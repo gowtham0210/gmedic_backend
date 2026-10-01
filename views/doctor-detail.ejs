@@ -1,0 +1,90 @@
+<%- include('partials/app-start') %>
+
+<div class="page-head">
+  <div>
+    <nav class="breadcrumb" aria-label="Breadcrumb"><a href="/dashboard">Dashboard</a><%- icon('chevron-right') %><a href="/doctors">Doctors</a><%- icon('chevron-right') %><span data-crumb>Doctor details</span></nav>
+    <h1>Doctor Details</h1>
+  </div>
+  <div class="page-head__actions">
+    <a class="btn btn--ghost" href="/doctors"><%- icon('arrow-left') %>Back to doctors</a>
+  </div>
+</div>
+
+<div class="two-col" data-doctor-id="<%= doctorId %>">
+  <div>
+    <article class="card">
+      <div class="profile-hero" data-doctor-hero>
+        <div class="skeleton" style="width:76px;height:76px;border-radius:22px"></div>
+        <div class="profile-hero__main"><div class="skeleton skeleton--text" style="width:50%;height:20px"></div><div class="skeleton skeleton--text" style="width:35%;margin-top:12px"></div></div>
+      </div>
+      <div class="kpis" data-doctor-kpis></div>
+    </article>
+
+    <article class="card" style="margin-top:24px">
+      <div class="card__head" style="padding-bottom:18px;border-bottom:1px solid var(--border-2)">
+        <div>
+          <h2 class="card__title"><%- icon('pencil') %>Doctor information</h2>
+          <p class="card__subtitle" data-edit-hint>Click Edit to update this doctor's details.</p>
+        </div>
+        <button type="button" class="btn btn--ghost btn--sm" data-start-edit><%- icon('pencil') %>Edit</button>
+      </div>
+
+      <form id="doctor-detail-form" novalidate>
+        <div class="alert alert--error" hidden data-form-alert style="margin-bottom:16px"><%- icon('alert') %><span></span></div>
+        <fieldset disabled data-edit-fields style="border:0;margin:0;padding:0;min-width:0">
+          <div class="form-grid">
+            <div class="field field--full">
+              <label for="d-name">Doctor name <span class="req">*</span></label>
+              <div class="input-wrap"><span class="input-affix">Dr.</span><input class="input" id="d-name" name="name" required minlength="3" maxlength="60"></div>
+              <p class="field__error" data-error-for="name"></p>
+            </div>
+            <div class="field">
+              <label for="d-spec">Specialist <span class="req">*</span></label>
+              <select class="select" id="d-spec" name="specialization" required>
+                <% specializations.forEach((s) => { %><option value="<%= s %>"><%= s %></option><% }) %>
+              </select>
+              <p class="field__error" data-error-for="specialization"></p>
+            </div>
+            <div class="field">
+              <label for="d-fee">Appointment fee <span class="req">*</span></label>
+              <div class="input-wrap"><span class="input-affix">₹</span><input class="input" id="d-fee" name="fee" type="number" inputmode="numeric" min="50" max="20000" step="1" required></div>
+              <p class="field__error" data-error-for="fee"></p>
+            </div>
+            <fieldset class="field field--full">
+              <legend>Availability <span class="req">*</span></legend>
+              <div class="segmented">
+                <label class="seg-option seg-option--present"><input type="radio" name="availability" value="present"><span class="seg-option__dot"></span><span><strong>Present</strong><small>Available for appointments today</small></span></label>
+                <label class="seg-option seg-option--absent"><input type="radio" name="availability" value="absent"><span class="seg-option__dot"></span><span><strong>Absent / On Leave</strong><small>Not available today</small></span></label>
+              </div>
+            </fieldset>
+          </div>
+        </fieldset>
+        <div class="form-actions" hidden data-edit-actions>
+          <button type="button" class="btn btn--ghost" data-cancel-edit>Cancel</button>
+          <button type="submit" class="btn btn--primary"><%- icon('check') %><span>Save</span></button>
+        </div>
+      </form>
+    </article>
+  </div>
+
+  <aside>
+    <article class="card card--flush">
+      <div class="card__head">
+        <div>
+          <h2 class="card__title"><%- icon('calendar') %>Upcoming appointments</h2>
+          <p class="card__subtitle">Today and upcoming bookings for this doctor</p>
+        </div>
+      </div>
+      <div class="table-wrap" style="padding:0 8px 8px">
+        <table class="table table--compact table--stack">
+          <thead><tr><th>Patient</th><th>When</th><th>Status</th></tr></thead>
+          <tbody data-schedule-rows><tr><td colspan="3"><div class="skeleton skeleton--row"></div><div class="skeleton skeleton--row"></div></td></tr></tbody>
+        </table>
+      </div>
+      <div class="pager"><a class="link-more" href="/appointments?doctorId=<%= doctorId %>">View all appointments <%- icon('arrow-right') %></a></div>
+    </article>
+  </aside>
+</div>
+
+<%- include('partials/modals/appointment') %>
+<%- include('partials/app-end') %>

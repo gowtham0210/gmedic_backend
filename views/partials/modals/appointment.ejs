@@ -1,0 +1,31 @@
+<div class="modal" id="appointment-modal" role="dialog" aria-modal="true" aria-labelledby="appt-title" hidden>
+  <div class="modal__backdrop" data-modal-close></div>
+  <div class="modal__panel">
+    <div class="modal__head">
+      <div class="modal__icon tone-blue"><%- icon('calendar-check') %></div>
+      <div>
+        <h2 id="appt-title">Appointment details</h2>
+        <p data-appt-sub>Booked through the Gmedic app</p>
+      </div>
+      <button type="button" class="icon-btn" data-modal-close aria-label="Close"><%- icon('x') %></button>
+    </div>
+    <div class="modal__body" data-appt-body>
+      <div class="skeleton skeleton--row"></div><div class="skeleton skeleton--row"></div>
+    </div>
+    <div class="modal__foot modal__foot--split">
+      <div class="field" style="flex-direction:row;align-items:center;gap:10px">
+        <label for="appt-status" class="field__label nowrap">Status</label>
+        <select class="select" id="appt-status" style="height:40px;min-width:160px" data-appt-status>
+          <option value="confirmed">Confirmed</option>
+          <option value="pending">Pending</option>
+          <option value="completed">Completed</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button type="button" class="btn btn--ghost" data-modal-close>Close</button>
+        <button type="button" class="btn btn--primary" data-appt-save disabled><%- icon('check') %><span>Update</span></button>
+      </div>
+    </div>
+  </div>
+</div>

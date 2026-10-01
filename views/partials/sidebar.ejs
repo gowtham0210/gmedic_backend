@@ -1,0 +1,39 @@
+<%
+  const navItems = [
+    { key: 'dashboard', href: '/dashboard', label: 'Dashboard', icon: 'home' },
+    { key: 'hospital', href: '/hospital', label: 'Hospital Information', icon: 'hospital' },
+    { key: 'doctors', href: '/doctors', label: 'Doctors', icon: 'user' },
+    { key: 'appointments', href: '/appointments', label: 'Appointments', icon: 'calendar' },
+    { key: 'tokens', href: '/tokens', label: 'Tokens', icon: 'ticket' },
+    { key: 'payments', href: '/payments', label: 'Payments', icon: 'credit-card' },
+  ];
+%>
+<aside class="sidebar" id="sidebar" aria-label="Main navigation">
+  <div class="sidebar__brand">
+    <a href="/dashboard" class="sidebar__logo" aria-label="Gmedic dashboard">
+      <img class="sidebar__logo-full" src="/images/gmedic-logo-light.png" alt="Gmedic — Book · Consult · Care" width="190" height="56">
+      <img class="sidebar__logo-mark" src="/images/gmedic-mark.png" alt="Gmedic" width="40" height="40">
+    </a>
+    <button type="button" class="icon-btn sidebar__close" data-sidebar-close aria-label="Close menu"><%- icon('x') %></button>
+  </div>
+
+  <nav class="nav">
+    <% navItems.forEach((item) => { %>
+      <a href="<%= item.href %>" class="nav__link<%= active === item.key ? ' is-active' : '' %>" title="<%= item.label %>"<%- active === item.key ? ' aria-current="page"' : '' %>>
+        <%- icon(item.icon) %><span class="nav__text"><%= item.label %></span>
+      </a>
+    <% }) %>
+  </nav>
+
+  <p class="sidebar__tagline">Better Healthcare<br>for a Healthier Tomorrow</p>
+
+  <nav class="nav nav--footer" aria-label="Account">
+    <a href="/settings" class="nav__link<%= active === 'settings' ? ' is-active' : '' %>" title="Settings"<%- active === 'settings' ? ' aria-current="page"' : '' %>>
+      <%- icon('settings') %><span class="nav__text">Settings</span>
+    </a>
+    <button type="button" class="nav__link" title="Logout" data-logout><%- icon('log-out') %><span class="nav__text">Logout</span></button>
+  </nav>
+
+  <div class="sidebar__resizer" role="separator" aria-orientation="vertical" aria-label="Resize sidebar (arrow keys to resize, Enter to collapse)" tabindex="0" title="Drag to resize · double-click to collapse" data-sidebar-resizer></div>
+</aside>
+<div class="sidebar-backdrop" data-sidebar-close></div>

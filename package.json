@@ -1,0 +1,35 @@
+{
+  "name": "gmedic-webportal",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Gmedic platform portal — Super Admin, Receptionist and Doctor experiences, built with Next.js (App Router) on MySQL.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "db:migrate": "node db/migrate.js",
+    "db:setup": "node scripts/db-setup.js",
+    "legacy:start": "node server.js",
+    "legacy:dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=18.18"
+  },
+  "dependencies": {
+    "@fontsource/plus-jakarta-sans": "^5.3.0",
+    "chart.js": "^4.5.1",
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.4",
+    "ejs": "^6.0.1",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.7.0",
+    "express-session": "^1.19.0",
+    "helmet": "^8.3.0",
+    "multer": "^2.4.0",
+    "mysql2": "^3.24.4",
+    "next": "^16.3.7",
+    "qrcode": "^1.5.4",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  }
+}

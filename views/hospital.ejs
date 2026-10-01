@@ -1,0 +1,140 @@
+<%- include('partials/app-start') %>
+
+<div class="page-head">
+  <div>
+    <nav class="breadcrumb" aria-label="Breadcrumb"><a href="/dashboard">Dashboard</a><%- icon('chevron-right') %><span>Hospital Information</span></nav>
+    <h1>Hospital Information</h1>
+    <p>Your hospital's details and the unique QR code patients scan in the Gmedic app.</p>
+  </div>
+  <div class="page-head__actions">
+    <button type="button" class="btn btn--ghost" data-edit-hospital><%- icon('pencil') %>Edit contact details</button>
+  </div>
+</div>
+
+<div class="two-col">
+  <div>
+    <!-- Read view -->
+    <article class="card" data-hospital-view>
+      <div class="info-hero">
+        <div class="info-hero__img"><img src="/images/hospital-illustration.svg" alt=""></div>
+        <div>
+          <h2 data-h-name><%= hospital.name %></h2>
+          <div class="info-hero__meta">
+            <span class="badge badge--teal badge--plain"><%- icon('hash', 'icon--xs') %>Hospital ID: <%= hospital.id %></span>
+            <span class="badge badge--confirmed">Active on Gmedic</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="detail-list">
+        <div class="detail">
+          <span class="detail__icon"><%- icon('hospital') %></span>
+          <div><div class="detail__label">Hospital name <%- icon('lock') %></div><div class="detail__value"><%= hospital.name %></div></div>
+        </div>
+        <div class="detail">
+          <span class="detail__icon"><%- icon('hash') %></span>
+          <div><div class="detail__label">Hospital ID <%- icon('lock') %></div><div class="detail__value"><%= hospital.id %></div></div>
+        </div>
+        <div class="detail">
+          <span class="detail__icon"><%- icon('phone') %></span>
+          <div><div class="detail__label">Contact number</div><div class="detail__value" data-h-phone><%= hospital.phone %></div></div>
+        </div>
+        <div class="detail">
+          <span class="detail__icon"><%- icon('mail') %></span>
+          <div><div class="detail__label">Email</div><div class="detail__value" data-h-email><%= hospital.email %></div></div>
+        </div>
+        <div class="detail detail--full" style="border-bottom:0">
+          <span class="detail__icon"><%- icon('map-pin') %></span>
+          <div><div class="detail__label">Address</div><div class="detail__value" data-h-address><%= hospital.addressText %></div></div>
+        </div>
+      </div>
+
+      <p class="note"><%- icon('info') %><span>The hospital name and ID are managed by the Gmedic administrator. You can update the contact number, email and address.</span></p>
+    </article>
+
+    <!-- Edit view -->
+    <article class="card" data-hospital-edit hidden>
+      <div class="card__head" style="padding-bottom:18px;border-bottom:1px solid var(--border-2)">
+        <div>
+          <h2 class="card__title"><%- icon('pencil') %>Edit contact details</h2>
+          <p class="card__subtitle">Changes are visible to patients in the Gmedic app.</p>
+        </div>
+      </div>
+      <form id="hospital-form" novalidate>
+        <div class="alert alert--error" hidden data-form-alert style="margin-bottom:16px"><%- icon('alert') %><span></span></div>
+        <div class="form-grid">
+          <div class="field">
+            <label for="h-name">Hospital name</label>
+            <div class="input-wrap"><%- icon('lock') %><input class="input" id="h-name" value="<%= hospital.name %>" readonly></div>
+          </div>
+          <div class="field">
+            <label for="h-id">Hospital ID</label>
+            <div class="input-wrap"><%- icon('lock') %><input class="input" id="h-id" value="<%= hospital.id %>" readonly></div>
+          </div>
+          <div class="field">
+            <label for="h-phone">Contact number <span class="req">*</span></label>
+            <input class="input" id="h-phone" name="phone" type="tel" required placeholder="+91 98765 43210" value="<%= hospital.phone %>">
+            <p class="field__error" data-error-for="phone"></p>
+          </div>
+          <div class="field">
+            <label for="h-email">Email <span class="req">*</span></label>
+            <input class="input" id="h-email" name="email" type="email" required placeholder="care@hospital.in" value="<%= hospital.email %>">
+            <p class="field__error" data-error-for="email"></p>
+          </div>
+          <div class="field field--full">
+            <label for="h-line1">Street address <span class="req">*</span></label>
+            <input class="input" id="h-line1" name="line1" required maxlength="160" value="<%= hospital.address.line1 %>">
+            <p class="field__error" data-error-for="line1"></p>
+          </div>
+          <div class="field">
+            <label for="h-city">City <span class="req">*</span></label>
+            <input class="input" id="h-city" name="city" required maxlength="60" value="<%= hospital.address.city %>">
+            <p class="field__error" data-error-for="city"></p>
+          </div>
+          <div class="field">
+            <label for="h-state">State <span class="req">*</span></label>
+            <input class="input" id="h-state" name="state" required maxlength="60" value="<%= hospital.address.state %>">
+            <p class="field__error" data-error-for="state"></p>
+          </div>
+          <div class="field">
+            <label for="h-pincode">PIN code <span class="req">*</span></label>
+            <input class="input" id="h-pincode" name="pincode" required inputmode="numeric" maxlength="6" pattern="\d{6}" value="<%= hospital.address.pincode %>">
+            <p class="field__error" data-error-for="pincode"></p>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn btn--ghost" data-cancel-edit>Cancel</button>
+          <button type="submit" class="btn btn--primary"><%- icon('check') %><span>Save changes</span></button>
+        </div>
+      </form>
+    </article>
+  </div>
+
+  <aside class="qr-card-col">
+    <article class="card qr-card">
+      <div class="card__head" style="justify-content:center">
+        <h2 class="card__title"><%- icon('qr-code') %>Unique Hospital QR Code</h2>
+      </div>
+      <button type="button" class="qr-card__poster" data-open-qr aria-label="View QR poster full size">
+        <img src="/api/hospital/qr-poster.svg" alt="Gmedic QR poster for <%= hospital.name %>" width="1060" height="1500">
+      </button>
+      <p class="qr-card__id">Hospital ID · <%= hospital.id %> · Display this poster at your reception desk.</p>
+
+      <div class="qr-card__actions">
+        <button type="button" class="btn btn--outline" data-open-qr><%- icon('eye') %>View QR</button>
+        <button type="button" class="btn btn--primary" data-download-poster><%- icon('download') %><span>Download QR</span></button>
+      </div>
+      <div class="qr-card__more">
+        <button type="button" class="btn btn--ghost btn--sm" data-qr-print><%- icon('printer') %>Print poster</button>
+        <a class="btn btn--ghost btn--sm" href="/api/hospital/qr.png?download=1" download><%- icon('qr-code') %>QR code only</a>
+      </div>
+      <div class="qr-card__link">
+        <code title="<%= hospital.qrLink %>"><%= hospital.qrLink %></code>
+        <button type="button" class="icon-btn icon-btn--sm" aria-label="Copy QR link" data-copy="<%= hospital.qrLink %>"><%- icon('copy') %></button>
+      </div>
+    </article>
+  </aside>
+</div>
+
+<%- include('partials/modals/qr') %>
+<%- include('partials/app-end') %>

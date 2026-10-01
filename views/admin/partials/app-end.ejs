@@ -1,0 +1,14 @@
+    </main>
+  </div>
+</div>
+
+<%- include('../../partials/modals/logout') %>
+<div class="toasts" id="toasts" aria-live="polite" aria-atomic="false"></div>
+
+<script>window.GMEDIC = <%- json({ user, permissions: locals.permissions || [] }) %>;</script>
+<script src="/js/core.js"></script>
+<script src="/js/layout.js"></script>
+<% scripts.forEach((name) => { %><script src="/js/<%= name %>.js"></script>
+<% }) %>
+</body>
+</html>

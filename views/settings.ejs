@@ -1,0 +1,120 @@
+<%- include('partials/app-start') %>
+
+<div class="page-head">
+  <div>
+    <nav class="breadcrumb" aria-label="Breadcrumb"><a href="/dashboard">Dashboard</a><%- icon('chevron-right') %><span>Settings</span></nav>
+    <h1>Settings</h1>
+    <p>Manage your receptionist profile and password.</p>
+  </div>
+</div>
+
+<div class="settings-layout">
+  <nav class="card settings-nav" aria-label="Settings sections">
+    <a class="nav__link is-active" href="#profile" data-section-link="profile"><%- icon('user') %>Profile</a>
+    <a class="nav__link" href="#password" data-section-link="password"><%- icon('lock') %>Change password</a>
+    <button type="button" class="nav__link nav__link--danger" data-logout><%- icon('log-out') %>Logout</button>
+  </nav>
+
+  <div>
+    <section class="card settings-panel" id="profile">
+      <div class="card__head">
+        <div>
+          <h2 class="card__title"><%- icon('user') %>Receptionist profile</h2>
+          <p class="card__subtitle">Your name and phone number are shown to hospital staff.</p>
+        </div>
+      </div>
+
+      <div class="profile-card">
+        <span class="avatar avatar--teal avatar--lg" data-user-initials><%= user.initials %></span>
+        <div>
+          <strong data-user-name><%= user.name %></strong>
+          <small>Receptionist · <%= hospital.name %></small>
+        </div>
+      </div>
+
+      <form id="profile-form" novalidate>
+        <div class="alert alert--error" hidden data-form-alert style="margin-bottom:16px"><%- icon('alert') %><span></span></div>
+        <div class="form-grid">
+          <div class="field">
+            <label for="pr-name">Full name <span class="req">*</span></label>
+            <input class="input" id="pr-name" name="name" required minlength="3" maxlength="60" value="<%= user.name %>" autocomplete="name">
+            <p class="field__error" data-error-for="name"></p>
+          </div>
+          <div class="field">
+            <label for="pr-phone">Phone <span class="req">*</span></label>
+            <input class="input" id="pr-phone" name="phone" type="tel" required value="<%= user.phone %>" autocomplete="tel">
+            <p class="field__error" data-error-for="phone"></p>
+          </div>
+          <div class="field">
+            <label for="pr-email">Email (login)</label>
+            <div class="input-wrap"><%- icon('lock') %><input class="input" id="pr-email" value="<%= user.email %>" readonly></div>
+            <p class="field__hint">Contact your Gmedic administrator to change your login email.</p>
+          </div>
+          <div class="field">
+            <label for="pr-username">Username</label>
+            <div class="input-wrap"><%- icon('lock') %><input class="input" id="pr-username" value="<%= user.username %>" readonly></div>
+          </div>
+          <div class="field">
+            <label for="pr-role">Role</label>
+            <input class="input" id="pr-role" value="Receptionist" readonly>
+          </div>
+          <div class="field">
+            <label for="pr-hospital">Hospital</label>
+            <input class="input" id="pr-hospital" value="<%= hospital.name %> (<%= hospital.id %>)" readonly>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="reset" class="btn btn--ghost">Cancel</button>
+          <button type="submit" class="btn btn--primary"><%- icon('check') %><span>Save profile</span></button>
+        </div>
+      </form>
+    </section>
+
+    <section class="card settings-panel" id="password">
+      <div class="card__head">
+        <div>
+          <h2 class="card__title"><%- icon('lock') %>Change password</h2>
+          <p class="card__subtitle" data-pw-changed><%= user.passwordChangedAt ? 'Last changed ' + new Date(user.passwordChangedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Use a strong password you don\'t use elsewhere.' %></p>
+        </div>
+      </div>
+      <form id="password-form" novalidate autocomplete="off">
+        <div class="alert alert--error" hidden data-form-alert style="margin-bottom:16px"><%- icon('alert') %><span></span></div>
+        <input type="text" name="username" value="<%= user.username %>" autocomplete="username" hidden>
+        <div class="form-grid">
+          <div class="field field--full" style="max-width:calc(50% - 8px);min-width:min(100%,280px)">
+            <label for="pw-current">Current password <span class="req">*</span></label>
+            <div class="input-wrap">
+              <input class="input" id="pw-current" name="currentPassword" type="password" required autocomplete="current-password">
+              <button type="button" class="input-toggle" data-toggle-password="pw-current" aria-label="Show password"><%- icon('eye') %></button>
+            </div>
+            <p class="field__error" data-error-for="currentPassword"></p>
+          </div>
+          <div class="field">
+            <label for="pw-new">New password <span class="req">*</span></label>
+            <div class="input-wrap">
+              <input class="input" id="pw-new" name="newPassword" type="password" required minlength="8" autocomplete="new-password">
+              <button type="button" class="input-toggle" data-toggle-password="pw-new" aria-label="Show password"><%- icon('eye') %></button>
+            </div>
+            <div class="strength" data-level="0" data-strength aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+            <p class="field__hint" data-strength-label>At least 8 characters, with a letter and a number.</p>
+            <p class="field__error" data-error-for="newPassword"></p>
+          </div>
+          <div class="field">
+            <label for="pw-confirm">Confirm new password <span class="req">*</span></label>
+            <div class="input-wrap">
+              <input class="input" id="pw-confirm" name="confirmPassword" type="password" required autocomplete="new-password">
+              <button type="button" class="input-toggle" data-toggle-password="pw-confirm" aria-label="Show password"><%- icon('eye') %></button>
+            </div>
+            <p class="field__error" data-error-for="confirmPassword"></p>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="reset" class="btn btn--ghost">Clear</button>
+          <button type="submit" class="btn btn--primary"><%- icon('lock') %><span>Update password</span></button>
+        </div>
+      </form>
+    </section>
+  </div>
+</div>
+
+<%- include('partials/app-end') %>

@@ -1,0 +1,10 @@
+-- No longer used.
+--
+-- Gmedic now runs on SQLite (via Node's built-in node:sqlite module) instead
+-- of MySQL, so there's no separate database server, root password or user to
+-- set up. Just run:
+--
+--   npm run db:setup
+--
+-- which creates data/gmedic.sqlite automatically. See database/migrations/
+-- for the schema (SQLite dialect).

@@ -1,0 +1,30 @@
+<div class="modal" id="availability-modal" role="dialog" aria-modal="true" aria-labelledby="availability-title" hidden>
+  <div class="modal__backdrop" data-modal-close></div>
+  <div class="modal__panel modal__panel--lg">
+    <div class="modal__head">
+      <div class="modal__icon tone-green"><%- icon('user-check') %></div>
+      <div>
+        <h2 id="availability-title">Update Availability</h2>
+        <p>Mark doctors present or absent / on leave for today.</p>
+      </div>
+      <button type="button" class="icon-btn" data-modal-close aria-label="Close"><%- icon('x') %></button>
+    </div>
+    <div class="modal__body">
+      <div class="avail-summary" data-avail-summary></div>
+      <div class="input-wrap" style="margin-bottom:12px">
+        <%- icon('search') %>
+        <input class="input" type="search" placeholder="Search doctor or specialisation" aria-label="Filter doctors" data-avail-filter>
+      </div>
+      <div class="avail-list" data-avail-list>
+        <div class="skeleton skeleton--row"></div><div class="skeleton skeleton--row"></div><div class="skeleton skeleton--row"></div>
+      </div>
+    </div>
+    <div class="modal__foot modal__foot--split">
+      <span class="text-muted" data-avail-changes>No changes yet</span>
+      <div style="display:flex;gap:10px">
+        <button type="button" class="btn btn--ghost" data-modal-close>Cancel</button>
+        <button type="button" class="btn btn--primary" data-avail-save disabled><%- icon('check') %><span>Save changes</span></button>
+      </div>
+    </div>
+  </div>
+</div>

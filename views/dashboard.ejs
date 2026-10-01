@@ -1,0 +1,147 @@
+<%- include('partials/app-start') %>
+
+<section class="welcome-row">
+  <div class="welcome">
+    <div class="welcome__text">
+      <h1><span data-greeting>Hello</span>, <%= user.firstName %>! <span class="wave" aria-hidden="true">👋</span></h1>
+      <p class="welcome__lead">Welcome to <span class="text-brand">Gmedic</span> Receptionist Portal</p>
+      <p class="welcome__sub">Manage doctors, appointments, and hospital information all in one place.</p>
+    </div>
+    <img class="welcome__art" src="/images/hospital-illustration.svg" alt="" aria-hidden="true">
+  </div>
+  <div class="date-card">
+    <span class="date-card__icon"><%- icon('calendar') %></span>
+    <div>
+      <strong data-today-date>&nbsp;</strong>
+      <span data-today-day>&nbsp;</span>
+      <small class="date-card__time" data-today-time></small>
+    </div>
+  </div>
+</section>
+
+<section class="stats" id="stats" aria-label="Summary">
+  <% for (let i = 0; i < 5; i++) { %>
+    <div class="card stat"><span class="skeleton" style="width:52px;height:52px;border-radius:14px"></span><div style="flex:1"><span class="skeleton skeleton--text" style="width:70%"></span><span class="skeleton" style="width:40%;height:26px;margin-top:10px"></span><span class="skeleton skeleton--text" style="width:80%;margin-top:12px"></span></div></div>
+  <% } %>
+</section>
+
+<section class="dash-grid">
+  <article class="card" id="availability-card">
+    <div class="card__head">
+      <h2 class="card__title"><%- icon('stethoscope') %>Doctor Availability</h2>
+      <a class="link-more" href="/doctors">View All <%- icon('arrow-right') %></a>
+    </div>
+    <div data-availability><div class="skeleton" style="height:150px"></div></div>
+  </article>
+
+  <article class="card card--flush" id="today-card">
+    <div class="card__head">
+      <div>
+        <h2 class="card__title"><%- icon('calendar') %>Today's Appointments</h2>
+      </div>
+      <a class="link-more" href="/appointments?date=today">View All <%- icon('arrow-right') %></a>
+    </div>
+    <div class="table-wrap" style="padding:0 8px 8px">
+      <table class="table table--compact table--stack">
+        <thead><tr><th>Patient</th><th>Doctor</th><th>Specialist</th><th>Time</th><th>Status</th><th>Payment</th></tr></thead>
+        <tbody data-today-rows>
+          <tr><td colspan="6"><div class="skeleton skeleton--row"></div><div class="skeleton skeleton--row"></div><div class="skeleton skeleton--row"></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </article>
+
+  <article class="card" id="hospital-card">
+    <div class="card__head">
+      <h2 class="card__title"><%- icon('hospital') %>Hospital Information</h2>
+      <a class="btn btn--ghost btn--sm" href="/hospital#edit"><%- icon('pencil') %>Edit</a>
+    </div>
+    <div class="hosp-summary">
+      <div class="hosp-thumb"><img src="/images/hospital-illustration.svg" alt=""></div>
+      <div>
+        <h3 data-h-name><%= hospital.name %></h3>
+        <p>Hospital ID: <strong class="text-strong"><%= hospital.id %></strong></p>
+      </div>
+    </div>
+    <ul class="contact-list">
+      <li><%- icon('phone') %><a href="tel:<%= hospital.phone.replace(/\s/g, '') %>" data-h-phone><%= hospital.phone %></a></li>
+      <li><%- icon('mail') %><a href="mailto:<%= hospital.email %>" data-h-email><%= hospital.email %></a></li>
+      <li><%- icon('map-pin') %><span data-h-address><%= hospital.addressText %></span></li>
+    </ul>
+    <div class="qr-panel">
+      <div class="qr-panel__img"><img src="/api/hospital/qr.svg" alt="Hospital QR code"></div>
+      <div>
+        <h4>Your Hospital QR Code</h4>
+        <p>Patients scan this QR code at the reception to add this hospital in the Gmedic app.</p>
+      </div>
+      <div class="qr-panel__actions">
+        <button type="button" class="btn btn--primary btn--sm" data-download-poster><%- icon('download') %><span>Download QR</span></button>
+        <button type="button" class="btn btn--outline btn--sm" data-open-qr><%- icon('eye') %>View QR</button>
+      </div>
+    </div>
+  </article>
+</section>
+
+<section class="dash-grid dash-grid--bottom">
+  <article class="card card--flush">
+    <div class="card__head">
+      <div>
+        <h2 class="card__title"><%- icon('calendar-check') %>Recent Appointments</h2>
+        <p class="card__subtitle">Latest bookings from the Gmedic app</p>
+      </div>
+      <a class="link-more" href="/appointments">View All <%- icon('arrow-right') %></a>
+    </div>
+    <div class="table-wrap" style="padding:0 8px 8px">
+      <table class="table table--compact table--stack">
+        <thead><tr><th>Date</th><th>Patient Name</th><th>Doctor</th><th>Specialist</th><th>Time</th><th class="num">Fee</th><th>Payment</th><th>Status</th></tr></thead>
+        <tbody data-recent-rows>
+          <tr><td colspan="8"><div class="skeleton skeleton--row"></div><div class="skeleton skeleton--row"></div><div class="skeleton skeleton--row"></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </article>
+
+  <div class="dash-stack">
+  <article class="card" id="tokens-card">
+    <div class="card__head">
+      <h2 class="card__title"><%- icon('ticket') %>Today's Tokens</h2>
+    </div>
+    <div data-token-summary>
+      <div class="skeleton" style="height:64px"></div>
+    </div>
+  </article>
+
+  <article class="card">
+    <div class="card__head">
+      <h2 class="card__title"><%- icon('zap') %>Quick Actions</h2>
+    </div>
+    <div class="qa-list">
+      <button type="button" class="qa" data-open-add-doctor>
+        <span class="qa__icon tone-blue"><%- icon('user-plus') %></span>
+        <span class="qa__text"><strong>Add Doctor</strong><small>Register a new doctor</small></span>
+        <%- icon('chevron-right') %>
+      </button>
+      <button type="button" class="qa" data-open-availability>
+        <span class="qa__icon tone-green"><%- icon('user-check') %></span>
+        <span class="qa__text"><strong>Update Availability</strong><small>Mark present / absent</small></span>
+        <%- icon('chevron-right') %>
+      </button>
+      <a class="qa" href="/appointments">
+        <span class="qa__icon tone-violet"><%- icon('calendar') %></span>
+        <span class="qa__text"><strong>View Appointments</strong><small>Check patient bookings</small></span>
+        <%- icon('chevron-right') %>
+      </a>
+      <a class="qa" href="/payments">
+        <span class="qa__icon tone-amber"><%- icon('wallet') %></span>
+        <span class="qa__text"><strong>View Payments</strong><small>Track payment status</small></span>
+        <%- icon('chevron-right') %>
+      </a>
+    </div>
+  </article>
+  </div>
+</section>
+
+<%- include('partials/modals/doctor-form') %>
+<%- include('partials/modals/availability') %>
+<%- include('partials/modals/qr') %>
+<%- include('partials/app-end') %>

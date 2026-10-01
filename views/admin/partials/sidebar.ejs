@@ -1,0 +1,55 @@
+<%
+  const nav = [
+    { key: 'dashboard', href: '/admin/dashboard', label: 'Dashboard', icon: 'home', perm: 'dashboard.view' },
+    { key: 'hospitals', href: '/admin/hospitals', label: 'Hospitals', icon: 'hospital', perm: 'hospitals.view' },
+    { key: 'doctors', href: '/admin/doctors', label: 'Doctors', icon: 'stethoscope', perm: 'doctors.view' },
+    { key: 'receptionists', href: '/admin/receptionists', label: 'Receptionists', icon: 'users', perm: 'receptionists.view' },
+    { key: 'qr', href: '/admin/qr', label: 'QR Management', icon: 'qr-code', perm: 'qr.view' },
+    { key: 'appointments', href: '/admin/appointments', label: 'Appointments', icon: 'calendar', perm: 'appointments.view' },
+    { key: 'patients', href: '/admin/patients', label: 'Patients', icon: 'user', perm: 'patients.view' },
+    { key: 'payments', href: '/admin/payments', label: 'Payments', icon: 'credit-card', perm: 'payments.view' },
+    { key: 'refunds', href: '/admin/refunds', label: 'Refunds', icon: 'refresh', perm: 'refunds.view' },
+    { key: 'settlements', href: '/admin/settlements', label: 'Settlements', icon: 'wallet', perm: 'settlements.view' },
+    { key: 'support', href: '/admin/support', label: 'Support', icon: 'life-buoy', perm: 'support.view' },
+    { key: 'disputes', href: '/admin/disputes', label: 'Disputes', icon: 'alert-triangle', perm: 'disputes.view' },
+    { key: 'communications', href: '/admin/communications', label: 'Communications', icon: 'message-square', perm: 'communications.view' },
+    { key: 'analytics', href: '/admin/analytics', label: 'Analytics', icon: 'bar-chart', perm: 'analytics.view' },
+  ];
+  const footNav = [
+    { key: 'settings', href: '/admin/settings', label: 'Settings', icon: 'settings', perm: 'settings.view' },
+    { key: 'audit-logs', href: '/admin/audit-logs', label: 'Audit Logs', icon: 'clipboard-list', perm: 'audit_logs.view' },
+  ];
+  const perms = new Set(locals.permissions || []);
+  const canSee = (item) => !item.perm || perms.has(item.perm);
+%>
+<aside class="sidebar" id="sidebar" aria-label="Main navigation">
+  <div class="sidebar__brand">
+    <a href="/admin/dashboard" class="sidebar__logo" aria-label="Gmedic admin dashboard">
+      <img class="sidebar__logo-full" src="/images/gmedic-logo-light.png" alt="Gmedic — Book · Consult · Care" width="190" height="56">
+      <img class="sidebar__logo-mark" src="/images/gmedic-mark.png" alt="Gmedic" width="40" height="40">
+    </a>
+    <button type="button" class="icon-btn sidebar__close" data-sidebar-close aria-label="Close menu"><%- icon('x') %></button>
+  </div>
+
+  <nav class="nav">
+    <% nav.filter(canSee).forEach((item) => { %>
+      <a href="<%= item.href %>" class="nav__link<%= active === item.key ? ' is-active' : '' %>" title="<%= item.label %>"<%- active === item.key ? ' aria-current="page"' : '' %>>
+        <%- icon(item.icon) %><span class="nav__text"><%= item.label %></span>
+      </a>
+    <% }) %>
+  </nav>
+
+  <p class="sidebar__tagline">Gmedic Platform<br>Super Admin Console</p>
+
+  <nav class="nav nav--footer" aria-label="Platform">
+    <% footNav.filter(canSee).forEach((item) => { %>
+      <a href="<%= item.href %>" class="nav__link<%= active === item.key ? ' is-active' : '' %>" title="<%= item.label %>"<%- active === item.key ? ' aria-current="page"' : '' %>>
+        <%- icon(item.icon) %><span class="nav__text"><%= item.label %></span>
+      </a>
+    <% }) %>
+    <button type="button" class="nav__link" title="Logout" data-logout><%- icon('log-out') %><span class="nav__text">Logout</span></button>
+  </nav>
+
+  <div class="sidebar__resizer" role="separator" aria-orientation="vertical" aria-label="Resize sidebar (arrow keys to resize, Enter to collapse)" tabindex="0" title="Drag to resize · double-click to collapse" data-sidebar-resizer></div>
+</aside>
+<div class="sidebar-backdrop" data-sidebar-close></div>

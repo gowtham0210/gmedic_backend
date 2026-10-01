@@ -1,0 +1,71 @@
+<%- include('partials/app-start') %>
+
+<div class="page-head">
+  <div>
+    <nav class="breadcrumb" aria-label="Breadcrumb"><a href="/dashboard">Dashboard</a><%- icon('chevron-right') %><span>Tokens</span></nav>
+    <h1>Token Management</h1>
+    <p>Issue queue tokens for patient visits and track their status. <span data-date-label></span></p>
+  </div>
+  <div class="page-head__actions">
+    <button type="button" class="btn btn--primary" data-open-generate><%- icon('plus') %>Generate Token</button>
+  </div>
+</div>
+
+<section class="summary-strip" aria-label="Token overview">
+  <div class="card mini-stat"><span class="stat__icon tone-teal"><%- icon('ticket') %></span><div><div class="mini-stat__label">Total Tokens</div><div class="mini-stat__value" data-sum="total">–</div></div></div>
+  <div class="card mini-stat"><span class="stat__icon tone-amber"><%- icon('hourglass') %></span><div><div class="mini-stat__label">Waiting</div><div class="mini-stat__value" data-sum="waiting">–</div></div></div>
+  <div class="card mini-stat"><span class="stat__icon tone-violet"><%- icon('megaphone') %></span><div><div class="mini-stat__label">Called</div><div class="mini-stat__value" data-sum="called">–</div></div></div>
+  <div class="card mini-stat"><span class="stat__icon tone-blue"><%- icon('check-circle') %></span><div><div class="mini-stat__label">Completed</div><div class="mini-stat__value" data-sum="completed">–</div></div></div>
+</section>
+
+<article class="card card--flush">
+  <form class="toolbar" data-filters role="search">
+    <div class="field toolbar__search">
+      <label for="t-q">Search</label>
+      <div class="input-wrap"><%- icon('search') %><input class="input" id="t-q" name="q" type="search" placeholder="Token number or patient"></div>
+    </div>
+    <div class="field toolbar__item">
+      <label for="t-date">Date</label>
+      <input class="input" id="t-date" name="date" type="date">
+    </div>
+    <div class="field toolbar__item">
+      <label for="t-doctor">Doctor</label>
+      <select class="select" id="t-doctor" name="doctorId"><option value="">All doctors</option></select>
+    </div>
+    <div class="field toolbar__item">
+      <label for="t-status">Token status</label>
+      <select class="select" id="t-status" name="status">
+        <option value="">All</option>
+        <option value="waiting">Waiting</option>
+        <option value="called">Called</option>
+        <option value="completed">Completed</option>
+        <option value="cancelled">Cancelled</option>
+      </select>
+    </div>
+    <button type="reset" class="btn btn--ghost" data-reset><%- icon('refresh') %>Reset</button>
+  </form>
+
+  <div class="tabs" role="tablist" aria-label="Token status" data-status-tabs>
+    <button type="button" role="tab" class="tab is-active" data-status="">All <span class="tab__count" data-count="total">–</span></button>
+    <button type="button" role="tab" class="tab" data-status="waiting">Waiting <span class="tab__count" data-count="waiting">–</span></button>
+    <button type="button" role="tab" class="tab" data-status="called">Called <span class="tab__count" data-count="called">–</span></button>
+    <button type="button" role="tab" class="tab" data-status="completed">Completed <span class="tab__count" data-count="completed">–</span></button>
+    <button type="button" role="tab" class="tab" data-status="cancelled">Cancelled <span class="tab__count" data-count="cancelled">–</span></button>
+  </div>
+
+  <div class="table-wrap" style="padding:14px 8px 0">
+    <table class="table table--stack">
+      <thead>
+        <tr><th>Token</th><th>Patient Name</th><th>Doctor</th><th>Specialist</th><th>Appointment Time</th><th>Token Status</th><th class="col-actions">Action</th></tr>
+      </thead>
+      <tbody data-token-rows>
+        <tr><td colspan="7"><div class="skeleton skeleton--row"></div><div class="skeleton skeleton--row"></div><div class="skeleton skeleton--row"></div></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="pager"><span data-token-count></span></div>
+</article>
+
+<%- include('partials/modals/token-generate') %>
+<%- include('partials/modals/token-detail') %>
+<%- include('partials/app-end') %>

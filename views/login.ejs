@@ -1,0 +1,100 @@
+<%- include('partials/head') %>
+<body>
+<div class="auth">
+  <section class="auth__brand" aria-hidden="true">
+    <img class="auth__logo" src="/images/gmedic-logo-light.png" alt="">
+    <div class="auth__pitch">
+      <span class="auth__eyebrow"><%- icon('shield-check') %>Receptionist Portal</span>
+      <h2>Your hospital's front desk, <span>organised in one place.</span></h2>
+      <p>Keep doctor availability up to date, follow appointments booked through the Gmedic app and see payment status at a glance.</p>
+      <ul class="auth__features">
+        <li><span class="f-icon"><%- icon('user-check') %></span>Manage doctors and daily availability</li>
+        <li><span class="f-icon"><%- icon('calendar-check') %></span>Track appointments from the patient app</li>
+        <li><span class="f-icon"><%- icon('qr-code') %></span>Share your hospital's unique QR code</li>
+      </ul>
+    </div>
+    <p class="auth__foot">© <%= new Date().getFullYear() %> Gmedic · Book · Consult · Care</p>
+  </section>
+
+  <main class="auth__main">
+    <div class="auth__card">
+      <img class="auth__card-logo" src="/images/gmedic-logo.png" alt="Gmedic — Book · Consult · Care" width="190" height="56">
+
+      <!-- Login -->
+      <div data-panel="login">
+        <h1>Welcome back</h1>
+        <p>Log in to the Gmedic Receptionist Portal.</p>
+
+        <form class="auth__form" id="login-form" novalidate>
+          <input type="hidden" name="next" value="<%= next %>">
+          <% if (loggedOut) { %>
+            <div class="alert alert--success" data-flash><%- icon('check-circle') %><span>You have been logged out securely.</span></div>
+          <% } else if (expired) { %>
+            <div class="alert alert--info" data-flash><%- icon('info') %><span>Your session has ended. Please log in again.</span></div>
+          <% } %>
+          <div class="alert alert--error" hidden data-form-alert><%- icon('alert') %><span></span></div>
+
+          <div class="field">
+            <label for="identifier">Email or username</label>
+            <div class="input-wrap">
+              <%- icon('mail') %>
+              <input class="input" id="identifier" name="identifier" type="text" autocomplete="username" required placeholder="you@hospital.in" autofocus>
+            </div>
+            <p class="field__error" data-error-for="identifier"></p>
+          </div>
+
+          <div class="field">
+            <label for="password">Password</label>
+            <div class="input-wrap">
+              <%- icon('lock') %>
+              <input class="input" id="password" name="password" type="password" autocomplete="current-password" required placeholder="Enter your password">
+              <button type="button" class="input-toggle" data-toggle-password="password" aria-label="Show password"><%- icon('eye') %></button>
+            </div>
+            <p class="field__error" data-error-for="password"></p>
+          </div>
+
+          <div class="auth__row">
+            <label class="checkbox"><input type="checkbox" name="remember"> Remember me</label>
+            <button type="button" class="auth__link" data-show-panel="forgot">Forgot password?</button>
+          </div>
+
+          <button type="submit" class="btn btn--primary btn--block"><span>Login</span><%- icon('arrow-right') %></button>
+        </form>
+
+        <div class="demo-creds">
+          <strong>Demo account</strong> — <code>riya.sharma@sunrisegeneral.in</code> / <code>Gmedic@123</code>
+          · <button type="button" data-fill-demo>Use demo login</button>
+        </div>
+      </div>
+
+      <!-- Forgot password -->
+      <div data-panel="forgot" hidden>
+        <h1>Reset password</h1>
+        <p>Enter your email or username. Receptionist accounts are managed by your hospital's Gmedic administrator, who will help you reset your password.</p>
+
+        <form class="auth__form" id="forgot-form" novalidate>
+          <div class="alert alert--error" hidden data-form-alert><%- icon('alert') %><span></span></div>
+          <div class="alert alert--success" hidden data-form-success><%- icon('check-circle') %><span></span></div>
+          <div class="field">
+            <label for="forgot-identifier">Email or username</label>
+            <div class="input-wrap">
+              <%- icon('mail') %>
+              <input class="input" id="forgot-identifier" name="identifier" type="text" autocomplete="username" required placeholder="you@hospital.in">
+            </div>
+            <p class="field__error" data-error-for="identifier"></p>
+          </div>
+          <button type="submit" class="btn btn--primary btn--block"><span>Send reset request</span></button>
+          <button type="button" class="btn btn--ghost btn--block" data-show-panel="login"><%- icon('arrow-left') %>Back to login</button>
+        </form>
+      </div>
+
+      <p class="auth__note"><%- icon('info') %><span>Receptionist accounts are created by the Gmedic administrator for your hospital. There is no public sign-up.</span></p>
+    </div>
+  </main>
+</div>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+<script src="/js/core.js"></script>
+<script src="/js/pages/login.js"></script>
+</body>
+</html>

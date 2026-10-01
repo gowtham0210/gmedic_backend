@@ -1,0 +1,29 @@
+<header class="topbar">
+  <button type="button" class="icon-btn topbar__menu" data-sidebar-toggle aria-label="Toggle sidebar" aria-controls="sidebar"><%- icon('menu') %></button>
+
+  <div class="hospital-chip" style="pointer-events:none">
+    <%- icon('shield') %>
+    <span class="hospital-chip__name">Gmedic Platform</span>
+    <span class="hospital-chip__id"><%= user.role.replace('_',' ') %></span>
+  </div>
+
+  <div class="topbar__actions" style="margin-left:auto">
+    <div class="dropdown" data-dropdown>
+      <button type="button" class="profile-btn" aria-haspopup="true" aria-expanded="false" data-dropdown-toggle aria-label="Account menu">
+        <span class="avatar avatar--teal" data-user-initials><%= user.initials %></span>
+        <span class="profile-btn__text"><strong data-user-name><%= user.name %></strong><small><%= user.role.replace('_',' ') %></small></span>
+        <%- icon('chevron-down') %>
+      </button>
+      <div class="dropdown__menu" role="menu">
+        <div class="dropdown__header">
+          <span class="avatar avatar--teal" data-user-initials><%= user.initials %></span>
+          <div><strong data-user-name><%= user.name %></strong><small><%= user.email %></small></div>
+        </div>
+        <a class="dropdown__item" role="menuitem" href="/admin/settings"><%- icon('user') %>My profile</a>
+        <a class="dropdown__item" role="menuitem" href="/admin/settings#password"><%- icon('lock') %>Change password</a>
+        <div class="dropdown__sep"></div>
+        <button type="button" class="dropdown__item dropdown__item--danger" role="menuitem" data-logout><%- icon('log-out') %>Logout</button>
+      </div>
+    </div>
+  </div>
+</header>

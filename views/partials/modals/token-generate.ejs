@@ -1,0 +1,49 @@
+<div class="modal" id="token-generate-modal" role="dialog" aria-modal="true" aria-labelledby="tg-title" hidden>
+  <div class="modal__backdrop" data-modal-close></div>
+  <div class="modal__panel modal__panel--lg">
+    <form id="token-generate-form" novalidate>
+      <div class="modal__head">
+        <div class="modal__icon tone-teal"><%- icon('ticket') %></div>
+        <div>
+          <h2 id="tg-title">Generate Token</h2>
+          <p>Assign the next queue token to a patient's appointment.</p>
+        </div>
+        <button type="button" class="icon-btn" data-modal-close aria-label="Close"><%- icon('x') %></button>
+      </div>
+
+      <div class="modal__body">
+        <div class="alert alert--error" hidden data-form-alert style="margin-bottom:16px"><%- icon('alert') %><span></span></div>
+        <div class="form-grid" style="margin-bottom:16px">
+          <div class="field">
+            <label for="tg-date">Appointment date</label>
+            <input class="input" id="tg-date" name="date" type="date" required>
+          </div>
+          <div class="field">
+            <label for="tg-doctor">Doctor</label>
+            <select class="select" id="tg-doctor" name="doctorId"><option value="">All doctors</option></select>
+          </div>
+          <div class="field field--full">
+            <label for="tg-q">Find patient</label>
+            <div class="input-wrap"><%- icon('search') %><input class="input" id="tg-q" name="q" type="search" placeholder="Patient name or appointment ID" autocomplete="off"></div>
+          </div>
+        </div>
+
+        <fieldset class="field" style="gap:10px">
+          <legend>Appointment <span class="req">*</span></legend>
+          <div class="elig-list" data-eligible-list>
+            <div class="skeleton skeleton--row"></div><div class="skeleton skeleton--row"></div>
+          </div>
+          <p class="field__error" data-error-for="appointmentId"></p>
+        </fieldset>
+      </div>
+
+      <div class="modal__foot modal__foot--split">
+        <span class="token-preview">Next token: <span class="token-pill" data-next-code>–</span></span>
+        <div style="display:flex;gap:10px">
+          <button type="button" class="btn btn--ghost" data-modal-close>Cancel</button>
+          <button type="submit" class="btn btn--primary" data-generate-submit><%- icon('check') %><span>Assign Token</span></button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>

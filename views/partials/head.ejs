@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b2238">
+  <title><%= title %> · Gmedic Receptionist Portal</title>
+  <link rel="icon" type="image/png" href="/images/favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
+  <link rel="stylesheet" href="/css/app.css">
+  <script>
+    // Apply the saved sidebar width / collapsed state before first paint.
+    try {
+      var s = JSON.parse(localStorage.getItem('gmedic.sidebar') || '{}');
+      if (s.width >= 220 && s.width <= 360) document.documentElement.style.setProperty('--sidebar-w-open', s.width + 'px');
+      if (s.collapsed) document.documentElement.classList.add('sidebar-collapsed');
+    } catch (e) {}
+  </script>
+</head>

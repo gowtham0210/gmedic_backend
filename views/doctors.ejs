@@ -1,0 +1,60 @@
+<%- include('partials/app-start') %>
+
+<div class="page-head">
+  <div>
+    <nav class="breadcrumb" aria-label="Breadcrumb"><a href="/dashboard">Dashboard</a><%- icon('chevron-right') %><span>Doctors</span></nav>
+    <h1>Doctors</h1>
+    <p>Manage doctors, appointment fees and today's availability.</p>
+  </div>
+  <div class="page-head__actions">
+    <button type="button" class="btn btn--ghost" data-open-availability><%- icon('user-check') %>Update Availability</button>
+    <button type="button" class="btn btn--primary" data-open-add-doctor><%- icon('plus') %>Add Doctor</button>
+  </div>
+</div>
+
+<section class="summary-strip summary-strip--3" data-doctor-summary>
+  <div class="card mini-stat"><span class="stat__icon tone-blue"><%- icon('users') %></span><div><div class="mini-stat__label">Total Doctors</div><div class="mini-stat__value" data-sum="total">–</div></div></div>
+  <div class="card mini-stat"><span class="stat__icon tone-green"><%- icon('user-check') %></span><div><div class="mini-stat__label">Present Today</div><div class="mini-stat__value" data-sum="present">–</div></div></div>
+  <div class="card mini-stat"><span class="stat__icon tone-red"><%- icon('user-x') %></span><div><div class="mini-stat__label">Absent / On Leave</div><div class="mini-stat__value" data-sum="absent">–</div></div></div>
+</section>
+
+<article class="card card--flush">
+  <form class="toolbar" data-filters role="search">
+    <div class="field toolbar__search">
+      <label for="f-q">Search</label>
+      <div class="input-wrap"><%- icon('search') %><input class="input" id="f-q" name="q" type="search" placeholder="Doctor name or ID"></div>
+    </div>
+    <div class="field toolbar__item">
+      <label for="f-spec">Specialist</label>
+      <select class="select" id="f-spec" name="specialization">
+        <option value="">All specialisations</option>
+        <% specializations.forEach((s) => { %><option value="<%= s %>"><%= s %></option><% }) %>
+      </select>
+    </div>
+    <div class="field toolbar__item">
+      <label for="f-avail">Availability</label>
+      <select class="select" id="f-avail" name="availability">
+        <option value="">All</option>
+        <option value="present">Present</option>
+        <option value="absent">Absent / On Leave</option>
+      </select>
+    </div>
+    <button type="reset" class="btn btn--ghost" data-reset><%- icon('refresh') %>Reset</button>
+  </form>
+
+  <div class="table-wrap">
+    <table class="table table--stack">
+      <thead>
+        <tr><th>Doctor</th><th>Specialist</th><th class="num">Appointment Fee</th><th>Today</th><th>Availability</th><th class="col-actions">Actions</th></tr>
+      </thead>
+      <tbody data-doctor-rows>
+        <tr><td colspan="6"><div class="skeleton skeleton--row"></div><div class="skeleton skeleton--row"></div><div class="skeleton skeleton--row"></div><div class="skeleton skeleton--row"></div></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="pager"><span data-doctor-count></span></div>
+</article>
+
+<%- include('partials/modals/doctor-form') %>
+<%- include('partials/modals/availability') %>
+<%- include('partials/app-end') %>

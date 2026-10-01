@@ -1,0 +1,69 @@
+<div class="modal" id="doctor-modal" role="dialog" aria-modal="true" aria-labelledby="doctor-modal-title" hidden>
+  <div class="modal__backdrop" data-modal-close></div>
+  <div class="modal__panel">
+    <form id="doctor-form" novalidate>
+      <div class="modal__head">
+        <div class="modal__icon tone-teal" data-doctor-modal-icon><%- icon('user-plus') %></div>
+        <div>
+          <h2 id="doctor-modal-title">Add Doctor</h2>
+          <p data-doctor-modal-sub>Add a doctor to <%= hospital.name %>.</p>
+        </div>
+        <button type="button" class="icon-btn" data-modal-close aria-label="Close"><%- icon('x') %></button>
+      </div>
+
+      <div class="modal__body">
+        <div class="alert alert--error" hidden data-form-alert><%- icon('alert') %><span></span></div>
+        <div class="form-grid" style="margin-top:0">
+          <div class="field field--full">
+            <label for="doctor-name">Doctor name <span class="req">*</span></label>
+            <div class="input-wrap">
+              <span class="input-affix">Dr.</span>
+              <input class="input" id="doctor-name" name="name" type="text" required minlength="3" maxlength="60" placeholder="e.g. Kavita Menon" autocomplete="off">
+            </div>
+            <p class="field__error" data-error-for="name"></p>
+          </div>
+
+          <div class="field">
+            <label for="doctor-spec">Specialist <span class="req">*</span></label>
+            <select class="select" id="doctor-spec" name="specialization" required>
+              <option value="">Select specialisation</option>
+              <% specializations.forEach((s) => { %><option value="<%= s %>"><%= s %></option><% }) %>
+            </select>
+            <p class="field__error" data-error-for="specialization"></p>
+          </div>
+
+          <div class="field">
+            <label for="doctor-fee">Appointment fee <span class="req">*</span></label>
+            <div class="input-wrap">
+              <span class="input-affix">₹</span>
+              <input class="input" id="doctor-fee" name="fee" type="number" inputmode="numeric" required min="50" max="20000" step="1" placeholder="500">
+            </div>
+            <p class="field__error" data-error-for="fee"></p>
+          </div>
+
+          <fieldset class="field field--full">
+            <legend>Availability <span class="req">*</span></legend>
+            <div class="segmented">
+              <label class="seg-option seg-option--present">
+                <input type="radio" name="availability" value="present" checked>
+                <span class="seg-option__dot"></span>
+                <span><strong>Present</strong><small>Available for appointments today</small></span>
+              </label>
+              <label class="seg-option seg-option--absent">
+                <input type="radio" name="availability" value="absent">
+                <span class="seg-option__dot"></span>
+                <span><strong>Absent / On Leave</strong><small>Not available today</small></span>
+              </label>
+            </div>
+            <p class="field__error" data-error-for="availability"></p>
+          </fieldset>
+        </div>
+      </div>
+
+      <div class="modal__foot">
+        <button type="button" class="btn btn--ghost" data-modal-close>Cancel</button>
+        <button type="submit" class="btn btn--primary" data-doctor-submit><%- icon('check') %><span>Save Doctor</span></button>
+      </div>
+    </form>
+  </div>
+</div>

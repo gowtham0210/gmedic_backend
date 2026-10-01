@@ -1,0 +1,66 @@
+<%- include('partials/app-start') %>
+
+<div class="page-head">
+  <div>
+    <nav class="breadcrumb" aria-label="Breadcrumb"><a href="/dashboard">Dashboard</a><%- icon('chevron-right') %><span>Payments</span></nav>
+    <h1>Payments</h1>
+    <p>Payment status for appointments. Patients pay in the Gmedic app.</p>
+  </div>
+  <div class="chips" role="group" aria-label="Quick date range" data-date-chips>
+    <button type="button" class="chip" data-range="today">Today</button>
+    <button type="button" class="chip" data-range="7d">Last 7 days</button>
+    <button type="button" class="chip" data-range="30d">Last 30 days</button>
+    <button type="button" class="chip" data-range="all">All</button>
+  </div>
+</div>
+
+<section class="summary-strip" aria-label="Payment summary">
+  <div class="card mini-stat"><span class="stat__icon tone-green"><%- icon('wallet') %></span><div><div class="mini-stat__label">Collected</div><div class="mini-stat__value" data-sum="collected">–</div></div></div>
+  <div class="card mini-stat"><span class="stat__icon tone-amber"><%- icon('clock') %></span><div><div class="mini-stat__label">Pending amount</div><div class="mini-stat__value" data-sum="pendingAmount">–</div></div></div>
+  <div class="card mini-stat"><span class="stat__icon tone-teal"><%- icon('check-circle') %></span><div><div class="mini-stat__label">Paid appointments</div><div class="mini-stat__value" data-sum="paidCount">–</div></div></div>
+  <div class="card mini-stat"><span class="stat__icon tone-red"><%- icon('receipt') %></span><div><div class="mini-stat__label">Awaiting payment</div><div class="mini-stat__value" data-sum="pendingCount">–</div></div></div>
+</section>
+
+<article class="card card--flush">
+  <form class="toolbar" data-filters role="search">
+    <div class="field toolbar__search">
+      <label for="p-q">Search</label>
+      <div class="input-wrap"><%- icon('search') %><input class="input" id="p-q" name="q" type="search" placeholder="Patient, doctor or transaction ID"></div>
+    </div>
+    <div class="field toolbar__item">
+      <label for="p-from">From</label>
+      <input class="input" id="p-from" name="from" type="date">
+    </div>
+    <div class="field toolbar__item">
+      <label for="p-to">To</label>
+      <input class="input" id="p-to" name="to" type="date">
+    </div>
+    <div class="field toolbar__item">
+      <label for="p-doctor">Doctor</label>
+      <select class="select" id="p-doctor" name="doctorId"><option value="">All doctors</option></select>
+    </div>
+    <div class="field toolbar__item">
+      <label for="p-status">Payment status</label>
+      <select class="select" id="p-status" name="paymentStatus">
+        <option value="">All</option>
+        <option value="paid">Paid</option>
+        <option value="pending">Pending</option>
+      </select>
+    </div>
+    <button type="reset" class="btn btn--ghost" data-reset><%- icon('refresh') %>Reset</button>
+  </form>
+
+  <div class="table-wrap" style="padding:14px 8px 0">
+    <table class="table table--stack">
+      <thead>
+        <tr><th>Patient</th><th>Doctor</th><th>Appointment Date</th><th>Appointment Time</th><th class="num">Fee</th><th>Method</th><th>Payment Status</th></tr>
+      </thead>
+      <tbody data-pay-rows>
+        <tr><td colspan="7"><div class="skeleton skeleton--row"></div><div class="skeleton skeleton--row"></div><div class="skeleton skeleton--row"></div></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="pager" data-pager></div>
+</article>
+
+<%- include('partials/app-end') %>

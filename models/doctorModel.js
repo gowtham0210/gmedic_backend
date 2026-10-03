@@ -18,6 +18,9 @@ function fromRow(row) {
     availabilityUpdatedAt: db.iso(row.availability_updated_at),
     verificationStatus: row.verification_status,
     verificationNote: row.verification_note,
+    bio: row.bio,
+    yearsExperience: row.years_experience != null ? Number(row.years_experience) : null,
+    languages: row.languages,
     createdAt: db.iso(row.created_at),
     updatedAt: db.iso(row.updated_at),
   };
@@ -69,6 +72,19 @@ async function update(hospitalId, id, patch) {
   await db.query(
     `UPDATE doctors SET name = ?, specialization = ?, fee = ?, availability = ?${touchAvailability ? ', availability_updated_at = CURRENT_TIMESTAMP' : ''} WHERE id = ?`,
     [name, specialization, fee, availability, id]
+  );
+  return findById(hospitalId, id);
+}
+
+// Doctor self-service: only the fields a doctor is allowed to change
+// themselves (not specialization, fee, registration number, qualifications —
+// those stay receptionist/admin-managed).
+async function updateProfile(hospitalId, id, { bio, yearsExperience, languages }) {
+  const doctor = await findById(hospitalId, id);
+  if (!doctor) return null;
+  await db.query(
+    'UPDATE doctors SET bio = ?, years_experience = ?, languages = ? WHERE id = ?',
+    [bio ?? null, yearsExperience ?? null, languages ?? null, id]
   );
   return findById(hospitalId, id);
 }
@@ -125,6 +141,6 @@ async function setVerification(id, status, note, verifiedBy) {
 }
 
 module.exports = {
-  AVAILABILITY, all, list, findById, create, update, setAvailabilityBulk,
+  AVAILABILITY, all, list, findById, create, update, updateProfile, setAvailabilityBulk,
   adminList, adminFindById, setVerification, fromRow,
 };

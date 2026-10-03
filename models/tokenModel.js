@@ -3,8 +3,21 @@
 // reused on that day, even when a token is cancelled.
 
 const db = require('../db');
+const { badRequest } = require('../utils/http');
 
-const STATUSES = ['waiting', 'called', 'completed', 'cancelled'];
+const STATUSES = ['waiting', 'called', 'in_consultation', 'completed', 'cancelled', 'skipped'];
+
+// Which statuses a token may move to from its current one. Terminal states
+// (completed, cancelled) have no way out — e.g. "Completed -> Waiting" is
+// rejected here rather than left to each caller to remember.
+const TRANSITIONS = {
+  waiting: ['called', 'skipped', 'cancelled'],
+  called: ['in_consultation', 'waiting', 'skipped', 'cancelled'],
+  in_consultation: ['completed', 'cancelled'],
+  skipped: ['waiting', 'called', 'cancelled'],
+  completed: [],
+  cancelled: [],
+};
 
 const formatCode = (number) => `T${String(number).padStart(3, '0')}`;
 
@@ -38,6 +51,7 @@ function fromRow(row) {
     calledAt: db.iso(row.called_at),
     completedAt: db.iso(row.completed_at),
     cancelledAt: db.iso(row.cancelled_at),
+    skippedAt: db.iso(row.skipped_at),
   };
 }
 
@@ -53,7 +67,7 @@ async function query(hospitalId, { date, doctorId, status, q } = {}) {
 }
 
 function summarize(tokens) {
-  const s = { total: tokens.length, waiting: 0, called: 0, completed: 0, cancelled: 0 };
+  const s = { total: tokens.length, waiting: 0, called: 0, in_consultation: 0, completed: 0, cancelled: 0, skipped: 0 };
   for (const t of tokens) s[t.status] += 1;
   return s;
 }
@@ -95,16 +109,24 @@ async function create(hospitalId, appointment) {
   return findById(hospitalId, token);
 }
 
-async function updateStatus(hospitalId, id, status) {
+async function updateStatus(hospitalId, id, status, { skipTransitionCheck = false } = {}) {
+  const current = await findById(hospitalId, id);
+  if (!current) return null;
+  if (!skipTransitionCheck && current.status !== status && !TRANSITIONS[current.status].includes(status)) {
+    throw badRequest(`A token can't move from "${current.status.replace('_', ' ')}" to "${status.replace('_', ' ')}".`);
+  }
+
   const now = 'CURRENT_TIMESTAMP';
   let extra = '';
-  if (status === 'waiting') extra = ', called_at = NULL, completed_at = NULL';
-  if (status === 'called') extra = `, called_at = COALESCE(called_at, ${now}), completed_at = NULL`;
+  if (status === 'waiting') extra = ', called_at = NULL, completed_at = NULL, skipped_at = NULL';
+  if (status === 'called') extra = `, called_at = ${now}, completed_at = NULL`;
+  if (status === 'in_consultation') extra = `, called_at = COALESCE(called_at, ${now})`;
   if (status === 'completed') extra = `, called_at = COALESCE(called_at, ${now}), completed_at = ${now}`;
   if (status === 'cancelled') extra = `, cancelled_at = ${now}`;
+  if (status === 'skipped') extra = `, skipped_at = ${now}`;
   const res = await db.query(`UPDATE tokens SET status = ?${extra} WHERE hospital_id = ? AND id = ?`, [status, hospitalId, id]);
   if (!res.affectedRows) return null;
   return findById(hospitalId, id);
 }
 
-module.exports = { STATUSES, formatCode, query, summarize, findById, activeForAppointment, nextNumber, create, updateStatus, fromRow };
+module.exports = { STATUSES, TRANSITIONS, formatCode, query, summarize, findById, activeForAppointment, nextNumber, create, updateStatus, fromRow };

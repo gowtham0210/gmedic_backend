@@ -21,68 +21,6 @@ async function api(url, opts = {}) {
 
 const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
 
-function RequestModal({ open, onClose, onCreated }) {
-  const [form, setForm] = useState({ appointmentId: '', amount: '', reason: '' });
-  const [errors, setErrors] = useState({});
-  const [saving, setSaving] = useState(false);
-  if (!open) return null;
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
-
-  async function submit(e) {
-    e.preventDefault();
-    setSaving(true);
-    setErrors({});
-    try {
-      const res = await api('/api/admin/refunds', { method: 'POST', body: form });
-      toast(res.message, 'success');
-      onCreated();
-      onClose();
-      setForm({ appointmentId: '', amount: '', reason: '' });
-    } catch (err) {
-      setErrors(err.fields || {});
-      if (!err.fields) toast(err.message, 'error');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="modal" role="dialog" aria-modal="true">
-      <div className="modal__backdrop" onClick={onClose}></div>
-      <div className="modal__panel modal__panel--sm">
-        <form onSubmit={submit}>
-          <div className="modal__head">
-            <div className="modal__icon tone-teal"><Icon name="refresh" /></div>
-            <div><h2>Request Refund</h2><p>Must be a paid appointment.</p></div>
-            <button type="button" className="icon-btn" onClick={onClose} aria-label="Close"><Icon name="x" /></button>
-          </div>
-          <div className="modal__body">
-            <div className={`field${errors.appointmentId ? ' has-error' : ''}`} style={{ marginBottom: 14 }}>
-              <label>Appointment ID *</label>
-              <input className="input" value={form.appointmentId} onChange={set('appointmentId')} placeholder="APT10001" required />
-              {errors.appointmentId && <p className="field__error">{errors.appointmentId}</p>}
-            </div>
-            <div className={`field${errors.amount ? ' has-error' : ''}`} style={{ marginBottom: 14 }}>
-              <label>Amount (₹) *</label>
-              <input className="input" type="number" min="1" value={form.amount} onChange={set('amount')} required />
-              {errors.amount && <p className="field__error">{errors.amount}</p>}
-            </div>
-            <div className={`field${errors.reason ? ' has-error' : ''}`}>
-              <label>Reason *</label>
-              <textarea className="textarea" rows={3} value={form.reason} onChange={set('reason')} required />
-              {errors.reason && <p className="field__error">{errors.reason}</p>}
-            </div>
-          </div>
-          <div className="modal__foot">
-            <button type="button" className="btn btn--ghost" onClick={onClose}>Cancel</button>
-            <button type="submit" className={`btn btn--primary${saving ? ' is-loading' : ''}`} disabled={saving}><Icon name="check" /><span>Request</span></button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
 function DecisionModal({ target, onClose, onDone }) {
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
@@ -133,7 +71,6 @@ export default function RefundsPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState('');
-  const [showRequest, setShowRequest] = useState(false);
   const [decisionTarget, setDecisionTarget] = useState(null);
 
   const load = useCallback(async () => {
@@ -159,10 +96,7 @@ export default function RefundsPage() {
       <div className="page-head">
         <div>
           <h1>Refunds</h1>
-          <p>Approve or reject refund requests. Amounts above the threshold need a second admin&apos;s sign-off.</p>
-        </div>
-        <div className="page-head__actions">
-          <button type="button" className="btn btn--primary" onClick={() => setShowRequest(true)}><Icon name="plus" />Request Refund</button>
+          <p>Approve or reject refund requests raised by hospital receptionists. Amounts above the threshold need a second admin&apos;s sign-off.</p>
         </div>
       </div>
 
@@ -212,7 +146,6 @@ export default function RefundsPage() {
         <div className="pager"><span>{total} refund{total === 1 ? '' : 's'}</span></div>
       </article>
 
-      <RequestModal open={showRequest} onClose={() => setShowRequest(false)} onCreated={load} />
       <DecisionModal target={decisionTarget} onClose={() => setDecisionTarget(null)} onDone={load} />
     </>
   );

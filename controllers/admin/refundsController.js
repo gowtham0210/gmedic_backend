@@ -44,6 +44,10 @@ exports.create = async (req, res) => {
 
   const appt = await db.one("SELECT a.*, pay.id AS payment_id, pay.amount AS paid_amount FROM appointments a JOIN payments pay ON pay.appointment_id = a.id AND pay.status='PAID' WHERE a.id = ?", [value.appointmentId]);
   if (!appt) throw badRequest('No paid payment was found for this appointment.', { appointmentId: 'No paid payment found.' });
+  // Scopes a receptionist to their own hospital's appointments; req.hospitalId
+  // is only set for receptionist-scoped requests (Super Admin can no longer
+  // request refunds — only approve/reject them, see decide() below).
+  if (req.hospitalId && appt.hospital_id !== req.hospitalId) throw notFound('Appointment not found.');
   if (value.amount > Number(appt.paid_amount)) throw badRequest(`Amount cannot exceed the paid amount (₹${appt.paid_amount}).`, { amount: 'Exceeds the paid amount.' });
 
   const threshold = Number((await db.one("SELECT value FROM platform_settings WHERE setting_key = 'refund_maker_checker_threshold'"))?.value ?? 2000);

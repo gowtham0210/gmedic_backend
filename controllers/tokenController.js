@@ -87,6 +87,6 @@ exports.updateStatus = async (req, res) => {
   if (token.status === status) return res.json({ ok: true, message: 'No changes to save.', token });
 
   const updated = await tokenModel.updateStatus(req.hospitalId, token.id, status);
-  const labels = { waiting: 'Waiting', called: 'Called', completed: 'Completed', cancelled: 'Cancelled' };
+  const labels = { waiting: 'Waiting', called: 'Called', in_consultation: 'In Consultation', completed: 'Completed', cancelled: 'Cancelled', skipped: 'Skipped' };
   res.json({ ok: true, message: `Token ${updated.code} marked as ${labels[status]}.`, token: updated });
 };

@@ -1,5 +1,6 @@
 import Script from 'next/script';
 import Icon from '../../../components/Icon';
+import RefundRequestModal from '../../../components/receptionist/RefundRequestModal';
 import { requireReceptionist } from '../../../lib/rbac';
 
 export const metadata = { title: 'Payments · Gmedic' };
@@ -62,16 +63,17 @@ export default async function PaymentsPage() {
         <div className="table-wrap" style={{ padding: '14px 8px 0' }}>
           <table className="table table--stack">
             <thead>
-              <tr><th>Patient</th><th>Doctor</th><th>Appointment Date</th><th>Appointment Time</th><th className="num">Fee</th><th>Method</th><th>Payment Status</th></tr>
+              <tr><th>Patient</th><th>Doctor</th><th>Appointment Date</th><th>Appointment Time</th><th className="num">Fee</th><th>Method</th><th>Payment Status</th><th className="col-actions">Actions</th></tr>
             </thead>
             <tbody data-pay-rows>
-              <tr><td colSpan={7}><div className="skeleton skeleton--row"></div><div className="skeleton skeleton--row"></div><div className="skeleton skeleton--row"></div></td></tr>
+              <tr><td colSpan={8}><div className="skeleton skeleton--row"></div><div className="skeleton skeleton--row"></div><div className="skeleton skeleton--row"></div></td></tr>
             </tbody>
           </table>
         </div>
         <div className="pager" data-pager></div>
       </article>
 
+      <RefundRequestModal />
       <Script src="/js/pages/payments.js" strategy="afterInteractive" />
     </>
   );

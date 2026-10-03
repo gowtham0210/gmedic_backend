@@ -114,6 +114,8 @@
     absent: 'Absent / On Leave',
     waiting: 'Waiting',
     called: 'Called',
+    in_consultation: 'In Consultation',
+    skipped: 'Skipped',
   };
   G.label = (key) => LABELS[key] || key;
   G.badge = (key, text) => `<span class="badge badge--${G.esc(key)}">${G.esc(text || G.label(key))}</span>`;

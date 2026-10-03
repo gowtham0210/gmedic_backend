@@ -43,7 +43,7 @@
     $('[data-sum="pendingCount"]').textContent = s.pendingCount;
 
     if (!data.items.length) {
-      tbody.innerHTML = G.emptyRow(7, 'No payments found', 'Try a different date range or filter.', 'wallet');
+      tbody.innerHTML = G.emptyRow(8, 'No payments found', 'Try a different date range or filter.', 'wallet');
     } else {
       tbody.innerHTML = data.items.map((p) => `
         <tr>
@@ -54,6 +54,8 @@
           <td data-label="Fee" class="num fee">${G.money(p.fee)}</td>
           <td data-label="Method">${p.payment ? `${esc(p.payment.method)}<span class="cell-sub mono">${esc(p.payment.transactionId)}</span>` : '<span class="text-muted">—</span>'}</td>
           <td data-label="Payment">${G.badge(p.paymentStatus)}</td>
+          <td class="col-actions">${p.paymentStatus === 'paid' ? `<button type="button" class="action-btn" data-request-refund
+              data-appointment-id="${esc(p.id)}" data-patient-name="${esc(p.patientName)}" data-fee="${p.fee}">${icon('refresh')}Request Refund</button>` : ''}</td>
         </tr>`).join('');
     }
     G.renderPager(pager, data, (page) => { state.page = page; load(); window.scrollTo({ top: 0, behavior: 'smooth' }); }, 'payments');
@@ -73,7 +75,7 @@
       render(await api(`/api/payments?${queryString({ pageSize: 10 })}`, { signal: controller.signal }));
     } catch (err) {
       if (err.name === 'AbortError') return;
-      tbody.innerHTML = `<tr><td colspan="7"><div class="alert alert--error">${icon('alert')}<span>${esc(err.message)}</span></div></td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8"><div class="alert alert--error">${icon('alert')}<span>${esc(err.message)}</span></div></td></tr>`;
     } finally {
       tbody.style.opacity = '';
     }
@@ -98,6 +100,14 @@
   $('[data-date-chips]').addEventListener('click', (e) => {
     const chip = e.target.closest('[data-range]');
     if (chip) update(RANGES[chip.dataset.range]());
+  });
+
+  tbody.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-request-refund]');
+    if (!btn) return;
+    window.dispatchEvent(new CustomEvent('refund:request', {
+      detail: { appointmentId: btn.dataset.appointmentId, patientName: btn.dataset.patientName, fee: Number(btn.dataset.fee) },
+    }));
   });
 
   load();

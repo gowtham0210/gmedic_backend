@@ -8,3 +8,4 @@ data/*.sqlite-wal
 .env
 storage/
 *.log
+data/backup/

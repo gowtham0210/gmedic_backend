@@ -2,6 +2,7 @@ const tokenModel = require('../models/tokenModel');
 const appointmentModel = require('../models/appointmentModel');
 const { badRequest, notFound } = require('../utils/http');
 const { isISODate, todayISO } = require('../utils/dates');
+const notifications = require('../services/notificationService');
 
 function readDate(value) {
   if (!value) return todayISO();
@@ -67,6 +68,9 @@ exports.create = async (req, res) => {
   if (existing) throw badRequest(`${appointment.patientName} already has token ${existing.code} for this appointment.`);
 
   const token = await tokenModel.create(req.hospitalId, appointment);
+  await notifications.trigger('TOKEN_GENERATED', await notifications.doctorUsers(token.doctorId), {
+    token_number: token.code, patient_name: token.patientName, doctor_name: token.doctorName.replace(/^Dr\.?\s*/i, ''), appointment_id: appointment.id, appointment_date: appointment.date,
+  }, { link: '/doctor/queue' });
   res.status(201).json({ ok: true, message: `Token ${token.code} assigned to ${token.patientName}.`, token });
 };
 

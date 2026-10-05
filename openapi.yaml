@@ -1,0 +1,2123 @@
+openapi: 3.0.3
+info:
+  title: Gmedic Web Portal API
+  version: 1.0.0
+  description: |
+    REST API behind the Gmedic Super Admin, Receptionist and Doctor portals (Next.js route handlers).
+    Authentication is a session cookie (`gmedic.sid`) set by `POST /api/auth/login`. Authorisation is enforced on the server:
+    admin routes need the named permission (403 otherwise), portal routes are scoped to the signed-in hospital / doctor,
+    and users only ever see their own support tickets (404 for anyone else's).
+    The access requirement of each operation is given in `x-access`.
+    Super Admin appointments are read-only: there is no cancel / reschedule / edit endpoint.
+servers:
+  - url: http://localhost:3000
+    description: Local development
+security:
+  - sessionCookie: []
+tags:
+  - name: "Auth"
+  - name: "Internal"
+  - name: "Admin: Dashboard"
+  - name: "Admin: Hospitals"
+  - name: "Admin: Doctors"
+  - name: "Admin: Receptionists"
+  - name: "Admin: QR"
+  - name: "Admin: Appointments"
+  - name: "Admin: Patients"
+  - name: "Admin: Finance"
+  - name: "Admin: Support"
+  - name: "Admin: Communications"
+  - name: "Admin: Settings"
+  - name: "Admin: Audit"
+  - name: "Receptionist"
+  - name: "Doctor"
+paths:
+  /api/auth/login:
+    post:
+      tags: ["Auth"]
+      summary: "Log in (sets the gmedic.sid session cookie)"
+      operationId: postApiAuthLogin
+      x-access: "public"
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/LoginRequest'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+  /api/auth/logout:
+    post:
+      tags: ["Auth"]
+      summary: "Log out"
+      operationId: postApiAuthLogout
+      x-access: "public"
+      security: []
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+  /api/auth/forgot-password:
+    post:
+      tags: ["Auth"]
+      summary: "Request a password reset"
+      operationId: postApiAuthForgotPassword
+      x-access: "public"
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ForgotPasswordRequest'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+  /api/internal/events:
+    post:
+      tags: ["Internal"]
+      summary: "Fire an appointment/payment notification event (patient-app backend). Header x-internal-key required"
+      operationId: postApiInternalEvents
+      x-access: "internal"
+      security:
+        - internalKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/InternalEventRequest'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+  /api/admin/dashboard:
+    get:
+      tags: ["Admin: Dashboard"]
+      summary: "Dashboard summary"
+      operationId: getApiAdminDashboard
+      x-access: "any admin"
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/admin/analytics:
+    get:
+      tags: ["Admin: Dashboard"]
+      summary: "Analytics summary"
+      operationId: getApiAdminAnalytics
+      x-access: "analytics.view"
+      parameters:
+        - {name: from, in: query, schema: {type: string}}
+        - {name: to, in: query, schema: {type: string}}
+        - {name: hospitalId, in: query, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/admin/hospitals:
+    get:
+      tags: ["Admin: Hospitals"]
+      summary: "List hospitals"
+      operationId: getApiAdminHospitals
+      x-access: "hospitals.view"
+      parameters:
+        - {name: status, in: query, schema: {type: string}}
+        - {name: kycStatus, in: query, schema: {type: string}}
+        - {name: q, in: query, schema: {type: string}}
+        - {name: page, in: query, schema: {type: string}}
+        - {name: pageSize, in: query, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+    post:
+      tags: ["Admin: Hospitals"]
+      summary: "Onboard a hospital"
+      operationId: postApiAdminHospitals
+      x-access: "hospitals.manage"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Object'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/admin/hospitals/{id}:
+    get:
+      tags: ["Admin: Hospitals"]
+      summary: "Hospital detail"
+      operationId: getApiAdminHospitalsId
+      x-access: "hospitals.view"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+    put:
+      tags: ["Admin: Hospitals"]
+      summary: "Update hospital"
+      operationId: putApiAdminHospitalsId
+      x-access: "hospitals.manage"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Object'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/admin/hospitals/{id}/status:
+    patch:
+      tags: ["Admin: Hospitals"]
+      summary: "Activate / suspend a hospital"
+      operationId: patchApiAdminHospitalsIdStatus
+      x-access: "hospitals.manage"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/StatusChange'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/admin/hospitals/{id}/fees:
+    put:
+      tags: ["Admin: Hospitals"]
+      summary: "Set booking model, fees and COMMISSION (type + value)"
+      operationId: putApiAdminHospitalsIdFees
+      x-access: "hospitals.manage"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/FeeCommission'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/admin/hospitals/{id}/kyc:
+    patch:
+      tags: ["Admin: Hospitals"]
+      summary: "Set KYC status"
+      operationId: patchApiAdminHospitalsIdKyc
+      x-access: "kyc.manage"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/StatusChange'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/admin/hospitals/{id}/documents:
+    get:
+      tags: ["Admin: Hospitals"]
+      summary: "List KYC documents"
+      operationId: getApiAdminHospitalsIdDocuments
+      x-access: "kyc.view"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/admin/hospitals/{id}/documents/{docId}:
+    patch:
+      tags: ["Admin: Hospitals"]
+      summary: "Approve / reject a KYC document"
+      operationId: patchApiAdminHospitalsIdDocumentsDocid
+      x-access: "kyc.manage"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+        - {name: docId, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/StatusChange'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/admin/hospitals/{id}/branches:
+    get:
+      tags: ["Admin: Hospitals"]
+      summary: "List branches"
+      operationId: getApiAdminHospitalsIdBranches
+      x-access: "branches.view"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+    post:
+      tags: ["Admin: Hospitals"]
+      summary: "Create branch"
+      operationId: postApiAdminHospitalsIdBranches
+      x-access: "branches.manage"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Object'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/admin/branches/{id}:
+    patch:
+      tags: ["Admin: Hospitals"]
+      summary: "Update branch"
+      operationId: patchApiAdminBranchesId
+      x-access: "branches.manage"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Object'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/admin/doctors:
+    get:
+      tags: ["Admin: Doctors"]
+      summary: "List doctors"
+      operationId: getApiAdminDoctors
+      x-access: "doctors.view"
+      parameters:
+        - {name: hospitalId, in: query, schema: {type: string}}
+        - {name: verificationStatus, in: query, schema: {type: string}}
+        - {name: q, in: query, schema: {type: string}}
+        - {name: page, in: query, schema: {type: string}}
+        - {name: pageSize, in: query, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/admin/doctors/{id}:
+    get:
+      tags: ["Admin: Doctors"]
+      summary: "Doctor detail"
+      operationId: getApiAdminDoctorsId
+      x-access: "doctors.view"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+    put:
+      tags: ["Admin: Doctors"]
+      summary: "Update doctor"
+      operationId: putApiAdminDoctorsId
+      x-access: "doctors.manage"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Object'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/admin/doctors/{id}/verification:
+    patch:
+      tags: ["Admin: Doctors"]
+      summary: "Verify / reject a doctor"
+      operationId: patchApiAdminDoctorsIdVerification
+      x-access: "doctors.verify"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/StatusChange'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/admin/receptionists:
+    get:
+      tags: ["Admin: Receptionists"]
+      summary: "List receptionists"
+      operationId: getApiAdminReceptionists
+      x-access: "receptionists.view"
+      parameters:
+        - {name: hospitalId, in: query, schema: {type: string}}
+        - {name: q, in: query, schema: {type: string}}
+        - {name: page, in: query, schema: {type: string}}
+        - {name: pageSize, in: query, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+    post:
+      tags: ["Admin: Receptionists"]
+      summary: "Create receptionist"
+      operationId: postApiAdminReceptionists
+      x-access: "receptionists.manage"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Object'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/admin/receptionists/{id}/status:
+    patch:
+      tags: ["Admin: Receptionists"]
+      summary: "Enable / disable receptionist"
+      operationId: patchApiAdminReceptionistsIdStatus
+      x-access: "receptionists.manage"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/StatusChange'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/admin/receptionists/{id}/reset-password:
+    post:
+      tags: ["Admin: Receptionists"]
+      summary: "Reset password"
+      operationId: postApiAdminReceptionistsIdResetPassword
+      x-access: "receptionists.manage"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/admin/qr:
+    get:
+      tags: ["Admin: QR"]
+      summary: "List QR codes"
+      operationId: getApiAdminQr
+      x-access: "qr.view"
+      parameters:
+        - {name: hospitalId, in: query, schema: {type: string}}
+        - {name: status, in: query, schema: {type: string}}
+        - {name: page, in: query, schema: {type: string}}
+        - {name: pageSize, in: query, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+    post:
+      tags: ["Admin: QR"]
+      summary: "Create QR code"
+      operationId: postApiAdminQr
+      x-access: "qr.manage"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Object'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/admin/qr/analytics:
+    get:
+      tags: ["Admin: QR"]
+      summary: "QR scan analytics"
+      operationId: getApiAdminQrAnalytics
+      x-access: "qr.view"
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/admin/qr/{id}/revoke:
+    post:
+      tags: ["Admin: QR"]
+      summary: "Revoke QR code"
+      operationId: postApiAdminQrIdRevoke
+      x-access: "qr.manage"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Reason'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/admin/qr/{id}/reissue:
+    post:
+      tags: ["Admin: QR"]
+      summary: "Reissue QR code"
+      operationId: postApiAdminQrIdReissue
+      x-access: "qr.manage"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/admin/appointments:
+    get:
+      tags: ["Admin: Appointments"]
+      summary: "List appointments (READ-ONLY)"
+      operationId: getApiAdminAppointments
+      x-access: "appointments.view"
+      parameters:
+        - {name: q, in: query, schema: {type: string}}
+        - {name: hospitalId, in: query, schema: {type: string}}
+        - {name: doctorId, in: query, schema: {type: string}}
+        - {name: status, in: query, schema: {type: string}}
+        - {name: paymentStatus, in: query, schema: {type: string}}
+        - {name: from, in: query, schema: {type: string}}
+        - {name: to, in: query, schema: {type: string}}
+        - {name: page, in: query, schema: {type: string}}
+        - {name: pageSize, in: query, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/admin/appointments/{id}:
+    get:
+      tags: ["Admin: Appointments"]
+      summary: "Appointment detail (READ-ONLY)"
+      operationId: getApiAdminAppointmentsId
+      x-access: "appointments.view"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/admin/patients/search:
+    get:
+      tags: ["Admin: Patients"]
+      summary: "Search patients"
+      operationId: getApiAdminPatientsSearch
+      x-access: "patients.view"
+      parameters:
+        - {name: q, in: query, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/admin/patients/{id}:
+    get:
+      tags: ["Admin: Patients"]
+      summary: "Patient detail"
+      operationId: getApiAdminPatientsId
+      x-access: "patients.view"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/admin/payments:
+    get:
+      tags: ["Admin: Finance"]
+      summary: "List payments"
+      operationId: getApiAdminPayments
+      x-access: "payments.view"
+      parameters:
+        - {name: status, in: query, schema: {type: string}}
+        - {name: hospitalId, in: query, schema: {type: string}}
+        - {name: from, in: query, schema: {type: string}}
+        - {name: to, in: query, schema: {type: string}}
+        - {name: page, in: query, schema: {type: string}}
+        - {name: pageSize, in: query, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/admin/refunds:
+    get:
+      tags: ["Admin: Finance"]
+      summary: "List refunds (raised by receptionists)"
+      operationId: getApiAdminRefunds
+      x-access: "refunds.view"
+      parameters:
+        - {name: status, in: query, schema: {type: string}}
+        - {name: page, in: query, schema: {type: string}}
+        - {name: pageSize, in: query, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/admin/refunds/{id}/decision:
+    post:
+      tags: ["Admin: Finance"]
+      summary: "Approve or reject a refund"
+      operationId: postApiAdminRefundsIdDecision
+      x-access: "refunds.approve"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RefundDecision'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/admin/disputes:
+    get:
+      tags: ["Admin: Finance"]
+      summary: "List disputes"
+      operationId: getApiAdminDisputes
+      x-access: "disputes.view"
+      parameters:
+        - {name: status, in: query, schema: {type: string}}
+        - {name: hospitalId, in: query, schema: {type: string}}
+        - {name: page, in: query, schema: {type: string}}
+        - {name: pageSize, in: query, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/admin/disputes/{id}/resolve:
+    post:
+      tags: ["Admin: Finance"]
+      summary: "Mark under review / resolve / reject (resolution note required to close)"
+      operationId: postApiAdminDisputesIdResolve
+      x-access: "disputes.manage"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DisputeResolve'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/admin/disputes/{id}/notes:
+    get:
+      tags: ["Admin: Finance"]
+      summary: "List internal notes"
+      operationId: getApiAdminDisputesIdNotes
+      x-access: "disputes.view"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+    post:
+      tags: ["Admin: Finance"]
+      summary: "Add internal note"
+      operationId: postApiAdminDisputesIdNotes
+      x-access: "disputes.manage"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Note'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/admin/settlements:
+    get:
+      tags: ["Admin: Finance"]
+      summary: "List settlements; also auto-generates any finished weekly settlement"
+      operationId: getApiAdminSettlements
+      x-access: "settlements.view"
+      parameters:
+        - {name: hospitalId, in: query, schema: {type: string}}
+        - {name: status, in: query, schema: {type: string}}
+        - {name: page, in: query, schema: {type: string}}
+        - {name: pageSize, in: query, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+    post:
+      tags: ["Admin: Finance"]
+      summary: "Generate a settlement for a custom period"
+      operationId: postApiAdminSettlements
+      x-access: "settlements.manage"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SettlementGenerate'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/admin/settlements/{id}/mark-paid:
+    post:
+      tags: ["Admin: Finance"]
+      summary: "Mark a settlement paid"
+      operationId: postApiAdminSettlementsIdMarkPaid
+      x-access: "settlements.manage"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/MarkPaid'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/admin/webhooks:
+    get:
+      tags: ["Admin: Finance"]
+      summary: "Payment webhooks"
+      operationId: getApiAdminWebhooks
+      x-access: "webhooks.view"
+      parameters:
+        - {name: status, in: query, schema: {type: string}}
+        - {name: page, in: query, schema: {type: string}}
+        - {name: pageSize, in: query, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/admin/webhooks/{id}/resync:
+    post:
+      tags: ["Admin: Finance"]
+      summary: "Re-sync a webhook"
+      operationId: postApiAdminWebhooksIdResync
+      x-access: "webhooks.manage"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/admin/support:
+    get:
+      tags: ["Admin: Support"]
+      summary: "List all tickets with counts"
+      operationId: getApiAdminSupport
+      x-access: "support.view_all"
+      parameters:
+        - {name: source, in: query, schema: {type: string}}
+        - {name: category, in: query, schema: {type: string}}
+        - {name: priority, in: query, schema: {type: string}}
+        - {name: status, in: query, schema: {type: string}}
+        - {name: hospitalId, in: query, schema: {type: string}}
+        - {name: from, in: query, schema: {type: string}}
+        - {name: to, in: query, schema: {type: string}}
+        - {name: q, in: query, schema: {type: string}}
+        - {name: page, in: query, schema: {type: string}}
+        - {name: pageSize, in: query, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/admin/support/assignees:
+    get:
+      tags: ["Admin: Support"]
+      summary: "Staff a ticket can be assigned to"
+      operationId: getApiAdminSupportAssignees
+      x-access: "support.view_all"
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/admin/support/{id}:
+    get:
+      tags: ["Admin: Support"]
+      summary: "Ticket with its conversation"
+      operationId: getApiAdminSupportId
+      x-access: "support.view_all"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/admin/support/{id}/messages:
+    post:
+      tags: ["Admin: Support"]
+      summary: "Reply (moves Open to In Progress)"
+      operationId: postApiAdminSupportIdMessages
+      x-access: "support.reply"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Message'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/admin/support/{id}/assign:
+    patch:
+      tags: ["Admin: Support"]
+      summary: "Assign ticket"
+      operationId: patchApiAdminSupportIdAssign
+      x-access: "support.assign"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Assign'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/admin/support/{id}/priority:
+    patch:
+      tags: ["Admin: Support"]
+      summary: "Change priority"
+      operationId: patchApiAdminSupportIdPriority
+      x-access: "support.update_status"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Priority'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/admin/support/{id}/status:
+    patch:
+      tags: ["Admin: Support"]
+      summary: "Change status (Closed needs support.close)"
+      operationId: patchApiAdminSupportIdStatus
+      x-access: "support.update_status"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TicketStatus'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/admin/communications/templates:
+    get:
+      tags: ["Admin: Communications"]
+      summary: "List notification templates, channels and unused events"
+      operationId: getApiAdminCommunicationsTemplates
+      x-access: "communications.templates.view"
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+    post:
+      tags: ["Admin: Communications"]
+      summary: "Create template for an event"
+      operationId: postApiAdminCommunicationsTemplates
+      x-access: "communications.templates.create"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TemplateWrite'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/admin/communications/templates/{id}:
+    patch:
+      tags: ["Admin: Communications"]
+      summary: "Edit template (variables validated, before/after audited)"
+      operationId: patchApiAdminCommunicationsTemplatesId
+      x-access: "communications.templates.update"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TemplateWrite'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/admin/communications/templates/{id}/status:
+    patch:
+      tags: ["Admin: Communications"]
+      summary: "Enable / disable template"
+      operationId: patchApiAdminCommunicationsTemplatesIdStatus
+      x-access: "communications.templates.enable|disable"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/StatusChange'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/admin/communications/logs:
+    get:
+      tags: ["Admin: Communications"]
+      summary: "Notification history"
+      operationId: getApiAdminCommunicationsLogs
+      x-access: "communications.templates.view"
+      parameters:
+        - {name: status, in: query, schema: {type: string}}
+        - {name: eventKey, in: query, schema: {type: string}}
+        - {name: page, in: query, schema: {type: string}}
+        - {name: pageSize, in: query, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/admin/communications/announcements:
+    get:
+      tags: ["Admin: Communications"]
+      summary: "List announcements"
+      operationId: getApiAdminCommunicationsAnnouncements
+      x-access: "communications.announcements.view"
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+    post:
+      tags: ["Admin: Communications"]
+      summary: "Create announcement (draft)"
+      operationId: postApiAdminCommunicationsAnnouncements
+      x-access: "communications.announcements.create"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Announcement'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/admin/communications/announcements/{id}/publish:
+    patch:
+      tags: ["Admin: Communications"]
+      summary: "Publish / archive (shown in Doctor and Receptionist portals)"
+      operationId: patchApiAdminCommunicationsAnnouncementsIdPublish
+      x-access: "communications.announcements.publish|archive"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/StatusChange'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/admin/communications/banners:
+    get:
+      tags: ["Admin: Communications"]
+      summary: "List banners"
+      operationId: getApiAdminCommunicationsBanners
+      x-access: "communications.banners.view"
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+    post:
+      tags: ["Admin: Communications"]
+      summary: "Create banner"
+      operationId: postApiAdminCommunicationsBanners
+      x-access: "communications.banners.create"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Banner'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/admin/communications/banners/{id}:
+    patch:
+      tags: ["Admin: Communications"]
+      summary: "Update banner"
+      operationId: patchApiAdminCommunicationsBannersId
+      x-access: "communications.banners.update"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Banner'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/admin/communications/banners/{id}/status:
+    patch:
+      tags: ["Admin: Communications"]
+      summary: "Activate / deactivate banner"
+      operationId: patchApiAdminCommunicationsBannersIdStatus
+      x-access: "communications.banners.activate|deactivate"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/StatusChange'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/admin/settings:
+    get:
+      tags: ["Admin: Settings"]
+      summary: "Platform settings"
+      operationId: getApiAdminSettings
+      x-access: "settings.view"
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+    put:
+      tags: ["Admin: Settings"]
+      summary: "Update a setting"
+      operationId: putApiAdminSettings
+      x-access: "settings.manage"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Object'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/admin/feature-flags:
+    get:
+      tags: ["Admin: Settings"]
+      summary: "List feature flags"
+      operationId: getApiAdminFeatureFlags
+      x-access: "feature_flags.view"
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/admin/feature-flags/{id}:
+    patch:
+      tags: ["Admin: Settings"]
+      summary: "Toggle a feature flag"
+      operationId: patchApiAdminFeatureFlagsId
+      x-access: "feature_flags.manage"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Object'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/admin/app-versions:
+    get:
+      tags: ["Admin: Settings"]
+      summary: "List app versions"
+      operationId: getApiAdminAppVersions
+      x-access: "app_versions.view"
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/admin/app-versions/{platform}:
+    put:
+      tags: ["Admin: Settings"]
+      summary: "Update app version"
+      operationId: putApiAdminAppVersionsPlatform
+      x-access: "app_versions.manage"
+      parameters:
+        - {name: platform, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Object'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/admin/audit-logs:
+    get:
+      tags: ["Admin: Audit"]
+      summary: "Audit logs"
+      operationId: getApiAdminAuditLogs
+      x-access: "audit_logs.view"
+      parameters:
+        - {name: action, in: query, schema: {type: string}}
+        - {name: entityType, in: query, schema: {type: string}}
+        - {name: userId, in: query, schema: {type: string}}
+        - {name: from, in: query, schema: {type: string}}
+        - {name: to, in: query, schema: {type: string}}
+        - {name: page, in: query, schema: {type: string}}
+        - {name: pageSize, in: query, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/me:
+    get:
+      tags: ["Receptionist"]
+      summary: "Current user"
+      operationId: getApiMe
+      x-access: "receptionist"
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/dashboard:
+    get:
+      tags: ["Receptionist"]
+      summary: "Dashboard summary"
+      operationId: getApiDashboard
+      x-access: "receptionist"
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/search:
+    get:
+      tags: ["Receptionist"]
+      summary: "Global search"
+      operationId: getApiSearch
+      x-access: "receptionist"
+      parameters:
+        - {name: q, in: query, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/appointments:
+    get:
+      tags: ["Receptionist"]
+      summary: "List appointments"
+      operationId: getApiAppointments
+      x-access: "receptionist"
+      parameters:
+        - {name: q, in: query, schema: {type: string}}
+        - {name: status, in: query, schema: {type: string}}
+        - {name: doctorId, in: query, schema: {type: string}}
+        - {name: date, in: query, schema: {type: string}}
+        - {name: page, in: query, schema: {type: string}}
+        - {name: pageSize, in: query, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/appointments/{id}:
+    get:
+      tags: ["Receptionist"]
+      summary: "Appointment detail"
+      operationId: getApiAppointmentsId
+      x-access: "receptionist"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/appointments/{id}/status:
+    patch:
+      tags: ["Receptionist"]
+      summary: "Update appointment status"
+      operationId: patchApiAppointmentsIdStatus
+      x-access: "receptionist"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/StatusChange'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/doctors:
+    get:
+      tags: ["Receptionist"]
+      summary: "List hospital doctors"
+      operationId: getApiDoctors
+      x-access: "receptionist"
+      parameters:
+        - {name: q, in: query, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+    post:
+      tags: ["Receptionist"]
+      summary: "Add doctor"
+      operationId: postApiDoctors
+      x-access: "receptionist"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Object'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/doctors/{id}:
+    get:
+      tags: ["Receptionist"]
+      summary: "Doctor detail"
+      operationId: getApiDoctorsId
+      x-access: "receptionist"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+    put:
+      tags: ["Receptionist"]
+      summary: "Update doctor"
+      operationId: putApiDoctorsId
+      x-access: "receptionist"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Object'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/doctors/{id}/availability:
+    patch:
+      tags: ["Receptionist"]
+      summary: "Set doctor availability (notifies via DOCTOR_AVAILABILITY_UPDATED)"
+      operationId: patchApiDoctorsIdAvailability
+      x-access: "receptionist"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Availability'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/doctors/availability:
+    patch:
+      tags: ["Receptionist"]
+      summary: "Bulk availability"
+      operationId: patchApiDoctorsAvailability
+      x-access: "receptionist"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Object'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/tokens:
+    get:
+      tags: ["Receptionist"]
+      summary: "List tokens"
+      operationId: getApiTokens
+      x-access: "receptionist"
+      parameters:
+        - {name: date, in: query, schema: {type: string}}
+        - {name: doctorId, in: query, schema: {type: string}}
+        - {name: status, in: query, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+    post:
+      tags: ["Receptionist"]
+      summary: "Generate token (notifies doctor: TOKEN_GENERATED)"
+      operationId: postApiTokens
+      x-access: "receptionist"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Object'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/tokens/eligible:
+    get:
+      tags: ["Receptionist"]
+      summary: "Appointments eligible for a token"
+      operationId: getApiTokensEligible
+      x-access: "receptionist"
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/tokens/{id}:
+    get:
+      tags: ["Receptionist"]
+      summary: "Token detail"
+      operationId: getApiTokensId
+      x-access: "receptionist"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/tokens/{id}/status:
+    patch:
+      tags: ["Receptionist"]
+      summary: "Update token status"
+      operationId: patchApiTokensIdStatus
+      x-access: "receptionist"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/StatusChange'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/payments:
+    get:
+      tags: ["Receptionist"]
+      summary: "Hospital payments"
+      operationId: getApiPayments
+      x-access: "receptionist"
+      parameters:
+        - {name: status, in: query, schema: {type: string}}
+        - {name: from, in: query, schema: {type: string}}
+        - {name: to, in: query, schema: {type: string}}
+        - {name: page, in: query, schema: {type: string}}
+        - {name: pageSize, in: query, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/refunds:
+    post:
+      tags: ["Receptionist"]
+      summary: "Request a refund (Super Admin approves/rejects)"
+      operationId: postApiRefunds
+      x-access: "receptionist"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RefundRequest'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/hospital:
+    get:
+      tags: ["Receptionist"]
+      summary: "Own hospital profile"
+      operationId: getApiHospital
+      x-access: "receptionist"
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+    put:
+      tags: ["Receptionist"]
+      summary: "Update hospital profile"
+      operationId: putApiHospital
+      x-access: "receptionist"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Object'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/hospital/qr.png:
+    get:
+      tags: ["Receptionist"]
+      summary: "Hospital QR (PNG)"
+      operationId: getApiHospitalQrPng
+      x-access: "receptionist"
+      responses:
+        '200': {description: OK, content: {image/png: {schema: {type: string, format: binary}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/hospital/qr.svg:
+    get:
+      tags: ["Receptionist"]
+      summary: "Hospital QR (SVG)"
+      operationId: getApiHospitalQrSvg
+      x-access: "receptionist"
+      responses:
+        '200': {description: OK, content: {image/svg+xml: {schema: {type: string, format: binary}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/hospital/qr-poster.svg:
+    get:
+      tags: ["Receptionist"]
+      summary: "QR poster (SVG)"
+      operationId: getApiHospitalQrPosterSvg
+      x-access: "receptionist"
+      responses:
+        '200': {description: OK, content: {image/svg+xml: {schema: {type: string, format: binary}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/profile:
+    put:
+      tags: ["Receptionist"]
+      summary: "Update profile"
+      operationId: putApiProfile
+      x-access: "receptionist"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Object'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/profile/password:
+    put:
+      tags: ["Receptionist"]
+      summary: "Change password"
+      operationId: putApiProfilePassword
+      x-access: "receptionist"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PasswordChange'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/notifications:
+    get:
+      tags: ["Receptionist"]
+      summary: "Notifications (system + derived)"
+      operationId: getApiNotifications
+      x-access: "receptionist"
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/notifications/read:
+    post:
+      tags: ["Receptionist"]
+      summary: "Mark notifications read"
+      operationId: postApiNotificationsRead
+      x-access: "receptionist"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Object'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/support:
+    get:
+      tags: ["Receptionist"]
+      summary: "My tickets"
+      operationId: getApiSupport
+      x-access: "support.view_own"
+      parameters:
+        - {name: status, in: query, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+    post:
+      tags: ["Receptionist"]
+      summary: "Raise a ticket"
+      operationId: postApiSupport
+      x-access: "support.create"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TicketCreate'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/support/{id}:
+    get:
+      tags: ["Receptionist"]
+      summary: "My ticket with conversation (404 if not mine)"
+      operationId: getApiSupportId
+      x-access: "support.view_own"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/support/{id}/messages:
+    post:
+      tags: ["Receptionist"]
+      summary: "Reply on my ticket"
+      operationId: postApiSupportIdMessages
+      x-access: "support.reply_own"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Message'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/doctor/appointments:
+    get:
+      tags: ["Doctor"]
+      summary: "My appointments"
+      operationId: getApiDoctorAppointments
+      x-access: "doctor"
+      parameters:
+        - {name: status, in: query, schema: {type: string}}
+        - {name: date, in: query, schema: {type: string}}
+        - {name: page, in: query, schema: {type: string}}
+        - {name: pageSize, in: query, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/doctor/appointments/{id}:
+    get:
+      tags: ["Doctor"]
+      summary: "Appointment detail"
+      operationId: getApiDoctorAppointmentsId
+      x-access: "doctor"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/doctor/appointments/{id}/status:
+    patch:
+      tags: ["Doctor"]
+      summary: "Update status / cancel (notifies receptionists)"
+      operationId: patchApiDoctorAppointmentsIdStatus
+      x-access: "doctor"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/StatusChange'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/doctor/availability:
+    patch:
+      tags: ["Doctor"]
+      summary: "Set my availability"
+      operationId: patchApiDoctorAvailability
+      x-access: "doctor"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Availability'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/doctor/queue:
+    get:
+      tags: ["Doctor"]
+      summary: "Queue for a date"
+      operationId: getApiDoctorQueue
+      x-access: "doctor"
+      parameters:
+        - {name: date, in: query, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/doctor/queue/call-next:
+    post:
+      tags: ["Doctor"]
+      summary: "Call next patient"
+      operationId: postApiDoctorQueueCallNext
+      x-access: "doctor"
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/doctor/queue/{id}/start:
+    post:
+      tags: ["Doctor"]
+      summary: "Start consultation"
+      operationId: postApiDoctorQueueIdStart
+      x-access: "doctor"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/doctor/queue/{id}/complete:
+    post:
+      tags: ["Doctor"]
+      summary: "Complete consultation"
+      operationId: postApiDoctorQueueIdComplete
+      x-access: "doctor"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/doctor/queue/{id}/skip:
+    post:
+      tags: ["Doctor"]
+      summary: "Skip token"
+      operationId: postApiDoctorQueueIdSkip
+      x-access: "doctor"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/doctor/queue/{id}/recall:
+    post:
+      tags: ["Doctor"]
+      summary: "Recall token"
+      operationId: postApiDoctorQueueIdRecall
+      x-access: "doctor"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/doctor/schedule:
+    get:
+      tags: ["Doctor"]
+      summary: "My weekly schedule"
+      operationId: getApiDoctorSchedule
+      x-access: "doctor"
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+    post:
+      tags: ["Doctor"]
+      summary: "Add schedule slot"
+      operationId: postApiDoctorSchedule
+      x-access: "doctor"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ScheduleSlot'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/doctor/schedule/{id}:
+    delete:
+      tags: ["Doctor"]
+      summary: "Remove schedule slot"
+      operationId: deleteApiDoctorScheduleId
+      x-access: "doctor"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/doctor/patients:
+    get:
+      tags: ["Doctor"]
+      summary: "My patients"
+      operationId: getApiDoctorPatients
+      x-access: "doctor"
+      parameters:
+        - {name: q, in: query, schema: {type: string}}
+        - {name: page, in: query, schema: {type: string}}
+        - {name: pageSize, in: query, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/doctor/patients/{id}:
+    get:
+      tags: ["Doctor"]
+      summary: "Patient detail"
+      operationId: getApiDoctorPatientsId
+      x-access: "doctor"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/doctor/profile:
+    get:
+      tags: ["Doctor"]
+      summary: "My profile"
+      operationId: getApiDoctorProfile
+      x-access: "doctor"
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+    put:
+      tags: ["Doctor"]
+      summary: "Update profile"
+      operationId: putApiDoctorProfile
+      x-access: "doctor"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Object'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/doctor/profile/password:
+    put:
+      tags: ["Doctor"]
+      summary: "Change password"
+      operationId: putApiDoctorProfilePassword
+      x-access: "doctor"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PasswordChange'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/doctor/notifications:
+    get:
+      tags: ["Doctor"]
+      summary: "Notifications"
+      operationId: getApiDoctorNotifications
+      x-access: "doctor"
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/doctor/notifications/read:
+    post:
+      tags: ["Doctor"]
+      summary: "Mark read"
+      operationId: postApiDoctorNotificationsRead
+      x-access: "doctor"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Object'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/doctor/support:
+    get:
+      tags: ["Doctor"]
+      summary: "My tickets"
+      operationId: getApiDoctorSupport
+      x-access: "support.view_own"
+      parameters:
+        - {name: status, in: query, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+    post:
+      tags: ["Doctor"]
+      summary: "Raise a ticket"
+      operationId: postApiDoctorSupport
+      x-access: "support.create"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TicketCreate'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+  /api/doctor/support/{id}:
+    get:
+      tags: ["Doctor"]
+      summary: "My ticket with conversation (404 if not mine)"
+      operationId: getApiDoctorSupportId
+      x-access: "support.view_own"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/doctor/support/{id}/messages:
+    post:
+      tags: ["Doctor"]
+      summary: "Reply on my ticket"
+      operationId: postApiDoctorSupportIdMessages
+      x-access: "support.reply_own"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Message'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+components:
+  securitySchemes:
+    sessionCookie: {type: apiKey, in: cookie, name: gmedic.sid}
+    internalKey: {type: apiKey, in: header, name: x-internal-key, description: Value of the INTERNAL_EVENT_KEY env var}
+  schemas:
+    Object: {type: object, additionalProperties: true, description: Free-form payload; see the portal form for fields}
+    Error:
+      type: object
+      properties:
+        error: {type: string}
+        fields: {type: object, additionalProperties: {type: string}, description: Per-field validation messages}
+    Ok:
+      type: object
+      properties:
+        ok: {type: boolean}
+        message: {type: string}
+        id: {type: string}
+    LoginRequest:
+      type: object
+      required: [role, identifier, password]
+      properties:
+        role: {type: string, enum: [SUPER_ADMIN, RECEPTIONIST, DOCTOR], description: SUPER_ADMIN also accepts Finance / Support / Operations staff}
+        identifier: {type: string, description: Email or username}
+        password: {type: string, format: password}
+        remember: {type: boolean}
+        next: {type: string}
+    ForgotPasswordRequest:
+      type: object
+      required: [identifier]
+      properties: {identifier: {type: string}}
+    InternalEventRequest:
+      type: object
+      required: [eventKey, appointmentId]
+      properties:
+        eventKey: {type: string, enum: [NEW_APPOINTMENT, APPOINTMENT_CONFIRMED, APPOINTMENT_CANCELLED, APPOINTMENT_RESCHEDULED, APPOINTMENT_REMINDER, PAYMENT_SUCCESS, PAYMENT_FAILED]}
+        appointmentId: {type: string, example: APT10545}
+    StatusChange:
+      type: object
+      properties:
+        status: {type: string}
+        reason: {type: string}
+        note: {type: string}
+    Reason: {type: object, properties: {reason: {type: string}}}
+    FeeCommission:
+      type: object
+      required: [bookingModel, commissionType, commissionValue]
+      properties:
+        bookingModel: {type: string}
+        bookingFee: {type: number}
+        convenienceFee: {type: number}
+        commissionType: {type: string, enum: [PERCENT, FLAT], description: "PERCENT of collection, or FLAT amount per paid appointment"}
+        commissionValue: {type: number, minimum: 0, maximum: 100000}
+    RefundRequest:
+      type: object
+      required: [appointmentId, amount, reason]
+      properties: {appointmentId: {type: string}, amount: {type: number}, reason: {type: string}}
+    RefundDecision:
+      type: object
+      required: [decision]
+      properties: {decision: {type: string, enum: [APPROVED, REJECTED]}, note: {type: string}}
+    DisputeResolve:
+      type: object
+      required: [status]
+      properties:
+        status: {type: string, enum: [UNDER_REVIEW, RESOLVED, REJECTED]}
+        resolution: {type: string, description: Required when status is RESOLVED or REJECTED}
+    Note: {type: object, required: [note], properties: {note: {type: string, maxLength: 1000}}}
+    SettlementGenerate:
+      type: object
+      required: [hospitalId, periodStart, periodEnd]
+      properties: {hospitalId: {type: string}, periodStart: {type: string, format: date}, periodEnd: {type: string, format: date}}
+    MarkPaid: {type: object, required: [payoutReference], properties: {payoutReference: {type: string}}}
+    Message: {type: object, required: [message], properties: {message: {type: string}}}
+    Assign: {type: object, properties: {assignedTo: {type: string, nullable: true}}}
+    Priority: {type: object, required: [priority], properties: {priority: {type: string, enum: [LOW, MEDIUM, HIGH, URGENT]}}}
+    TicketStatus: {type: object, required: [status], properties: {status: {type: string, enum: [OPEN, IN_PROGRESS, RESOLVED, CLOSED]}}}
+    TicketCreate:
+      type: object
+      required: [subject, description, category]
+      properties:
+        subject: {type: string}
+        description: {type: string}
+        category: {type: string, enum: [APPOINTMENT, PAYMENT, REFUND, HOSPITAL, DOCTOR, ACCOUNT, QR, SCHEDULE, TECHNICAL, OTHER]}
+        priority: {type: string, enum: [LOW, MEDIUM, HIGH, URGENT]}
+        appointmentId: {type: string}
+    TemplateWrite:
+      type: object
+      properties:
+        eventKey: {type: string, description: Required on create}
+        title: {type: string}
+        body: {type: string, description: "May only use {{variables}} defined for the event"}
+        channels: {type: array, items: {type: string, enum: [IN_APP, PUSH, SMS, WHATSAPP, EMAIL]}, description: Only IN_APP delivers; others are logged UNAVAILABLE}
+    Announcement:
+      type: object
+      properties: {title: {type: string}, message: {type: string}, audience: {type: string}, hospitalIds: {type: array, items: {type: string}}}
+    Banner:
+      type: object
+      properties: {title: {type: string}, message: {type: string}, ctaLabel: {type: string}, ctaUrl: {type: string}, startsAt: {type: string}, endsAt: {type: string}}
+    Availability: {type: object, required: [availability], properties: {availability: {type: string}}}
+    ScheduleSlot:
+      type: object
+      properties: {dayOfWeek: {type: integer}, startTime: {type: string}, endTime: {type: string}, slotMinutes: {type: integer}}
+    PasswordChange:
+      type: object
+      properties: {currentPassword: {type: string, format: password}, newPassword: {type: string, format: password}}

@@ -5,6 +5,7 @@ import hospitalModel from '../../models/hospitalModel';
 import doctorModel from '../../models/doctorModel';
 import Sidebar from '../../components/doctor/Sidebar';
 import Topbar from '../../components/doctor/Topbar';
+import PortalNotices from '../../components/shared/PortalNotices';
 import LogoutModal from '../../components/LogoutModal';
 
 export default async function DoctorLayout({ children }) {
@@ -21,7 +22,10 @@ export default async function DoctorLayout({ children }) {
       <Sidebar />
       <div className="main">
         <Topbar user={publicUser} doctor={doctorSafe} hospital={hospital} />
-        <main id="main" className="page" tabIndex={-1}>{children}</main>
+        <main id="main" className="page" tabIndex={-1}>
+          <PortalNotices hospitalId={user.hospitalId} />
+          {children}
+        </main>
       </div>
 
       <LogoutModal />

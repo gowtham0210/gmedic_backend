@@ -133,6 +133,12 @@
       return;
     }
     notifList.innerHTML = items.map((n) => {
+      if (n.type === 'system') {
+        return `<a class="notif__item${n.unread ? ' is-unread' : ''}" href="${esc(n.link || '#')}">
+          <span class="notif__icon tone-teal">${icon('bell')}</span>
+          <span><p><strong>${esc(n.title)}</strong> — ${esc(n.body)}</p><small>${esc(G.timeAgo(n.at))}</small></span>
+        </a>`;
+      }
       const isPay = n.type === 'payment';
       const text = isPay
         ? `Payment of <strong>${G.money(n.amount)}</strong> received from <strong>${esc(n.patientName)}</strong> via ${esc(n.method)}`

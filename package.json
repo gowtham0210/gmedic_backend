@@ -9,6 +9,7 @@
     "start": "next start",
     "db:migrate": "node db/migrate.js",
     "db:setup": "node scripts/db-setup.js",
+    "db:verify": "node db/verifyIntegrity.js",
     "legacy:start": "node server.js",
     "legacy:dev": "node --watch server.js"
   },

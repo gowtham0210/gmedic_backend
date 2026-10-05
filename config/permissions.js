@@ -1,9 +1,12 @@
-// Central role -> permission map. Every admin route checks this via
-// middleware/rbac.js — permissions are never enforced by hiding UI alone.
+// Central role -> permission map. Every API route checks this server-side —
+// permissions are never enforced by hiding UI alone.
 //
-// SUPER_ADMIN implicitly has every permission (checked separately).
-// Portal roles (RECEPTIONIST, DOCTOR) use the existing hospital/doctor-scoped
-// routes under /api and /receptionist, not these admin permissions.
+// SUPER_ADMIN has every permission. Doctors and receptionists only get the
+// "own" support permissions; the rest of their access is scoped by their
+// session (hospital / doctor) in the portal-specific API routes.
+//
+// Appointments are deliberately view-only for every admin role: cancelling or
+// rescheduling is done by the patient, and day-to-day handling by the hospital.
 
 const PERMISSIONS = [
   'dashboard.view',
@@ -13,21 +16,28 @@ const PERMISSIONS = [
   'doctors.view', 'doctors.manage', 'doctors.verify',
   'receptionists.view', 'receptionists.manage',
   'qr.view', 'qr.manage',
-  'appointments.view', 'appointments.manage',
+  'appointments.view',
   'patients.view',
   'payments.view',
   'webhooks.view', 'webhooks.manage',
   'refunds.view', 'refunds.manage', 'refunds.approve',
   'settlements.view', 'settlements.manage',
-  'support.view', 'support.manage',
+  'support.view_all', 'support.reply', 'support.assign', 'support.update_status', 'support.close',
   'disputes.view', 'disputes.manage',
-  'communications.view', 'communications.manage',
+  'communications.templates.view', 'communications.templates.create', 'communications.templates.update',
+  'communications.templates.enable', 'communications.templates.disable',
+  'communications.announcements.view', 'communications.announcements.create',
+  'communications.announcements.publish', 'communications.announcements.archive',
+  'communications.banners.view', 'communications.banners.create', 'communications.banners.update',
+  'communications.banners.activate', 'communications.banners.deactivate',
   'analytics.view',
   'settings.view', 'settings.manage',
   'feature_flags.view', 'feature_flags.manage',
   'app_versions.view', 'app_versions.manage',
   'audit_logs.view',
 ];
+
+const OWN_SUPPORT = ['support.create', 'support.view_own', 'support.reply_own'];
 
 const ROLE_PERMISSIONS = {
   SUPER_ADMIN: PERMISSIONS, // full platform access
@@ -37,15 +47,16 @@ const ROLE_PERMISSIONS = {
     'payments.view', 'webhooks.view', 'webhooks.manage',
     'refunds.view', 'refunds.manage', 'refunds.approve',
     'settlements.view', 'settlements.manage',
+    'disputes.view', 'disputes.manage',
     'analytics.view',
   ],
 
   SUPPORT: [
     'dashboard.view',
     'patients.view',
-    'appointments.view', 'appointments.manage',
-    'support.view', 'support.manage',
-    'disputes.view', 'disputes.manage',
+    'appointments.view',
+    'support.view_all', 'support.reply', 'support.assign', 'support.update_status', 'support.close',
+    'disputes.view',
   ],
 
   OPERATIONS: [
@@ -58,9 +69,13 @@ const ROLE_PERMISSIONS = {
     'qr.view', 'qr.manage',
     'feature_flags.view', 'feature_flags.manage',
   ],
+
+  DOCTOR: OWN_SUPPORT,
+  RECEPTIONIST: OWN_SUPPORT,
 };
 
-const ADMIN_ROLES = Object.keys(ROLE_PERMISSIONS);
+// Roles that use the Super Admin console. (DOCTOR / RECEPTIONIST have their own portals.)
+const ADMIN_ROLES = ['SUPER_ADMIN', 'FINANCE', 'SUPPORT', 'OPERATIONS'];
 
 function permissionsFor(role) {
   return new Set(ROLE_PERMISSIONS[role] || []);

@@ -1,5 +1,6 @@
 const appointmentModel = require('../../models/appointmentModel');
 const { badRequest, notFound } = require('../../utils/http');
+const notifications = require('../../services/notificationService');
 
 // GET /api/doctor/appointments?date=&status=&paymentStatus=&q=&page=&pageSize=
 exports.list = async (req, res) => {
@@ -29,7 +30,11 @@ exports.updateStatus = async (req, res) => {
   if (status === 'cancelled' && !String(reason || '').trim()) throw badRequest('A reason is required to cancel.', { reason: 'Enter a reason.' });
 
   if (status === 'cancelled') {
-    const updated = await appointmentModel.adminCancel(req.params.id, reason, req.user.id);
+    const updated = await appointmentModel.cancelWithReason(req.params.id, reason, req.user.id);
+    await notifications.trigger('APPOINTMENT_CANCELLED', await notifications.hospitalUsers(appointment.hospitalId, 'RECEPTIONIST'), {
+      patient_name: appointment.patientName, doctor_name: appointment.doctorName.replace(/^Dr\.?\s*/i, ''), hospital_name: appointment.hospitalName, branch_name: appointment.branchName,
+      appointment_id: appointment.id, appointment_date: appointment.date, appointment_time: appointment.time,
+    }, { link: '/appointments' });
     return res.json({ ok: true, message: `Appointment ${updated.id} cancelled.`, appointment: updated });
   }
   const updated = await appointmentModel.updateStatus(appointment.hospitalId, req.params.id, 'completed');

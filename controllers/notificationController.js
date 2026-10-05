@@ -1,4 +1,5 @@
 const appointmentModel = require('../models/appointmentModel');
+const notificationModel = require('../models/notificationModel');
 
 // Recent bookings and payments coming in from the Gmedic patient app.
 async function recentEvents(hospitalId) {
@@ -17,11 +18,15 @@ async function recentEvents(hospitalId) {
 exports.list = async (req, res) => {
   const readAt = req.session.notificationsReadAt || 0;
   const events = await recentEvents(req.hospitalId);
-  const items = events.slice(0, 8).map((e) => ({ ...e, unread: Date.parse(e.at) > readAt }));
-  res.json({ items, unread: events.filter((e) => Date.parse(e.at) > readAt).length });
+  const booking = events.map((e) => ({ ...e, unread: Date.parse(e.at) > readAt }));
+  // Template-driven notifications (refund decisions, token/availability updates, support replies…).
+  const system = await notificationModel.listForUser(req.user.id);
+  const merged = [...booking.slice(0, 8), ...system].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 12);
+  res.json({ items: merged, unread: booking.filter((e) => e.unread).length + system.filter((n) => n.unread).length });
 };
 
-exports.markRead = (req, res) => {
+exports.markRead = async (req, res) => {
   req.session.notificationsReadAt = Date.now();
+  await notificationModel.markAllRead(req.user.id);
   res.json({ ok: true, unread: 0 });
 };

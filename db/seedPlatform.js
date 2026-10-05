@@ -51,19 +51,13 @@ async function seedFeatureFlags() {
 }
 
 async function seedNotificationTemplates() {
-  const templates = [
-    ['PUSH', 'booking_confirmed', 'Booking confirmed', 'Appointment confirmed', 'Hi {{patient_name}}, your appointment with {{doctor_name}} at {{hospital_name}} on {{appointment_date}} at {{appointment_time}} is confirmed.'],
-    ['SMS', 'booking_confirmed', 'Booking confirmed (SMS)', null, 'Gmedic: Your appointment with {{doctor_name}} at {{hospital_name}} on {{appointment_date}} {{appointment_time}} is confirmed.'],
-    ['WHATSAPP', 'booking_reminder', 'Appointment reminder', 'Reminder', 'Hi {{patient_name}}, reminder: your appointment with {{doctor_name}} at {{hospital_name}} is at {{appointment_time}} on {{appointment_date}}.'],
-    ['PUSH', 'payment_success', 'Payment received', 'Payment successful', 'Payment received for your appointment with {{doctor_name}} at {{hospital_name}}.'],
-  ];
-  let seq = 1;
-  for (const [channel, code, name, title, body] of templates) {
-    const exists = await db.one('SELECT id FROM notification_templates WHERE channel = ? AND code = ?', [channel, code]);
+  const { EVENTS } = require('../config/notificationEvents');
+  for (const [eventKey, event] of Object.entries(EVENTS)) {
+    const exists = await db.one('SELECT id FROM notification_templates WHERE event_key = ?', [eventKey]);
     if (exists) continue;
     await db.query(
-      `INSERT INTO notification_templates (id, channel, code, name, title, body) VALUES (?, ?, ?, ?, ?, ?)`,
-      [`TPL${String(seq++).padStart(3, '0')}`, channel, code, name, title, body]
+      `INSERT INTO notification_templates (id, event_key, name, title, body, channels) VALUES (?, ?, ?, ?, ?, '["IN_APP"]')`,
+      [await db.nextId('notification_templates', 'TPL', 1), eventKey, event.name, event.title, event.body]
     );
   }
 }

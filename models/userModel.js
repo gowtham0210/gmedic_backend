@@ -1,4 +1,5 @@
 const db = require('../db');
+const { ADMIN_ROLES } = require('../config/permissions');
 const { hashPassword } = require('../utils/password');
 
 function initials(name) {
@@ -40,9 +41,13 @@ async function findById(id) {
 async function findByLogin(identifier, role) {
   const key = String(identifier || '').trim().toLowerCase();
   if (!key) return null;
+  // The "Super Admin" tab is the admin-console login, so it also accepts the
+  // other console roles (Finance, Support, Operations); what each may do is
+  // decided by config/permissions.js, not by which tab they signed in with.
+  const roles = role === 'SUPER_ADMIN' ? ADMIN_ROLES : [role];
   const row = await db.one(
-    'SELECT * FROM users WHERE (LOWER(email) = ? OR LOWER(username) = ?) AND role = ?',
-    [key, key, role]
+    `SELECT * FROM users WHERE (LOWER(email) = ? OR LOWER(username) = ?) AND role IN (${roles.map(() => '?').join(',')})`,
+    [key, key, ...roles]
   );
   return fromRow(row);
 }

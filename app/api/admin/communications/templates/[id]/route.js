@@ -1,4 +1,4 @@
 import { adapt } from '../../../../../../lib/adaptExpress';
 import communications from '../../../../../../controllers/admin/communicationsController';
 
-export const PATCH = adapt(communications.updateTemplate, 'communications.manage');
+export const PATCH = adapt(communications.updateTemplate, 'communications.templates.update');

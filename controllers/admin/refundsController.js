@@ -2,6 +2,9 @@ const db = require('../../db');
 const { validate } = require('../../utils/validate');
 const { badRequest, notFound } = require('../../utils/http');
 const auditLog = require('../../services/auditLog');
+const notifications = require('../../services/notificationService');
+
+const inr = (n) => `₹${Number(n).toLocaleString('en-IN')}`;
 
 const SELECT = `
   SELECT r.*, a.hospital_id, a.patient_id, h.name AS hospital_name, p.name AS patient_name, pay.transaction_id
@@ -50,6 +53,10 @@ exports.create = async (req, res) => {
   if (req.hospitalId && appt.hospital_id !== req.hospitalId) throw notFound('Appointment not found.');
   if (value.amount > Number(appt.paid_amount)) throw badRequest(`Amount cannot exceed the paid amount (₹${appt.paid_amount}).`, { amount: 'Exceeds the paid amount.' });
 
+  const alreadyRefunded = Number((await db.one("SELECT COALESCE(SUM(amount), 0) AS n FROM refunds WHERE payment_id = ? AND status <> 'REJECTED'", [appt.payment_id])).n);
+  const refundable = Number(appt.paid_amount) - alreadyRefunded;
+  if (value.amount > refundable) throw badRequest(`Only ₹${refundable} is still refundable on this payment.`, { amount: `Only ₹${refundable} left to refund.` });
+
   const threshold = Number((await db.one("SELECT value FROM platform_settings WHERE setting_key = 'refund_maker_checker_threshold'"))?.value ?? 2000);
   const requiresChecker = value.amount > threshold;
   const id = await db.nextId('refunds', 'REF', 1);
@@ -59,6 +66,10 @@ exports.create = async (req, res) => {
     [id, appt.payment_id, appt.id, value.amount, value.reason, requiresChecker ? 1 : 0, req.user.id]
   );
   await auditLog.record({ req, action: 'REFUND_REQUESTED', entityType: 'REFUND', entityId: id, summary: `Requested refund of ₹${value.amount} for ${value.appointmentId}: ${value.reason}` });
+  const info = await db.one('SELECT p.name AS patient_name, h.name AS hospital_name FROM appointments a JOIN hospitals h ON h.id = a.hospital_id LEFT JOIN patients p ON p.id = a.patient_id WHERE a.id = ?', [appt.id]);
+  await notifications.trigger('REFUND_REQUESTED', await notifications.adminUsers(['SUPER_ADMIN', 'FINANCE']), {
+    refund_id: id, refund_amount: inr(value.amount), patient_name: info.patient_name, hospital_name: info.hospital_name, appointment_id: appt.id, requested_by: req.user.name,
+  }, { link: '/admin/refunds' });
   res.status(201).json({ ok: true, message: requiresChecker ? 'Refund requested — needs a second approver (above the auto-approval threshold).' : 'Refund requested.', id });
 };
 
@@ -80,5 +91,9 @@ exports.decide = async (req, res) => {
     await db.query("UPDATE refunds SET status = 'COMPLETED', completed_at = CURRENT_TIMESTAMP WHERE id = ?", [req.params.id]);
   }
   await auditLog.record({ req, action: `REFUND_${decision}`, entityType: 'REFUND', entityId: req.params.id, summary: `Refund ${req.params.id}: ${decision.toLowerCase()}${note ? ` (${note})` : ''}`, previousValue: { status: 'PENDING' }, newValue: { status: decision } });
+  const info = await db.one('SELECT p.name AS patient_name FROM appointments a LEFT JOIN patients p ON p.id = a.patient_id WHERE a.id = ?', [refund.appointment_id]);
+  await notifications.trigger(decision === 'APPROVED' ? 'REFUND_APPROVED' : 'REFUND_REJECTED', refund.requested_by, {
+    refund_id: refund.id, refund_amount: inr(refund.amount), patient_name: info && info.patient_name, appointment_id: refund.appointment_id, decision_note: note || '',
+  }, { link: '/payments' });
   res.json({ ok: true, message: `Refund ${decision === 'APPROVED' ? 'approved and processed' : 'rejected'}.` });
 };

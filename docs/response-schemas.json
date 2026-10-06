@@ -3157,5 +3157,775 @@
     }
    }
   }
+ },
+ "get /api/doctor/appointments": {
+  "name": "DocAppointmentList",
+  "schema": {
+   "type": "object",
+   "properties": {
+    "items": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "properties": {
+       "id": {
+        "type": "string"
+       },
+       "hospitalId": {
+        "type": "string"
+       },
+       "hospitalName": {
+        "type": "string"
+       },
+       "doctorId": {
+        "type": "string"
+       },
+       "doctorName": {
+        "type": "string"
+       },
+       "specialization": {
+        "type": "string"
+       },
+       "department": {
+        "nullable": true,
+        "type": "string"
+       },
+       "branchName": {
+        "nullable": true,
+        "type": "string"
+       },
+       "tokenCode": {
+        "type": "string",
+        "nullable": true
+       },
+       "transactionId": {
+        "type": "string",
+        "nullable": true
+       },
+       "patientId": {
+        "type": "string"
+       },
+       "patientName": {
+        "type": "string"
+       },
+       "patientMobile": {
+        "type": "string"
+       },
+       "date": {
+        "type": "string",
+        "format": "date"
+       },
+       "time": {
+        "type": "string"
+       },
+       "fee": {
+        "type": "integer"
+       },
+       "status": {
+        "type": "string"
+       },
+       "paymentStatus": {
+        "type": "string"
+       },
+       "source": {
+        "type": "string"
+       },
+       "cancelReason": {
+        "nullable": true,
+        "type": "string"
+       },
+       "createdAt": {
+        "type": "string",
+        "format": "date-time"
+       },
+       "updatedAt": {
+        "type": "string",
+        "format": "date-time"
+       }
+      }
+     }
+    },
+    "total": {
+     "type": "integer"
+    },
+    "page": {
+     "type": "integer"
+    },
+    "pageSize": {
+     "type": "integer"
+    },
+    "pages": {
+     "type": "integer"
+    }
+   }
+  }
+ },
+ "get /api/doctor/appointments/{id}": {
+  "name": "DocAppointmentDetail",
+  "schema": {
+   "type": "object",
+   "properties": {
+    "appointment": {
+     "type": "object",
+     "properties": {
+      "id": {
+       "type": "string"
+      },
+      "hospitalId": {
+       "type": "string"
+      },
+      "hospitalName": {
+       "type": "string"
+      },
+      "doctorId": {
+       "type": "string"
+      },
+      "doctorName": {
+       "type": "string"
+      },
+      "specialization": {
+       "type": "string"
+      },
+      "department": {
+       "nullable": true,
+       "type": "string"
+      },
+      "branchName": {
+       "nullable": true,
+       "type": "string"
+      },
+      "tokenCode": {
+       "type": "string"
+      },
+      "transactionId": {
+       "type": "string"
+      },
+      "patientId": {
+       "type": "string"
+      },
+      "patientName": {
+       "type": "string"
+      },
+      "patientMobile": {
+       "type": "string"
+      },
+      "date": {
+       "type": "string",
+       "format": "date"
+      },
+      "time": {
+       "type": "string"
+      },
+      "fee": {
+       "type": "integer"
+      },
+      "status": {
+       "type": "string"
+      },
+      "paymentStatus": {
+       "type": "string"
+      },
+      "source": {
+       "type": "string"
+      },
+      "cancelReason": {
+       "nullable": true,
+       "type": "string"
+      },
+      "createdAt": {
+       "type": "string",
+       "format": "date-time"
+      },
+      "updatedAt": {
+       "type": "string",
+       "format": "date-time"
+      }
+     }
+    }
+   }
+  }
+ },
+ "get /api/doctor/queue": {
+  "name": "DocQueue",
+  "schema": {
+   "type": "object",
+   "properties": {
+    "date": {
+     "type": "string",
+     "format": "date"
+    },
+    "items": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "properties": {
+       "id": {
+        "type": "string"
+       },
+       "hospitalId": {
+        "type": "string"
+       },
+       "appointmentId": {
+        "type": "string"
+       },
+       "doctorId": {
+        "type": "string"
+       },
+       "doctorName": {
+        "type": "string"
+       },
+       "specialization": {
+        "type": "string"
+       },
+       "patientName": {
+        "type": "string"
+       },
+       "date": {
+        "type": "string",
+        "format": "date"
+       },
+       "number": {
+        "type": "integer"
+       },
+       "code": {
+        "type": "string"
+       },
+       "status": {
+        "type": "string"
+       },
+       "time": {
+        "type": "string"
+       },
+       "appointmentStatus": {
+        "type": "string"
+       },
+       "paymentStatus": {
+        "type": "string"
+       },
+       "fee": {
+        "type": "integer"
+       },
+       "createdAt": {
+        "type": "string",
+        "format": "date-time"
+       },
+       "updatedAt": {
+        "type": "string",
+        "format": "date-time"
+       },
+       "calledAt": {
+        "type": "string",
+        "format": "date-time",
+        "nullable": true
+       },
+       "completedAt": {
+        "nullable": true,
+        "type": "string"
+       },
+       "cancelledAt": {
+        "nullable": true,
+        "type": "string"
+       },
+       "skippedAt": {
+        "nullable": true,
+        "type": "string"
+       }
+      }
+     }
+    },
+    "summary": {
+     "type": "object",
+     "properties": {
+      "total": {
+       "type": "integer"
+      },
+      "waiting": {
+       "type": "integer"
+      },
+      "called": {
+       "type": "integer"
+      },
+      "in_consultation": {
+       "type": "integer"
+      },
+      "completed": {
+       "type": "integer"
+      },
+      "cancelled": {
+       "type": "integer"
+      },
+      "skipped": {
+       "type": "integer"
+      }
+     }
+    }
+   }
+  }
+ },
+ "get /api/doctor/schedule": {
+  "name": "DocScheduleList",
+  "schema": {
+   "type": "object",
+   "properties": {
+    "items": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "properties": {
+       "id": {
+        "type": "integer"
+       },
+       "doctorId": {
+        "type": "string"
+       },
+       "dayOfWeek": {
+        "type": "integer"
+       },
+       "startTime": {
+        "type": "string"
+       },
+       "endTime": {
+        "type": "string"
+       },
+       "slotMinutes": {
+        "type": "integer"
+       }
+      }
+     }
+    }
+   }
+  }
+ },
+ "get /api/doctor/patients": {
+  "name": "DocPatientList",
+  "schema": {
+   "type": "object",
+   "properties": {
+    "items": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "properties": {
+       "id": {
+        "type": "string"
+       },
+       "name": {
+        "type": "string"
+       },
+       "mobile": {
+        "type": "string"
+       },
+       "totalVisits": {
+        "type": "integer"
+       },
+       "completedVisits": {
+        "type": "integer"
+       },
+       "lastAppointment": {
+        "type": "string"
+       },
+       "nextAppointment": {
+        "nullable": true,
+        "type": "string"
+       }
+      }
+     }
+    },
+    "summary": {
+     "type": "object",
+     "properties": {
+      "total": {
+       "type": "integer"
+      },
+      "today": {
+       "type": "integer"
+      },
+      "upcoming": {
+       "type": "integer"
+      },
+      "completed": {
+       "type": "integer"
+      }
+     }
+    }
+   }
+  }
+ },
+ "get /api/doctor/patients/{id}": {
+  "name": "DocPatientDetail",
+  "schema": {
+   "type": "object",
+   "properties": {
+    "patient": {
+     "type": "object",
+     "properties": {
+      "id": {
+       "type": "string"
+      },
+      "name": {
+       "type": "string"
+      },
+      "mobile": {
+       "type": "string"
+      },
+      "email": {
+       "nullable": true,
+       "type": "string"
+      }
+     }
+    },
+    "appointments": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "properties": {
+       "id": {
+        "type": "string"
+       },
+       "date": {
+        "type": "string",
+        "format": "date"
+       },
+       "time": {
+        "type": "string"
+       },
+       "status": {
+        "type": "string"
+       },
+       "paymentStatus": {
+        "type": "string"
+       },
+       "fee": {
+        "type": "integer"
+       }
+      }
+     }
+    }
+   }
+  }
+ },
+ "get /api/doctor/profile": {
+  "name": "DocProfile",
+  "schema": {
+   "type": "object",
+   "properties": {
+    "doctor": {
+     "type": "object",
+     "properties": {
+      "id": {
+       "type": "string"
+      },
+      "hospitalId": {
+       "type": "string"
+      },
+      "branchId": {
+       "nullable": true,
+       "type": "string"
+      },
+      "name": {
+       "type": "string"
+      },
+      "photoUrl": {
+       "nullable": true,
+       "type": "string"
+      },
+      "department": {
+       "nullable": true,
+       "type": "string"
+      },
+      "specialization": {
+       "type": "string"
+      },
+      "registrationNumber": {
+       "nullable": true,
+       "type": "string"
+      },
+      "qualifications": {
+       "nullable": true,
+       "type": "string"
+      },
+      "fee": {
+       "type": "integer"
+      },
+      "availability": {
+       "type": "string"
+      },
+      "availabilityUpdatedAt": {
+       "type": "string",
+       "format": "date-time"
+      },
+      "verificationStatus": {
+       "type": "string"
+      },
+      "verificationNote": {
+       "nullable": true,
+       "type": "string"
+      },
+      "bio": {
+       "type": "string"
+      },
+      "yearsExperience": {
+       "type": "integer"
+      },
+      "languages": {
+       "type": "string"
+      },
+      "createdAt": {
+       "type": "string",
+       "format": "date-time"
+      },
+      "updatedAt": {
+       "type": "string",
+       "format": "date-time"
+      }
+     }
+    },
+    "user": {
+     "type": "object",
+     "properties": {
+      "name": {
+       "type": "string"
+      },
+      "email": {
+       "type": "string"
+      },
+      "phone": {
+       "nullable": true,
+       "type": "string"
+      }
+     }
+    },
+    "hospital": {
+     "type": "object",
+     "properties": {
+      "id": {
+       "type": "string"
+      },
+      "name": {
+       "type": "string"
+      },
+      "phone": {
+       "type": "string"
+      },
+      "email": {
+       "type": "string"
+      },
+      "address": {
+       "type": "object",
+       "properties": {
+        "line1": {
+         "type": "string"
+        },
+        "city": {
+         "type": "string"
+        },
+        "state": {
+         "type": "string"
+        },
+        "pincode": {
+         "type": "string"
+        }
+       }
+      },
+      "addressText": {
+       "type": "string"
+      },
+      "qrLink": {
+       "type": "string"
+      },
+      "updatedAt": {
+       "type": "string",
+       "format": "date-time"
+      }
+     }
+    }
+   }
+  }
+ },
+ "get /api/doctor/support": {
+  "name": "DocTicketList",
+  "schema": {
+   "type": "object",
+   "properties": {
+    "items": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "properties": {
+       "id": {
+        "type": "string"
+       },
+       "ticketNumber": {
+        "type": "string"
+       },
+       "createdBy": {
+        "type": "string"
+       },
+       "createdByName": {
+        "type": "string"
+       },
+       "createdByRole": {
+        "type": "string"
+       },
+       "hospitalId": {
+        "type": "string"
+       },
+       "hospitalName": {
+        "type": "string"
+       },
+       "category": {
+        "type": "string"
+       },
+       "subject": {
+        "type": "string"
+       },
+       "description": {
+        "type": "string"
+       },
+       "priority": {
+        "type": "string"
+       },
+       "status": {
+        "type": "string"
+       },
+       "assignedTo": {
+        "type": "string"
+       },
+       "assigneeName": {
+        "type": "string"
+       },
+       "slaDueAt": {
+        "type": "string",
+        "format": "date-time"
+       },
+       "createdAt": {
+        "type": "string",
+        "format": "date-time"
+       },
+       "updatedAt": {
+        "type": "string",
+        "format": "date-time"
+       },
+       "resolvedAt": {
+        "nullable": true,
+        "type": "string"
+       },
+       "closedAt": {
+        "nullable": true,
+        "type": "string"
+       }
+      }
+     }
+    },
+    "categories": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    }
+   }
+  }
+ },
+ "get /api/doctor/support/{id}": {
+  "name": "DocTicketDetail",
+  "schema": {
+   "type": "object",
+   "properties": {
+    "ticket": {
+     "type": "object",
+     "properties": {
+      "id": {
+       "type": "string"
+      },
+      "ticketNumber": {
+       "type": "string"
+      },
+      "createdBy": {
+       "type": "string"
+      },
+      "createdByName": {
+       "type": "string"
+      },
+      "createdByRole": {
+       "type": "string"
+      },
+      "hospitalId": {
+       "type": "string"
+      },
+      "hospitalName": {
+       "type": "string"
+      },
+      "category": {
+       "type": "string"
+      },
+      "subject": {
+       "type": "string"
+      },
+      "description": {
+       "type": "string"
+      },
+      "priority": {
+       "type": "string"
+      },
+      "status": {
+       "type": "string"
+      },
+      "assignedTo": {
+       "type": "string"
+      },
+      "assigneeName": {
+       "type": "string"
+      },
+      "slaDueAt": {
+       "type": "string",
+       "format": "date-time"
+      },
+      "createdAt": {
+       "type": "string",
+       "format": "date-time"
+      },
+      "updatedAt": {
+       "type": "string",
+       "format": "date-time"
+      },
+      "resolvedAt": {
+       "nullable": true,
+       "type": "string"
+      },
+      "closedAt": {
+       "nullable": true,
+       "type": "string"
+      }
+     }
+    },
+    "messages": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "properties": {
+       "id": {
+        "type": "integer"
+       },
+       "senderId": {
+        "type": "string"
+       },
+       "senderRole": {
+        "type": "string"
+       },
+       "senderName": {
+        "type": "string"
+       },
+       "message": {
+        "type": "string"
+       },
+       "createdAt": {
+        "type": "string",
+        "format": "date-time"
+       }
+      }
+     }
+    }
+   }
+  }
  }
 }

@@ -126,6 +126,7 @@ def main():
         result[key] = {"name": name, "schema": schema}
         print(f"{key:55} -> {name}")
     result.update(receptionist(op))
+    result.update(doctor(op))
     json.dump(result, open(OUT, "w", encoding="utf-8"), indent=1)
     print("wrote", OUT)
 
@@ -175,6 +176,32 @@ def receptionist(admin_op):
     if tokens:
         data = call(rec, "GET", f"/api/tokens/{tokens[0]['id']}")
         out["get /api/tokens/{id}"] = {"name": "RecTokenDetail", "schema": fix(infer(data))}
+    print("probe ticket (delete it):", ticket)
+    return out
+
+
+DOC_TARGETS = [
+    ("get /api/doctor/appointments", "/api/doctor/appointments?pageSize=100", "DocAppointmentList"),
+    ("get /api/doctor/appointments/{id}", "/api/doctor/appointments/APT10549", "DocAppointmentDetail"),
+    ("get /api/doctor/queue", "/api/doctor/queue?date=2026-10-03", "DocQueue"),
+    ("get /api/doctor/schedule", "/api/doctor/schedule", "DocScheduleList"),
+    ("get /api/doctor/patients", "/api/doctor/patients", "DocPatientList"),
+    ("get /api/doctor/patients/{id}", "/api/doctor/patients/PAT1001", "DocPatientDetail"),
+    ("get /api/doctor/profile", "/api/doctor/profile", "DocProfile"),
+    ("get /api/doctor/support", "/api/doctor/support", "DocTicketList"),
+    ("get /api/doctor/support/{id}", "/api/doctor/support/{ticket}", "DocTicketDetail"),
+]
+
+
+def doctor(admin_op):
+    """Reads as the demo doctor; creates one throw-away ticket (delete it afterwards)."""
+    doc = login("DOCTOR", "doc101@sunrisegeneral.in", "Gmedic@Doctor1")
+    ticket = call(doc, "POST", "/api/doctor/support", {"subject": "Schema probe", "description": "temporary ticket used to read response shapes", "category": "OTHER", "priority": "LOW"})["ticket"]["id"]
+    call(admin_op, "POST", f"/api/admin/support/{ticket}/messages", {"message": "probe reply"})
+    out = {}
+    for key, url, name in DOC_TARGETS:
+        out[key] = {"name": name, "schema": fix(infer(call(doc, "GET", url.replace("{ticket}", ticket))))}
+        print(f"{key:55} -> {name}")
     print("probe ticket (delete it):", ticket)
     return out
 

@@ -117,6 +117,30 @@ E = [
  ("post", "/api/support", "Receptionist", "Raise a ticket", "support.create", "TicketCreate", []),
  ("get", "/api/support/{id}", "Receptionist", "My ticket with conversation (404 if not mine)", "support.view_own", None, []),
  ("post", "/api/support/{id}/messages", "Receptionist", "Reply on my ticket", "support.reply_own", "Message", []),
+ ("get", "/api/doctor/appointments", "Doctor", "My appointments", DOC, None, []),
+ ("get", "/api/doctor/appointments/{id}", "Doctor", "Appointment detail (404 if it is not mine)", DOC, None, []),
+ ("patch", "/api/doctor/appointments/{id}/status", "Doctor", "Mark completed, or cancel with a reason (notifies receptionists)", DOC, "DoctorAppointmentStatus", []),
+ ("patch", "/api/doctor/availability", "Doctor", "Set my availability (notifies receptionists)", DOC, "Availability", []),
+ ("get", "/api/doctor/queue", "Doctor", "My queue for a date (default today)", DOC, None, []),
+ ("post", "/api/doctor/queue/call-next", "Doctor", "Call the next waiting patient", DOC, "QueueCallNext", []),
+ ("post", "/api/doctor/queue/{id}/start", "Doctor", "Start consultation", DOC, None, []),
+ ("post", "/api/doctor/queue/{id}/complete", "Doctor", "Complete consultation", DOC, None, []),
+ ("post", "/api/doctor/queue/{id}/skip", "Doctor", "Skip token", DOC, None, []),
+ ("post", "/api/doctor/queue/{id}/recall", "Doctor", "Call a skipped patient back", DOC, None, []),
+ ("get", "/api/doctor/schedule", "Doctor", "My weekly working hours", DOC, None, []),
+ ("post", "/api/doctor/schedule", "Doctor", "Add a working-hours block (no overlaps)", DOC, "ScheduleSlot", []),
+ ("delete", "/api/doctor/schedule/{id}", "Doctor", "Remove a working-hours block", DOC, None, []),
+ ("get", "/api/doctor/patients", "Doctor", "Patients who have booked with me", DOC, None, []),
+ ("get", "/api/doctor/patients/{id}", "Doctor", "Patient detail (404 if not my patient)", DOC, None, []),
+ ("get", "/api/doctor/profile", "Doctor", "My profile", DOC, None, []),
+ ("put", "/api/doctor/profile", "Doctor", "Update my bio, languages and experience", DOC, "DoctorProfileUpdate", []),
+ ("put", "/api/doctor/profile/password", "Doctor", "Change password", DOC, "PasswordChange", []),
+ ("get", "/api/doctor/notifications", "Doctor", "Notifications", DOC, None, []),
+ ("post", "/api/doctor/notifications/read", "Doctor", "Mark notifications read", DOC, None, []),
+ ("get", "/api/doctor/support", "Doctor", "My tickets", "support.view_own", None, []),
+ ("post", "/api/doctor/support", "Doctor", "Raise a ticket", "support.create", "TicketCreate", []),
+ ("get", "/api/doctor/support/{id}", "Doctor", "My ticket with conversation (404 if not mine)", "support.view_own", None, []),
+ ("post", "/api/doctor/support/{id}/messages", "Doctor", "Reply on my ticket", "support.reply_own", "Message", []),
  # ---- doctor
 ]
 
@@ -131,7 +155,7 @@ CREATED = {
     "/api/admin/qr", "/api/admin/qr/{id}/reissue", "/api/admin/receptionists", "/api/admin/settlements",
     "/api/admin/communications/templates", "/api/admin/communications/announcements", "/api/admin/communications/banners",
     "/api/admin/disputes/{id}/notes", "/api/admin/support/{id}/messages",
-    "/api/doctors", "/api/tokens", "/api/refunds", "/api/support", "/api/support/{id}/messages",
+    "/api/doctors", "/api/tokens", "/api/refunds", "/api/support", "/api/support/{id}/messages", "/api/doctor/support", "/api/doctor/support/{id}/messages", "/api/doctor/schedule",
 }
 
 RESPONSES = {
@@ -285,6 +309,34 @@ BODY.update({
 PARAMS.update({
 })
 QENUM.update({
+})
+
+RESPONSES.update({
+    "get /api/notifications": "NotificationList",
+    "get /api/doctor/notifications": "NotificationList",
+    "patch /api/doctor/appointments/{id}/status": "AppointmentResult",
+    "patch /api/doctor/availability": "RecDoctorResult",
+    "post /api/doctor/queue/call-next": "TokenResult",
+    "post /api/doctor/queue/{id}/start": "TokenResult",
+    "post /api/doctor/queue/{id}/complete": "TokenResult",
+    "post /api/doctor/queue/{id}/skip": "TokenResult",
+    "post /api/doctor/queue/{id}/recall": "TokenResult",
+    "put /api/doctor/profile": "DoctorProfileResult",
+    "put /api/doctor/profile/password": "Ok",
+    "post /api/doctor/notifications/read": "NotificationsReadResult",
+    "post /api/doctor/support": "TicketCreated",
+    "post /api/doctor/support/{id}/messages": "TicketReply",
+})
+PARAMS.update({
+    ("get", "/api/doctor/appointments"): ["date", "status", "paymentStatus", "q", "page", "pageSize"],
+    ("get", "/api/doctor/queue"): ["date"],
+    ("get", "/api/doctor/patients"): ["q"],
+    ("get", "/api/doctor/support"): ["status", "q"],
+})
+QENUM.update({
+    ("/api/doctor/appointments", "status"): ["confirmed", "pending", "completed", "cancelled"],
+    ("/api/doctor/appointments", "paymentStatus"): ["paid", "pending"],
+    ("/api/doctor/support", "status"): ["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"],
 })
 
 SCHEMAS = """

@@ -52,6 +52,15 @@ WHEN OLD.booking_model IS NOT NEW.booking_model OR OLD.booking_fee IS NOT NEW.bo
   VALUES (NEW.id, NEW.booking_model, NEW.booking_fee, NEW.convenience_fee, NEW.commission_type, NEW.commission_value);
 END;
 
+CREATE TRIGGER trg_hospital_rate_history_ins AFTER INSERT ON hospitals BEGIN
+  INSERT INTO hospital_rate_history (hospital_id, booking_model, booking_fee, convenience_fee, commission_type, commission_value)
+  VALUES (NEW.id, NEW.booking_model, NEW.booking_fee, NEW.convenience_fee, NEW.commission_type, NEW.commission_value);
+END;
+
+CREATE TRIGGER trg_hospital_policy_ins AFTER INSERT ON hospitals BEGIN
+  INSERT INTO hospital_policies (hospital_id) VALUES (NEW.id);
+END;
+
 CREATE TABLE hospital_rate_history (
   id               INTEGER PRIMARY KEY AUTOINCREMENT,
   hospital_id      TEXT NOT NULL REFERENCES hospitals (id) ON DELETE CASCADE,

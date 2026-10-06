@@ -3,6 +3,9 @@ const { validate } = require('../../utils/validate');
 const { badRequest, notFound } = require('../../utils/http');
 const auditLog = require('../../services/auditLog');
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+const config = require('../../config');
 
 const STATUSES = ['ONBOARDING', 'ACTIVE', 'SUSPENDED', 'OFFBOARDED'];
 const KYC_STATUSES = ['PENDING', 'UNDER_REVIEW', 'VERIFIED', 'REJECTED'];
@@ -27,6 +30,8 @@ function fromRow(row) {
     convenienceFee: Number(row.convenience_fee),
     commissionType: row.commission_type,
     commissionValue: Number(row.commission_value),
+    currency: row.currency,
+    timezone: row.timezone,
     createdAt: db.iso(row.created_at),
     updatedAt: db.iso(row.updated_at),
   };
@@ -209,6 +214,28 @@ exports.reviewDocument = async (req, res) => {
   await db.query('UPDATE hospital_documents SET status = ?, rejection_reason = ?, reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP WHERE id = ?', [status, status === 'REJECTED' ? reason : null, req.user.id, doc.id]);
   await auditLog.record({ req, action: `DOCUMENT_${status}`, entityType: 'HOSPITAL_DOCUMENT', entityId: doc.id, summary: `${doc.doc_type} for ${req.params.id}: ${status}` });
   res.json({ ok: true, message: `Document marked as ${status.toLowerCase()}.` });
+};
+
+// Streams a stored KYC document back (inline for PDFs and images).
+exports.downloadDocument = async (req, res) => {
+  const doc = await db.one('SELECT * FROM hospital_documents WHERE id = ? AND hospital_id = ?', [req.params.docId, req.params.id]);
+  if (!doc) throw notFound('Document not found.');
+  const file = path.join(config.uploadDir, path.basename(doc.storage_path));
+  if (!fs.existsSync(file)) throw notFound('The stored file is missing.');
+  res.set({ 'Content-Type': doc.mime_type, 'Content-Disposition': `inline; filename="${String(doc.file_name).replace(/"/g, '')}"` });
+  res.send(fs.readFileSync(file));
+};
+
+// The commission / fee rules in force over time (written by a trigger on every change).
+exports.listRateHistory = async (req, res) => {
+  await load(req.params.id);
+  const rows = await db.query('SELECT * FROM hospital_rate_history WHERE hospital_id = ? ORDER BY effective_from DESC, id DESC', [req.params.id]);
+  res.json({
+    rates: rows.map((r) => ({
+      id: r.id, bookingModel: r.booking_model, bookingFee: r.booking_fee == null ? null : Number(r.booking_fee), convenienceFee: r.convenience_fee == null ? null : Number(r.convenience_fee),
+      commissionType: r.commission_type, commissionValue: Number(r.commission_value), effectiveFrom: db.iso(r.effective_from),
+    })),
+  });
 };
 
 exports.setKycStatus = async (req, res) => {

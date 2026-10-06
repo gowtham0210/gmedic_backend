@@ -2,6 +2,10 @@ const db = require('../db');
 
 const AVAILABILITY = ['present', 'absent'];
 
+// department and languages live in their own tables (departments, doctor_languages).
+const DOCTOR_SELECT = `SELECT doctors.*, (SELECT name FROM departments WHERE id = doctors.department_id) AS department, (SELECT group_concat(language, ', ') FROM (SELECT language FROM doctor_languages WHERE doctor_id = doctors.id ORDER BY rowid)) AS languages FROM doctors`;
+
+
 function fromRow(row) {
   return {
     id: row.id,
@@ -27,7 +31,7 @@ function fromRow(row) {
 }
 
 async function all(hospitalId) {
-  const rows = await db.query('SELECT * FROM doctors WHERE hospital_id = ?', [hospitalId]);
+  const rows = await db.query(`${DOCTOR_SELECT} WHERE hospital_id = ?`, [hospitalId]);
   return rows.map(fromRow);
 }
 
@@ -37,12 +41,12 @@ async function list(hospitalId, { q, specialization, availability } = {}) {
   if (specialization) { clauses.push('specialization = ?'); params.push(specialization); }
   if (availability) { clauses.push('availability = ?'); params.push(availability); }
   if (q) { clauses.push('(name LIKE ? OR specialization LIKE ? OR id LIKE ?)'); params.push(`%${q}%`, `%${q}%`, `%${q}%`); }
-  const rows = await db.query(`SELECT * FROM doctors WHERE ${clauses.join(' AND ')} ORDER BY name`, params);
+  const rows = await db.query(`${DOCTOR_SELECT} WHERE ${clauses.join(' AND ')} ORDER BY name`, params);
   return rows.map(fromRow);
 }
 
 async function findById(hospitalId, id) {
-  const row = await db.one('SELECT * FROM doctors WHERE hospital_id = ? AND id = ?', [hospitalId, id]);
+  const row = await db.one(`${DOCTOR_SELECT} WHERE hospital_id = ? AND id = ?`, [hospitalId, id]);
   return row ? fromRow(row) : null;
 }
 
@@ -82,10 +86,12 @@ async function update(hospitalId, id, patch) {
 async function updateProfile(hospitalId, id, { bio, yearsExperience, languages }) {
   const doctor = await findById(hospitalId, id);
   if (!doctor) return null;
-  await db.query(
-    'UPDATE doctors SET bio = ?, years_experience = ?, languages = ? WHERE id = ?',
-    [bio ?? null, yearsExperience ?? null, languages ?? null, id]
-  );
+  await db.tx(async (conn) => {
+    await conn.query('UPDATE doctors SET bio = ?, years_experience = ? WHERE id = ?', [bio ?? null, yearsExperience ?? null, id]);
+    await conn.query('DELETE FROM doctor_languages WHERE doctor_id = ?', [id]);
+    const list = [...new Set(String(languages || '').split(',').map((l) => l.trim()).filter(Boolean))];
+    for (const language of list) await conn.query('INSERT INTO doctor_languages (doctor_id, language) VALUES (?, ?)', [id, language]);
+  });
   return findById(hospitalId, id);
 }
 
@@ -114,7 +120,7 @@ async function adminList({ hospitalId, specialization, verificationStatus, q, pa
   const size = Math.min(Math.max(Number(pageSize) || 20, 1), 100);
   const offset = (Math.max(Number(page) || 1, 1) - 1) * size;
   const rows = await db.query(
-    `SELECT d.*, h.name AS hospital_name FROM doctors d JOIN hospitals h ON h.id = d.hospital_id
+    `SELECT d.*, (SELECT name FROM departments WHERE id = d.department_id) AS department, (SELECT group_concat(language, ', ') FROM (SELECT language FROM doctor_languages WHERE doctor_id = d.id ORDER BY rowid)) AS languages, h.name AS hospital_name FROM doctors d JOIN hospitals h ON h.id = d.hospital_id
      WHERE ${where} ORDER BY d.created_at DESC LIMIT ? OFFSET ?`,
     [...params, size, offset]
   );
@@ -126,7 +132,7 @@ async function adminList({ hospitalId, specialization, verificationStatus, q, pa
 
 async function adminFindById(id) {
   const row = await db.one(
-    `SELECT d.*, h.name AS hospital_name FROM doctors d JOIN hospitals h ON h.id = d.hospital_id WHERE d.id = ?`,
+    `SELECT d.*, (SELECT name FROM departments WHERE id = d.department_id) AS department, (SELECT group_concat(language, ', ') FROM (SELECT language FROM doctor_languages WHERE doctor_id = d.id ORDER BY rowid)) AS languages, h.name AS hospital_name FROM doctors d JOIN hospitals h ON h.id = d.hospital_id WHERE d.id = ?`,
     [id]
   );
   return row ? { ...fromRow(row), hospitalName: row.hospital_name } : null;

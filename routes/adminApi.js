@@ -57,8 +57,6 @@ router.get('/qr/analytics', requireAdminApi('qr.view'), qr.analytics);
 
 router.get('/appointments', requireAdminApi('appointments.view'), appointments.list);
 router.get('/appointments/:id', requireAdminApi('appointments.view'), appointments.get);
-router.post('/appointments/:id/cancel', requireAdminApi('appointments.manage'), appointments.cancel);
-router.post('/appointments/:id/reschedule', requireAdminApi('appointments.manage'), appointments.reschedule);
 
 router.get('/patients/search', requireAdminApi('patients.view'), patients.search);
 router.get('/patients/:id', requireAdminApi('patients.view'), patients.get);

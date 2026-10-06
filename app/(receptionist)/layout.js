@@ -4,6 +4,7 @@ import userModel from '../../models/userModel';
 import hospitalModel from '../../models/hospitalModel';
 import Sidebar from '../../components/receptionist/Sidebar';
 import Topbar from '../../components/receptionist/Topbar';
+import PortalNotices from '../../components/shared/PortalNotices';
 import LogoutModal from '../../components/LogoutModal';
 
 export default async function ReceptionistLayout({ children }) {
@@ -16,7 +17,10 @@ export default async function ReceptionistLayout({ children }) {
       <Sidebar />
       <div className="main">
         <Topbar user={publicUser} hospital={hospital} />
-        <main id="main" className="page" tabIndex={-1}>{children}</main>
+        <main id="main" className="page" tabIndex={-1}>
+          <PortalNotices hospitalId={user.hospitalId} />
+          {children}
+        </main>
       </div>
 
       <LogoutModal />

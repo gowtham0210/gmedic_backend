@@ -3,6 +3,7 @@
 
 const db = require('../../db');
 const { todayISO } = require('../../utils/dates');
+const notificationModel = require('../../models/notificationModel');
 
 async function recentEvents(doctorId) {
   const since = Date.now() - 3 * 24 * 3600 * 1000;
@@ -34,11 +35,15 @@ async function recentEvents(doctorId) {
 exports.list = async (req, res) => {
   const readAt = req.session.notificationsReadAt || 0;
   const events = await recentEvents(req.doctorId);
-  const items = events.slice(0, 10).map((e) => ({ ...e, unread: Date.parse(e.at) > readAt }));
-  res.json({ items, unread: events.filter((e) => Date.parse(e.at) > readAt).length });
+  const own = events.map((e) => ({ ...e, unread: Date.parse(e.at) > readAt }));
+  // Template-driven notifications (new tokens, support replies, …).
+  const system = await notificationModel.listForUser(req.user.id);
+  const items = [...own.slice(0, 10), ...system].sort((a, b) => (b.at || '').localeCompare(a.at || '')).slice(0, 15);
+  res.json({ items, unread: own.filter((e) => e.unread).length + system.filter((n) => n.unread).length });
 };
 
-exports.markRead = (req, res) => {
+exports.markRead = async (req, res) => {
   req.session.notificationsReadAt = Date.now();
+  await notificationModel.markAllRead(req.user.id);
   res.json({ ok: true, unread: 0 });
 };

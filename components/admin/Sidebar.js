@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import Icon from '../Icon';
 
+// Items with `children` render as a labelled group (Finance, Communications).
+// A group is shown if the user can see at least one of its children.
 const NAV = [
   { href: '/admin/dashboard', label: 'Dashboard', icon: 'home', perm: 'dashboard.view' },
   { href: '/admin/hospitals', label: 'Hospitals', icon: 'hospital', perm: 'hospitals.view' },
@@ -12,13 +14,25 @@ const NAV = [
   { href: '/admin/qr', label: 'QR Management', icon: 'qr-code', perm: 'qr.view' },
   { href: '/admin/appointments', label: 'Appointments', icon: 'calendar', perm: 'appointments.view' },
   { href: '/admin/patients', label: 'Patients', icon: 'user', perm: 'patients.view' },
-  { href: '/admin/payments', label: 'Payments', icon: 'credit-card', perm: 'payments.view' },
-  { href: '/admin/refunds', label: 'Refunds', icon: 'refresh', perm: 'refunds.view' },
-  { href: '/admin/settlements', label: 'Settlements', icon: 'wallet', perm: 'settlements.view' },
-  { href: '/admin/support', label: 'Support', icon: 'life-buoy', perm: 'support.view' },
-  { href: '/admin/disputes', label: 'Disputes', icon: 'alert-triangle', perm: 'disputes.view' },
-  { href: '/admin/communications', label: 'Communications', icon: 'message-square', perm: 'communications.view' },
+  {
+    group: 'Finance',
+    children: [
+      { href: '/admin/payments', label: 'Payments', icon: 'credit-card', perm: 'payments.view' },
+      { href: '/admin/refunds', label: 'Refunds', icon: 'refresh', perm: 'refunds.view' },
+      { href: '/admin/disputes', label: 'Disputes', icon: 'alert-triangle', perm: 'disputes.view' },
+      { href: '/admin/settlements', label: 'Settlements', icon: 'wallet', perm: 'settlements.view' },
+    ],
+  },
+  { href: '/admin/support', label: 'Support', icon: 'life-buoy', perm: 'support.view_all' },
   { href: '/admin/analytics', label: 'Analytics', icon: 'bar-chart', perm: 'analytics.view' },
+  {
+    group: 'Communications',
+    children: [
+      { href: '/admin/communications/templates', label: 'Templates', icon: 'message-square', perm: 'communications.templates.view' },
+      { href: '/admin/communications/announcements', label: 'Announcements', icon: 'megaphone', perm: 'communications.announcements.view' },
+      { href: '/admin/communications/banners', label: 'Banners', icon: 'sparkles', perm: 'communications.banners.view' },
+    ],
+  },
 ];
 
 const FOOT_NAV = [
@@ -50,7 +64,19 @@ export default function Sidebar({ permissions }) {
           <button type="button" className="icon-btn sidebar__close" data-sidebar-close aria-label="Close menu"><Icon name="x" /></button>
         </div>
 
-        <nav className="nav">{NAV.filter(canSee).map(renderLink)}</nav>
+        <nav className="nav">
+          {NAV.map((item) => {
+            if (!item.group) return canSee(item) ? renderLink(item) : null;
+            const visible = item.children.filter(canSee);
+            if (!visible.length) return null;
+            return (
+              <div key={item.group} role="group" aria-label={item.group}>
+                <p className="nav__group">{item.group}</p>
+                <div className="nav__sub">{visible.map(renderLink)}</div>
+              </div>
+            );
+          })}
+        </nav>
 
         <p className="sidebar__tagline">Gmedic Platform<br />Super Admin Console</p>
 

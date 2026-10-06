@@ -8,6 +8,7 @@ class HttpError extends Error {
 
 const badRequest = (message, details) => new HttpError(400, message, details);
 const notFound = (message = 'Not found.') => new HttpError(404, message);
+const forbidden = (message = "You don't have permission to do this.") => new HttpError(403, message);
 
 // Only allow same-site relative redirects such as "/doctors?x=1".
 function safeNext(next, fallback = '/dashboard') {
@@ -16,4 +17,4 @@ function safeNext(next, fallback = '/dashboard') {
   return next;
 }
 
-module.exports = { HttpError, badRequest, notFound, safeNext };
+module.exports = { HttpError, badRequest, notFound, forbidden, safeNext };

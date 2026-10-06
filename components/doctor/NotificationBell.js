@@ -71,12 +71,14 @@ export default function NotificationBell() {
             <div className="empty" style={{ padding: '28px 16px' }}><div className="empty__icon"><Icon name="bell" /></div><p>You&apos;re all caught up.</p></div>
           )}
           {!loading && items.map((n) => (
-            <Link key={n.id} className={`notif__item${n.unread ? ' is-unread' : ''}`} href={`/doctor/appointments?q=${encodeURIComponent(n.patientName || '')}`}>
-              <span className={`notif__icon ${n.type === 'reminder' ? 'tone-blue' : 'tone-green'}`}><Icon name={n.type === 'reminder' ? 'clock' : 'calendar-check'} /></span>
+            <Link key={n.id} className={`notif__item${n.unread ? ' is-unread' : ''}`} href={n.type === 'system' ? (n.link || '/doctor/notifications') : `/doctor/appointments?q=${encodeURIComponent(n.patientName || '')}`}>
+              <span className={`notif__icon ${n.type === 'reminder' ? 'tone-blue' : n.type === 'system' ? 'tone-teal' : 'tone-green'}`}><Icon name={n.type === 'reminder' ? 'clock' : n.type === 'system' ? 'bell' : 'calendar-check'} /></span>
               <span>
-                <p>{n.type === 'reminder'
-                  ? <>Upcoming today: <strong>{n.patientName}</strong> at {n.time}</>
-                  : <>New appointment booked: <strong>{n.patientName}</strong> on {n.date} at {n.time}</>}
+                <p>{n.type === 'system'
+                  ? <><strong>{n.title}</strong> — {n.body}</>
+                  : n.type === 'reminder'
+                    ? <>Upcoming today: <strong>{n.patientName}</strong> at {n.time}</>
+                    : <>New appointment booked: <strong>{n.patientName}</strong> on {n.date} at {n.time}</>}
                 </p>
                 <small>{n.at ? new Date(n.at).toLocaleString() : ''}</small>
               </span>

@@ -58,11 +58,13 @@ export default function NotificationsPage() {
           )}
           {items.map((n) => (
             <div key={n.id} className={`notif__item${n.unread ? ' is-unread' : ''}`} style={{ display: 'flex', gap: 14, padding: '14px 10px', borderBottom: '1px solid var(--border-2)' }}>
-              <span className={`notif__icon ${n.type === 'reminder' ? 'tone-blue' : 'tone-green'}`}><Icon name={n.type === 'reminder' ? 'clock' : 'calendar-check'} /></span>
+              <span className={`notif__icon ${n.type === 'reminder' ? 'tone-blue' : n.type === 'system' ? 'tone-teal' : 'tone-green'}`}><Icon name={n.type === 'reminder' ? 'clock' : n.type === 'system' ? 'bell' : 'calendar-check'} /></span>
               <span style={{ flex: 1 }}>
-                <p>{n.type === 'reminder'
-                  ? <>Your appointment with <strong>{n.patientName}</strong> starts at {n.time}.</>
-                  : <>New appointment: <strong>{n.patientName}</strong> on {n.date} at {n.time}.</>}
+                <p>{n.type === 'system'
+                  ? <><strong>{n.title}</strong> — {n.body}</>
+                  : n.type === 'reminder'
+                    ? <>Your appointment with <strong>{n.patientName}</strong> starts at {n.time}.</>
+                    : <>New appointment: <strong>{n.patientName}</strong> on {n.date} at {n.time}.</>}
                 </p>
                 <small className="text-muted">{n.at ? new Date(n.at).toLocaleString() : ''}</small>
               </span>

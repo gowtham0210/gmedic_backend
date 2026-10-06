@@ -25,7 +25,21 @@ function ResolveModal({ target, onClose, onDone }) {
   const [status, setStatus] = useState('UNDER_REVIEW');
   const [resolution, setResolution] = useState('');
   const [saving, setSaving] = useState(false);
+  const [notes, setNotes] = useState([]);
+  const [note, setNote] = useState('');
+  const loadNotes = useCallback(() => {
+    if (target) api(`/api/admin/disputes/${target.id}/notes`).then((d) => setNotes(d.notes)).catch(() => {});
+  }, [target]);
+  useEffect(() => { loadNotes(); }, [loadNotes]);
   if (!target) return null;
+
+  async function addNote() {
+    if (!note.trim()) return;
+    try {
+      const res = await api(`/api/admin/disputes/${target.id}/notes`, { method: 'POST', body: { note } });
+      toast(res.message, 'success'); setNote(''); loadNotes();
+    } catch (err) { toast(err.message, 'error'); }
+  }
 
   async function submit(e) {
     e.preventDefault();
@@ -49,7 +63,7 @@ function ResolveModal({ target, onClose, onDone }) {
         <form onSubmit={submit}>
           <div className="modal__head">
             <div className="modal__icon tone-amber"><Icon name="alert-triangle" /></div>
-            <div><h2>Dispute {target.id}</h2><p>{target.patientName} · {money(target.amount)}</p></div>
+            <div><h2>Dispute {target.id}</h2><p>{target.patientName} · {target.hospitalName} · {money(target.amount)}</p></div>
           </div>
           <div className="modal__body">
             <div className="field" style={{ marginBottom: 14 }}>
@@ -59,6 +73,19 @@ function ResolveModal({ target, onClose, onDone }) {
                 <option value="RESOLVED">Resolve (in patient&apos;s favor)</option>
                 <option value="REJECTED">Reject dispute</option>
               </select>
+            </div>
+            <dl className="kv" style={{ marginBottom: 14 }}>
+              <div><dt>Transaction</dt><dd className="mono">{target.transactionId}</dd></div>
+              <div><dt>Appointment</dt><dd className="mono">{target.appointmentId}</dd></div>
+              <div className="kv--full"><dt>Reason raised</dt><dd>{target.reason}</dd></div>
+            </dl>
+            <div className="field" style={{ marginBottom: 14 }}>
+              <label>Internal notes</label>
+              {notes.map((n) => <p key={n.id} style={{ fontSize: 13, margin: '4px 0' }}><strong>{n.userName}:</strong> {n.note}</p>)}
+              <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                <input className="input" placeholder="Add an internal note (not visible to the hospital)" value={note} onChange={(e) => setNote(e.target.value)} />
+                <button type="button" className="btn btn--ghost btn--sm" onClick={addNote}>Add</button>
+              </div>
             </div>
             <div className="field"><label>Resolution note{status !== 'UNDER_REVIEW' ? ' *' : ''}</label><textarea className="textarea" rows={3} value={resolution} onChange={(e) => setResolution(e.target.value)} required={status !== 'UNDER_REVIEW'} /></div>
           </div>

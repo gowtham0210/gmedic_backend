@@ -1,6 +1,15 @@
 const tokenModel = require('../../models/tokenModel');
 const { badRequest, notFound } = require('../../utils/http');
 const { isISODate, todayISO } = require('../../utils/dates');
+const notifications = require('../../services/notificationService');
+
+const LABEL = { called: 'Called', in_consultation: 'In Consultation', completed: 'Completed', skipped: 'Skipped' };
+
+async function notifyReceptionists(req, token) {
+  await notifications.trigger('TOKEN_UPDATED', await notifications.hospitalUsers(req.hospitalId, 'RECEPTIONIST'), {
+    token_number: token.code, token_status: LABEL[token.status] || token.status, patient_name: token.patientName, doctor_name: token.doctorName.replace(/^Dr\.?\s*/i, ''),
+  }, { link: '/tokens' });
+}
 
 function readDate(value) {
   if (!value) return todayISO();
@@ -28,29 +37,34 @@ exports.callNext = async (req, res) => {
   const next = items.sort((a, b) => a.number - b.number)[0];
   if (!next) throw badRequest('No patients are waiting.');
   const token = await tokenModel.updateStatus(req.hospitalId, next.id, 'called');
+  await notifyReceptionists(req, token);
   res.json({ ok: true, message: `${token.code} called — ${token.patientName}.`, token });
 };
 
 exports.start = async (req, res) => {
   const token = await ownToken(req);
   const updated = await tokenModel.updateStatus(req.hospitalId, token.id, 'in_consultation');
+  await notifyReceptionists(req, updated);
   res.json({ ok: true, message: `Consultation started for ${updated.patientName}.`, token: updated });
 };
 
 exports.complete = async (req, res) => {
   const token = await ownToken(req);
   const updated = await tokenModel.updateStatus(req.hospitalId, token.id, 'completed');
+  await notifyReceptionists(req, updated);
   res.json({ ok: true, message: `${updated.code} marked completed.`, token: updated });
 };
 
 exports.skip = async (req, res) => {
   const token = await ownToken(req);
   const updated = await tokenModel.updateStatus(req.hospitalId, token.id, 'skipped');
+  await notifyReceptionists(req, updated);
   res.json({ ok: true, message: `${updated.code} skipped.`, token: updated });
 };
 
 exports.recall = async (req, res) => {
   const token = await ownToken(req);
   const updated = await tokenModel.updateStatus(req.hospitalId, token.id, 'called');
+  await notifyReceptionists(req, updated);
   res.json({ ok: true, message: `${updated.code} called back.`, token: updated });
 };

@@ -11,6 +11,7 @@ const NAV = [
   { href: '/appointments', label: 'Appointments', icon: 'calendar' },
   { href: '/tokens', label: 'Tokens', icon: 'ticket' },
   { href: '/payments', label: 'Payments', icon: 'credit-card' },
+  { href: '/support', label: 'Support', icon: 'life-buoy' },
 ];
 
 export default function Sidebar() {

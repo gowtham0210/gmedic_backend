@@ -8,10 +8,14 @@ const STATUSES = ['confirmed', 'pending', 'completed', 'cancelled'];
 const PAYMENT_STATUSES = ['paid', 'pending'];
 
 const SELECT = `
-  SELECT a.*, d.name AS doctor_name, d.specialization, h.name AS hospital_name, p.mobile AS patient_mobile, p.name AS patient_name
+  SELECT a.*, d.name AS doctor_name, d.specialization, (SELECT name FROM departments WHERE id = d.department_id) AS department, h.name AS hospital_name, b.name AS branch_name,
+         p.mobile AS patient_mobile, p.name AS patient_name,
+         (SELECT t.code FROM tokens t WHERE t.appointment_id = a.id AND t.status <> 'cancelled' ORDER BY t.id DESC LIMIT 1) AS token_code,
+         (SELECT pay2.transaction_id FROM payments pay2 WHERE pay2.appointment_id = a.id ORDER BY pay2.created_at DESC LIMIT 1) AS transaction_id
   FROM appointments a
   JOIN doctors d ON d.id = a.doctor_id
   JOIN hospitals h ON h.id = a.hospital_id
+  LEFT JOIN hospital_branches b ON b.id = a.branch_id
   LEFT JOIN patients p ON p.id = a.patient_id`;
 
 function fromRow(row) {
@@ -22,6 +26,10 @@ function fromRow(row) {
     doctorId: row.doctor_id,
     doctorName: row.doctor_name,
     specialization: row.specialization,
+    department: row.department,
+    branchName: row.branch_name,
+    tokenCode: row.token_code,
+    transactionId: row.transaction_id,
     patientId: row.patient_id,
     patientName: row.patient_name,
     patientMobile: row.patient_mobile,
@@ -105,7 +113,8 @@ async function adminFindById(id) {
   return row ? fromRow(row) : null;
 }
 
-async function adminCancel(id, reason, byUserId) {
+// Used by the doctor workflow (Super Admin cannot cancel appointments).
+async function cancelWithReason(id, reason, byUserId) {
   const res = await db.query(
     "UPDATE appointments SET status = 'cancelled', cancel_reason = ?, cancelled_by = ? WHERE id = ? AND status <> 'cancelled'",
     [reason, byUserId, id]
@@ -114,17 +123,7 @@ async function adminCancel(id, reason, byUserId) {
   return adminFindById(id);
 }
 
-async function adminReschedule(id, { date, time }, reason, byUserId) {
-  const current = await adminFindById(id);
-  if (!current) return null;
-  await db.query(
-    `UPDATE appointments SET appt_date = ?, appt_time = ?, rescheduled_from_date = ?, rescheduled_from_time = ?, cancel_reason = ?, cancelled_by = ? WHERE id = ?`,
-    [date, time, current.date, current.time, reason, byUserId, id]
-  );
-  return adminFindById(id);
-}
-
 module.exports = {
   STATUSES, PAYMENT_STATUSES, query, sortRows, paginate, findById, updateStatus,
-  adminSearch, adminFindById, adminCancel, adminReschedule, fromRow,
+  adminSearch, adminFindById, cancelWithReason, fromRow,
 };

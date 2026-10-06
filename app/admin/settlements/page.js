@@ -51,7 +51,7 @@ function GenerateModal({ open, hospitals, onClose, onCreated }) {
         <form onSubmit={submit}>
           <div className="modal__head">
             <div className="modal__icon tone-teal"><Icon name="wallet" /></div>
-            <div><h2>Generate Settlement</h2><p>Computed from real payments and refunds for the period.</p></div>
+            <div><h2>Custom-period settlement</h2><p>Computed from real payments and refunds for the period.</p></div>
             <button type="button" className="icon-btn" onClick={onClose} aria-label="Close"><Icon name="x" /></button>
           </div>
           <div className="modal__body">
@@ -152,12 +152,31 @@ export default function SettlementsPage() {
       <div className="page-head">
         <div>
           <h1>Settlements</h1>
-          <p>Per-hospital payout reports, computed from real payments and refunds.</p>
+          <p>Generated automatically every week from each hospital&apos;s paid appointments, refunds and commission rule.</p>
         </div>
         <div className="page-head__actions">
-          <button type="button" className="btn btn--primary" onClick={() => setShowGenerate(true)}><Icon name="plus" />Generate Settlement</button>
+          <button type="button" className="btn btn--primary" onClick={() => setShowGenerate(true)}><Icon name="plus" />Custom Period</button>
         </div>
       </div>
+
+      <article className="card" style={{ marginBottom: 16 }}>
+        <div className="card__head"><h2 className="card__title"><Icon name="wallet" />Commission rates</h2></div>
+        <p className="text-muted" style={{ fontSize: 13, margin: '0 0 10px' }}>The Super Admin sets each hospital&apos;s commission on its page under Fee &amp; Commission. It is applied to every new settlement and recorded on it.</p>
+        <div className="table-wrap">
+          <table className="table">
+            <thead><tr><th>Hospital</th><th>Commission</th><th></th></tr></thead>
+            <tbody>
+              {hospitals.map((h) => (
+                <tr key={h.id}>
+                  <td>{h.name}</td>
+                  <td className="num">{h.commissionType === 'PERCENT' ? `${h.commissionValue}% of collection` : `₹${h.commissionValue} per paid appointment`}</td>
+                  <td className="col-actions"><a className="action-btn" href={`/admin/hospitals/${h.id}`}><Icon name="pencil" />Edit rate</a></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </article>
 
       <article className="card card--flush">
         <div className="toolbar">
@@ -175,20 +194,21 @@ export default function SettlementsPage() {
         </div>
         <div className="table-wrap">
           <table className="table table--stack">
-            <thead><tr><th>Settlement</th><th>Hospital</th><th>Period</th><th>Gross</th><th>Refunds</th><th>Commission</th><th>Net Payout</th><th>Status</th><th className="col-actions">Actions</th></tr></thead>
+            <thead><tr><th>Settlement</th><th>Hospital</th><th>Period</th><th>Appts</th><th>Gross</th><th>Refunds</th><th>Commission (rate)</th><th>Net Payout</th><th>Status</th><th className="col-actions">Actions</th></tr></thead>
             <tbody>
-              {loading && <tr><td colSpan={9}><div className="skeleton skeleton--row"></div></td></tr>}
+              {loading && <tr><td colSpan={10}><div className="skeleton skeleton--row"></div></td></tr>}
               {!loading && items.length === 0 && (
-                <tr><td colSpan={9} style={{ whiteSpace: 'normal' }}><div className="empty"><div className="empty__icon"><Icon name="wallet" /></div><h3>No settlements found</h3><p>Generate the first settlement for a hospital and period.</p></div></td></tr>
+                <tr><td colSpan={10} style={{ whiteSpace: 'normal' }}><div className="empty"><div className="empty__icon"><Icon name="wallet" /></div><h3>No settlements found</h3><p>Generate the first settlement for a hospital and period.</p></div></td></tr>
               )}
               {items.map((s) => (
                 <tr key={s.id}>
                   <td data-label="Settlement" className="cell-primary mono">{s.id}</td>
                   <td data-label="Hospital" className="text-muted">{s.hospitalName}</td>
                   <td data-label="Period" className="mono">{s.periodStart} → {s.periodEnd}</td>
+ <td data-label="Appts" className="num">{s.appointmentsCount}</td>
                   <td data-label="Gross" className="num fee">{money(s.grossCollection)}</td>
                   <td data-label="Refunds" className="num">{money(s.refundsAmount)}</td>
-                  <td data-label="Commission" className="num">{money(s.commissionAmount)}</td>
+                  <td data-label="Commission" className="num">{money(s.commissionAmount)}<div className="text-muted" style={{ fontSize: 12 }}>{s.commissionType === 'PERCENT' ? `${s.commissionValue}%` : s.commissionType === 'FLAT' ? `₹${s.commissionValue}/appt` : ''}</div></td>
                   <td data-label="Net Payout" className="num fee">{money(s.netPayout)}</td>
                   <td data-label="Status"><span className={`badge badge--${STATUS_TONE[s.status]}`}>{s.status.replace('_', ' ')}</span></td>
                   <td className="col-actions">{s.status !== 'PAID' && <button type="button" className="action-btn" onClick={() => setPaidTarget(s)}><Icon name="check" />Mark Paid</button>}</td>

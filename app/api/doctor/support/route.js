@@ -1,5 +1,5 @@
 import { adapt } from '../../../../lib/adaptExpress';
-import support from '../../../../controllers/doctor/supportController';
+import tickets from '../../../../controllers/supportTicketsController';
 
-export const GET = adapt(support.list, { scope: 'doctor' });
-export const POST = adapt(support.create, { scope: 'doctor' });
+export const GET = adapt(tickets.list, { scope: 'doctor' });
+export const POST = adapt(tickets.create, { scope: 'doctor' });

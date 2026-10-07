@@ -194,3 +194,14 @@ Add `doctor_affiliations (doctor_id, hospital_id, branch_id, ...)` with primary 
 After 010: foreign-key and integrity checks clean, `db:verify` green; 15 bad writes (wrong hospital, branch, doctor, date, currency, transaction, payment total, settlement net, overlapping period, held-and-booked seat) were each rejected by a constraint; settlement generation (with line items, currency and rate-history link), refunds, tokens, appointment status, support, doctor profile / department and every portal list endpoint still work.
 
 Process note: a file copy of the SQLite database taken while it is in WAL mode can miss recent writes. Use `VACUUM INTO 'file'` for backups (the latest is `data/backup/gmedic.after010.sqlite`). My first run of 010 failed halfway on a trigger that referenced a rebuilt table; I restored a copy that turned out to predate migrations 008-009, then replayed 008-010 on it. The data matched (only test rows differed, and I cleaned those), but the older `before00x` copies in `data/backup/` should not be trusted for point-in-time restore.
+
+---
+
+# Patient app API (migrations 012-013)
+
+Added so the patient app can book through this backend (see [patient-api.md](patient-api.md)).
+- `users.role` now includes `PATIENT` (users table rebuilt). A patient account is a user; the account holder is also a `patients` row with `relation = SELF` (adopting an existing walk-in record with the same mobile number), and family members are `patients` rows with `account_user_id` set.
+- `otp_codes` (hashed one-time codes, attempts, expiry).
+- Catalogue fields for the app: `hospitals.kind / area / lat / lng / brand_color / initials / about`, `departments.icon` (departments are per hospital), `doctors.gender`.
+- Booking fields: `appointments.token_no`, `reschedule_count`, `booked_by_user_id` (who booked, even for a family member), `payments.idempotency_key` (unique, so a retried payment never charges twice).
+- Existing tables carry the rest: `slot_holds` (10-minute seat holds), `appointments.seat_no` + `doctor_schedules.capacity_per_slot` (seats), `hospital_policies` (cancellation window, refund %, booking window), `qr_codes` / `qr_scans` / `patient_hospital_links` (QR linking), `refunds` (patient cancellations).

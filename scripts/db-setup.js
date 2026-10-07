@@ -11,6 +11,7 @@
 const { migrate } = require('../db/migrate');
 const { importLegacy, ensureSuperAdmin, ensureDemoDoctor } = require('../db/importLegacy');
 const { seedPlatform } = require('../db/seedPlatform');
+const { seedPatientDemo } = require('../db/seedPatientDemo');
 const { ping } = require('../db');
 const config = require('../config');
 
@@ -38,6 +39,9 @@ async function main() {
 
   console.log('\nSeeding platform defaults and sample analytics data...');
   await seedPlatform();
+
+  console.log('\nFilling in catalogue details for the patient app (departments, doctor profiles, schedules)...');
+  await seedPatientDemo();
 
   console.log('\nDone.');
   if (created) {

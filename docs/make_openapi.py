@@ -3,6 +3,7 @@ import os, re, json
 
 # (method, path, tag, summary, access, body schema, query params)
 ADM, REC, DOC, PUB = "admin", "receptionist", "doctor", "public"
+PAT = "patient"
 Q_PAGE = ["page", "pageSize"]
 E = [
  # ---- auth
@@ -141,6 +142,39 @@ E = [
  ("post", "/api/doctor/support", "Doctor", "Raise a ticket", "support.create", "TicketCreate", []),
  ("get", "/api/doctor/support/{id}", "Doctor", "My ticket with conversation (404 if not mine)", "support.view_own", None, []),
  ("post", "/api/doctor/support/{id}/messages", "Doctor", "Reply on my ticket", "support.reply_own", "Message", []),
+ ("post", "/api/patient/auth/otp", "Patient", "Send a one-time code to the patient's mobile number (dev mode: the code is PATIENT_DEV_OTP)", PUB, "PatientOtpRequest", []),
+ ("post", "/api/patient/auth/verify", "Patient", "Verify the code; creates the account on first sign-in and returns a bearer token", PUB, "PatientVerifyRequest", []),
+ ("post", "/api/patient/auth/logout", "Patient", "Sign out (the token stops working, held slots are released)", PAT, None, []),
+ ("get", "/api/patient/me", "Patient", "My profile", PAT, None, []),
+ ("put", "/api/patient/me", "Patient", "Complete or edit my profile (name, date of birth, gender)", PAT, "PatientProfileUpdate", []),
+ ("delete", "/api/patient/me", "Patient", "Delete my account: future appointments are cancelled per the refund policy and personal details are erased", PAT, None, []),
+ ("get", "/api/patient/dependents", "Patient", "My family members", PAT, None, []),
+ ("post", "/api/patient/dependents", "Patient", "Add a family member (up to 6)", PAT, "FamilyMemberCreate", []),
+ ("put", "/api/patient/dependents/{id}", "Patient", "Edit a family member", PAT, "FamilyMemberUpdate", []),
+ ("delete", "/api/patient/dependents/{id}", "Patient", "Remove a family member (their visit history stays with the hospital)", PAT, None, []),
+ ("post", "/api/patient/qr/resolve", "Patient", "Read a scanned QR code, deep link or hospital code and show the hospital before linking", PAT, "QrResolveRequest", []),
+ ("get", "/api/patient/hospitals", "Patient", "Hospitals I have linked", PAT, None, []),
+ ("get", "/api/patient/hospitals/{id}", "Patient", "A linked hospital", PAT, None, []),
+ ("post", "/api/patient/hospitals/{id}/link", "Patient", "Link a hospital using the key from the QR code", PAT, "LinkRequest", []),
+ ("delete", "/api/patient/hospitals/{id}/link", "Patient", "Unlink a hospital", PAT, None, []),
+ ("post", "/api/patient/hospitals/{id}/relink", "Patient", "Undo an unlink made in the last 10 minutes", PAT, None, []),
+ ("get", "/api/patient/hospitals/{id}/departments", "Patient", "Departments of a linked hospital", PAT, None, []),
+ ("get", "/api/patient/hospitals/{id}/doctors", "Patient", "Verified doctors of a linked hospital with their next free slot", PAT, None, []),
+ ("get", "/api/patient/doctors/{id}", "Patient", "A doctor's profile and weekly schedule", PAT, None, []),
+ ("get", "/api/patient/doctors/{id}/slots", "Patient", "The doctor's slots on one day, as available, full or unavailable", PAT, None, ["date"]),
+ ("get", "/api/patient/doctors/{id}/next-available", "Patient", "The earliest day with a free slot inside the booking window", PAT, None, ["after"]),
+ ("get", "/api/patient/doctors/{id}/quote", "Patient", "What the patient pays now and later, in paise", PAT, None, []),
+ ("post", "/api/patient/holds", "Patient", "Hold one seat for the booking hold time (10 minutes) while the patient pays", PAT, "HoldRequest", []),
+ ("delete", "/api/patient/holds/{id}", "Patient", "Release a hold", PAT, None, []),
+ ("post", "/api/patient/holds/{id}/pay", "Patient", "Pay through the simulated gateway and confirm the appointment. The same idempotencyKey never charges twice", PAT, "PayRequest", []),
+ ("get", "/api/patient/appointments", "Patient", "My appointments and my family's", PAT, None, []),
+ ("get", "/api/patient/appointments/{id}", "Patient", "One appointment with its hospital and doctor", PAT, None, []),
+ ("get", "/api/patient/appointments/{id}/cancel-quote", "Patient", "How much would be refunded if cancelled now", PAT, None, []),
+ ("post", "/api/patient/appointments/{id}/cancel", "Patient", "Cancel a confirmed appointment (refund per the hospital's policy)", PAT, "CancelRequest", []),
+ ("get", "/api/patient/appointments/{id}/reschedule-check", "Patient", "Why rescheduling is not allowed, or null when it is", PAT, None, []),
+ ("post", "/api/patient/appointments/{id}/reschedule", "Patient", "Move to another slot of the same doctor (once, up to 2 hours before)", PAT, "RescheduleRequest", []),
+ ("get", "/api/patient/notifications", "Patient", "Booking, payment and cancellation notifications", PAT, None, []),
+ ("post", "/api/patient/notifications/read", "Patient", "Mark all notifications read", PAT, None, []),
  # ---- doctor
 ]
 
@@ -155,7 +189,7 @@ CREATED = {
     "/api/admin/qr", "/api/admin/qr/{id}/reissue", "/api/admin/receptionists", "/api/admin/settlements",
     "/api/admin/communications/templates", "/api/admin/communications/announcements", "/api/admin/communications/banners",
     "/api/admin/disputes/{id}/notes", "/api/admin/support/{id}/messages",
-    "/api/doctors", "/api/tokens", "/api/refunds", "/api/support", "/api/support/{id}/messages", "/api/doctor/support", "/api/doctor/support/{id}/messages", "/api/doctor/schedule",
+    "/api/doctors", "/api/tokens", "/api/refunds", "/api/support", "/api/support/{id}/messages", "/api/doctor/support", "/api/doctor/support/{id}/messages", "/api/doctor/schedule", "/api/patient/dependents", "/api/patient/holds", "/api/patient/holds/{id}/pay",
 }
 
 RESPONSES = {
@@ -339,7 +373,328 @@ QENUM.update({
     ("/api/doctor/support", "status"): ["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"],
 })
 
+RESPONSES.update({
+    "post /api/patient/auth/otp": "PatientOtpSent",
+    "post /api/patient/auth/verify": "PatientSession",
+    "get /api/patient/me": "PatientUser",
+    "put /api/patient/me": "PatientUser",
+    "get /api/patient/dependents": "FamilyList",
+    "post /api/patient/dependents": "FamilyMember",
+    "put /api/patient/dependents/{id}": "FamilyMember",
+    "post /api/patient/qr/resolve": "QrResolution",
+    "get /api/patient/hospitals": "PatientHospitalList",
+    "get /api/patient/hospitals/{id}": "PatientHospital",
+    "get /api/patient/hospitals/{id}/departments": "DepartmentList",
+    "get /api/patient/hospitals/{id}/doctors": "DoctorSummaryList",
+    "get /api/patient/doctors/{id}": "PatientDoctor",
+    "get /api/patient/doctors/{id}/slots": "SlotList",
+    "get /api/patient/doctors/{id}/next-available": "NextAvailableDay",
+    "get /api/patient/doctors/{id}/quote": "FeeBreakdown",
+    "post /api/patient/holds": "Hold",
+    "post /api/patient/holds/{id}/pay": "AppointmentView",
+    "get /api/patient/appointments": "AppointmentViewList",
+    "get /api/patient/appointments/{id}": "AppointmentView",
+    "get /api/patient/appointments/{id}/cancel-quote": "RefundQuote",
+    "post /api/patient/appointments/{id}/cancel": "AppointmentView",
+    "get /api/patient/appointments/{id}/reschedule-check": "RescheduleBlocker",
+    "post /api/patient/appointments/{id}/reschedule": "AppointmentView",
+    "get /api/patient/notifications": "PatientNotifications",
+    "post /api/patient/notifications/read": "NotificationsReadResult",
+})
+
 SCHEMAS = """
+    PatientError:
+      type: object
+      required: [error, code]
+      properties:
+        error: {type: string, description: A message that can be shown to the patient}
+        code: {type: string}
+        fields: {type: object, additionalProperties: {type: string}}
+    PatientOtpRequest:
+      type: object
+      required: [phone]
+      properties:
+        phone: {type: string, example: "9876543210", description: 10-digit Indian mobile number (+91 / 0 prefixes are accepted)}
+    PatientOtpSent:
+      type: object
+      properties:
+        ok: {type: boolean}
+        expiresInSeconds: {type: integer, example: 300}
+        mode: {type: string, enum: [dev], description: In dev mode the code is PATIENT_DEV_OTP. Without an SMS provider the real mode answers 501}
+    PatientVerifyRequest:
+      type: object
+      required: [phone, code]
+      properties:
+        phone: {type: string}
+        code: {type: string, example: "123456"}
+    PatientUser:
+      type: object
+      properties:
+        id: {type: string, example: USR2001}
+        phone: {type: string}
+        name: {type: string, nullable: true}
+        dob: {type: string, format: date, nullable: true}
+        gender: {type: string, enum: [male, female, other, null], nullable: true}
+        profileComplete: {type: boolean}
+    PatientSession:
+      type: object
+      properties:
+        token: {type: string, description: Send as Authorization Bearer <token>}
+        user: {$ref: '#/components/schemas/PatientUser'}
+    PatientProfileUpdate:
+      type: object
+      required: [name, dob, gender]
+      properties:
+        name: {type: string, minLength: 2, maxLength: 60}
+        dob: {type: string, format: date}
+        gender: {type: string, enum: [male, female, other]}
+    FamilyMember:
+      type: object
+      properties:
+        id: {type: string, description: "The account holder's own entry uses the user id"}
+        name: {type: string}
+        relation: {type: string, enum: [self, spouse, child, parent, sibling, other]}
+        dob: {type: string, format: date, nullable: true}
+        gender: {type: string, enum: [male, female, other]}
+    FamilyMemberCreate:
+      type: object
+      required: [name, relation, dob, gender]
+      properties:
+        name: {type: string}
+        relation: {type: string, enum: [spouse, child, parent, sibling, other]}
+        dob: {type: string, format: date}
+        gender: {type: string, enum: [male, female, other]}
+    FamilyMemberUpdate:
+      type: object
+      description: Send only the fields to change
+      properties:
+        name: {type: string}
+        relation: {type: string, enum: [spouse, child, parent, sibling, other]}
+        dob: {type: string, format: date}
+        gender: {type: string, enum: [male, female, other]}
+    FamilyList:
+      type: object
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/FamilyMember'}}
+    QrResolveRequest:
+      type: object
+      required: [raw]
+      properties:
+        raw: {type: string, example: "https://gmedic.app/h/HSP001?k=a55cbe027beac2cfbcf40d82", description: "A scanned QR payload, a gmedic:// deep link or a bare hospital code"}
+    PatientHospital:
+      type: object
+      properties:
+        id: {type: string, example: HSP001}
+        code: {type: string, example: HSP001}
+        name: {type: string}
+        kind: {type: string, example: Multispecialty hospital}
+        address: {type: string}
+        area: {type: string}
+        phone: {type: string}
+        lat: {type: number}
+        lng: {type: number}
+        feeModel: {type: string, enum: [fullPrepay, bookingFee, tokenFee]}
+        bookingFeePaise: {type: integer}
+        tokenFeePaise: {type: integer}
+        convenienceFeePaise: {type: integer}
+        status: {type: string, enum: [active, suspended]}
+        brandColor: {type: integer, description: ARGB colour}
+        initials: {type: string}
+        gstin: {type: string}
+        about: {type: string}
+    PatientHospitalList:
+      type: object
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/PatientHospital'}}
+    QrResolution:
+      type: object
+      properties:
+        hospital: {$ref: '#/components/schemas/PatientHospital'}
+        alreadyLinked: {type: boolean}
+        qrKeyId: {type: string, description: Pass back to the link endpoint}
+    LinkRequest:
+      type: object
+      required: [qrKeyId]
+      properties:
+        qrKeyId: {type: string}
+    DepartmentList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties: {id: {type: string}, hospitalId: {type: string}, name: {type: string}, icon: {type: string, example: heart}}
+    ScheduleSession:
+      type: object
+      properties:
+        weekday: {type: integer, minimum: 1, maximum: 7, description: 1 = Monday ... 7 = Sunday}
+        startMinute: {type: integer, description: Minutes after midnight}
+        endMinute: {type: integer}
+        slotMinutes: {type: integer}
+        perSlot: {type: integer, description: Patients per slot}
+    PatientDoctor:
+      type: object
+      properties:
+        id: {type: string}
+        hospitalId: {type: string}
+        departmentId: {type: string}
+        name: {type: string}
+        qualifications: {type: string}
+        specialty: {type: string}
+        experienceYears: {type: integer}
+        languages: {type: array, items: {type: string}}
+        feePaise: {type: integer}
+        gender: {type: string, enum: [male, female, other]}
+        about: {type: string}
+        schedule: {type: array, items: {$ref: '#/components/schemas/ScheduleSession'}}
+        onLeave: {type: boolean}
+        leaveNote: {type: string, nullable: true}
+    DoctorSummaryList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              doctor: {$ref: '#/components/schemas/PatientDoctor'}
+              nextAvailable: {type: string, format: date-time, nullable: true}
+    PatientSlot:
+      type: object
+      properties:
+        id: {type: string, example: DOC101_202610081030}
+        doctorId: {type: string}
+        start: {type: string, format: date-time, description: Hospital local time with its UTC offset}
+        end: {type: string, format: date-time}
+        status: {type: string, enum: [available, full, unavailable]}
+        seatsLeft: {type: integer}
+        capacity: {type: integer}
+    SlotList:
+      type: object
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/PatientSlot'}}
+    NextAvailableDay:
+      type: object
+      properties:
+        date: {type: string, format: date, nullable: true}
+    FeeBreakdown:
+      type: object
+      properties:
+        model: {type: string, enum: [fullPrepay, bookingFee, tokenFee]}
+        consultationPaise: {type: integer}
+        payNowBasePaise: {type: integer}
+        convenienceFeePaise: {type: integer}
+        gstPaise: {type: integer}
+        totalNowPaise: {type: integer}
+        payAtHospitalPaise: {type: integer}
+        payNowLabel: {type: string}
+    HoldRequest:
+      type: object
+      required: [slotId, patientId]
+      properties:
+        slotId: {type: string}
+        patientId: {type: string, description: "The user id for the account holder, or a family member's id"}
+    Hold:
+      type: object
+      properties:
+        id: {type: string}
+        slot: {$ref: '#/components/schemas/PatientSlot'}
+        patientId: {type: string}
+        expiresAt: {type: string, format: date-time}
+        ttlSeconds: {type: integer, example: 600}
+    PayRequest:
+      type: object
+      required: [method, idempotencyKey]
+      properties:
+        method: {type: string, enum: [upi, card, netbanking, wallet]}
+        idempotencyKey: {type: string, minLength: 8, maxLength: 80, description: A new random value per payment attempt; reuse it only to retry the same attempt}
+        reason: {type: string, maxLength: 300, description: Reason for the visit}
+    PatientAppointment:
+      type: object
+      properties:
+        id: {type: string, example: APT10557}
+        code: {type: string, example: GM-0007MQ}
+        hospitalId: {type: string}
+        doctorId: {type: string}
+        patient: {$ref: '#/components/schemas/FamilyMember'}
+        start: {type: string, format: date-time}
+        end: {type: string, format: date-time}
+        token: {type: integer, description: "Number in the doctor's queue for the day, never reused"}
+        status: {type: string, enum: [confirmed, checkedIn, inConsultation, completed, cancelled, noShow]}
+        fees: {$ref: '#/components/schemas/FeeBreakdown'}
+        payment:
+          type: object
+          nullable: true
+          properties:
+            id: {type: string}
+            gatewayRef: {type: string}
+            amountPaise: {type: integer}
+            method: {type: string, enum: [upi, card, netbanking, wallet]}
+            paidAt: {type: string, format: date-time}
+            status: {type: string, enum: [paid, refunded, partiallyRefunded]}
+        createdAt: {type: string, format: date-time}
+        reason: {type: string, nullable: true}
+        refund:
+          type: object
+          nullable: true
+          properties:
+            amountPaise: {type: integer}
+            status: {type: string, enum: [initiated, completed]}
+            createdAt: {type: string, format: date-time}
+            reason: {type: string}
+        rescheduleCount: {type: integer}
+        queueAhead: {type: integer, nullable: true, description: Patients ahead once the patient is checked in}
+        cancelledAt: {type: string, format: date-time, nullable: true}
+        cancelReason: {type: string, nullable: true}
+        checkedInAt: {type: string, format: date-time, nullable: true}
+    AppointmentView:
+      type: object
+      properties:
+        appointment: {$ref: '#/components/schemas/PatientAppointment'}
+        hospital: {$ref: '#/components/schemas/PatientHospital'}
+        doctor: {$ref: '#/components/schemas/PatientDoctor'}
+    AppointmentViewList:
+      type: object
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/AppointmentView'}}
+    RefundQuote:
+      type: object
+      properties:
+        refundPaise: {type: integer}
+        paidPaise: {type: integer}
+        withinFreeWindow: {type: boolean}
+        note: {type: string}
+    CancelRequest:
+      type: object
+      properties:
+        reason: {type: string, maxLength: 300}
+    RescheduleBlocker:
+      type: object
+      properties:
+        blocker: {type: string, nullable: true}
+    RescheduleRequest:
+      type: object
+      required: [slotId]
+      properties:
+        slotId: {type: string}
+    PatientNotifications:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              id: {type: string}
+              type: {type: string, example: system}
+              eventKey: {type: string, example: APPOINTMENT_CONFIRMED}
+              title: {type: string}
+              body: {type: string}
+              link: {type: string, nullable: true}
+              at: {type: string, format: date-time}
+              unread: {type: boolean}
+        unread: {type: integer}
     DoctorAppointmentStatus:
       type: object
       required: [status]
@@ -973,6 +1328,8 @@ w("    admin routes need the named permission (403 otherwise), portal routes are
 w("    and users only ever see their own support tickets (404 for anyone else's).")
 w("    The access requirement of each operation is given in `x-access`.")
 w("    Super Admin appointments are read-only: there is no cancel / reschedule / edit endpoint.")
+w("    The Patient tag is the API of the Gmedic patient app: it signs in with a one-time code and a bearer token, money is in paise,")
+w("    and every booking, payment and cancellation is written to the same database the portals read.")
 w("servers:")
 w("  - url: http://localhost:3000")
 w("    description: Local development")
@@ -1000,8 +1357,8 @@ for p, ops in paths.items():
         w(f"      summary: \"{summary}\"")
         w(f"      operationId: {op_id(m, p)}")
         w(f"      x-access: \"{access}\"")
-        if access in (PUB, "internal"):
-            w("      security: []" if access == PUB else "      security:\n        - internalKey: []")
+        if access in (PUB, "internal", PAT):
+            w("      security: []" if access == PUB else "      security:\n        - internalKey: []" if access == "internal" else "      security:\n        - patientBearer: []")
         if params_path or query:
             w("      parameters:")
             for n in params_path:
@@ -1031,6 +1388,9 @@ for p, ops in paths.items():
             w("        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}")
         else:
             w("        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}")
+        if tag == "Patient":
+            w("        '4XX': {description: \"Error. The body is { error, code }; code is a stable value such as INVALID_OTP, NOT_SIGNED_IN, NOT_LINKED, QR_INVALID, QR_REVOKED, QR_SUSPENDED, SLOT_UNAVAILABLE, DUPLICATE_BOOKING, HOLD_EXPIRED, PAYMENT_DECLINED, PAYMENT_TIMEOUT, PAYMENT_LATE_REFUNDED, LIMIT_REACHED, POLICY or VALIDATION\", content: {application/json: {schema: {$ref: '#/components/schemas/PatientError'}}}}")
+            continue
         w("        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}")
         if access not in (PUB,) and (m, p) not in EXTRA:
             w("        '401': {description: Not signed in / session ended}")
@@ -1046,6 +1406,7 @@ w("components:")
 w("  securitySchemes:")
 w("    sessionCookie: {type: apiKey, in: cookie, name: gmedic.sid}")
 w("    internalKey: {type: apiKey, in: header, name: x-internal-key, description: Value of the INTERNAL_EVENT_KEY env var}")
+w("    patientBearer: {type: http, scheme: bearer, description: Token returned by POST /api/patient/auth/verify}")
 w("  schemas:" + SCHEMAS.rstrip("\n"))
 for _key, _v in INFERRED.items():
     w(f"    {_v['name']}: {json.dumps(_v['schema'])}")

@@ -18,6 +18,15 @@
   const profileForm = $('#profile-form');
   let saved = G.formValues(profileForm);
 
+  // Refresh the form from GET /api/me, so it shows the account as it is now (e.g. after a change in another tab).
+  api('/api/me').then(({ user }) => {
+    if (profileForm.dataset.touched) return;
+    if (profileForm.elements.name && user.name) profileForm.elements.name.value = user.name;
+    if (profileForm.elements.phone && user.phone) profileForm.elements.phone.value = user.phone;
+    saved = G.formValues(profileForm);
+  }).catch(() => {});
+  profileForm.addEventListener('input', () => { profileForm.dataset.touched = '1'; }, { once: true });
+
   profileForm.addEventListener('reset', (e) => {
     e.preventDefault();
     for (const [k, v] of Object.entries(saved)) if (profileForm.elements[k]) profileForm.elements[k].value = v;

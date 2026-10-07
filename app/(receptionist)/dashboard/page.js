@@ -37,7 +37,7 @@ export default async function DashboardPage() {
       <section className="stats" id="stats" aria-label="Summary">
         {Array.from({ length: 5 }).map((_, i) => (
           <div className="card stat" key={i}>
-            <span className="skeleton" style={{ width: 52, height: 52, borderRadius: 14 }}></span>
+            <span className="skeleton" style={{ width: 52, height: 52, borderRadius: 6 }}></span>
             <div style={{ flex: 1 }}>
               <span className="skeleton skeleton--text" style={{ width: '70%' }}></span>
               <span className="skeleton" style={{ width: '40%', height: 26, marginTop: 10 }}></span>

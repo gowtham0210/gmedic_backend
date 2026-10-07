@@ -9,7 +9,7 @@
   G.esc = (value) => String(value == null ? '' : value).replace(/[&<>"']/g, (c) => ESC[c]);
 
   G.icon = (name, cls = '') =>
-    `<svg class="icon${cls ? ` ${cls}` : ''}" aria-hidden="true" focusable="false"><use href="/images/icons.svg#${name}"></use></svg>`;
+    `<svg class="icon${cls ? ` ${cls}` : ''}" aria-hidden="true" focusable="false"><use href="/images/fa-icons.svg#${name}"></use></svg>`;
 
   G.$ = (sel, root = document) => root.querySelector(sel);
   G.$$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));

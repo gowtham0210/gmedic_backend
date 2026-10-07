@@ -10,16 +10,22 @@
   const root = document.documentElement;
   const desktop = window.matchMedia('(min-width: 1024px)');
   const MIN_W = 220;
-  const MAX_W = 360;
+  const MAX_W = 300;
   const COLLAPSE_BELOW = 160;
   const STORE_KEY = 'gmedic.sidebar';
 
   const readPrefs = () => { try { return JSON.parse(localStorage.getItem(STORE_KEY) || '{}'); } catch (_) { return {}; } };
   const savePrefs = (patch) => { try { localStorage.setItem(STORE_KEY, JSON.stringify({ ...readPrefs(), ...patch })); } catch (_) { /* storage unavailable */ } };
 
+  // Tell assistive tech whether the sidebar is expanded (desktop) / open (drawer).
+  const syncToggles = () => {
+    const expanded = desktop.matches ? !root.classList.contains('sidebar-collapsed') : body.classList.contains('sidebar-open');
+    $$('[data-sidebar-toggle]').forEach((b) => b.setAttribute('aria-expanded', String(expanded)));
+  };
   const setCollapsed = (collapsed) => {
     root.classList.toggle('sidebar-collapsed', collapsed);
     savePrefs({ collapsed });
+    syncToggles();
   };
   const setWidth = (w) => {
     const width = Math.round(Math.min(MAX_W, Math.max(MIN_W, w)));
@@ -27,15 +33,22 @@
     return width;
   };
 
-  const openSidebar = () => { body.classList.add('sidebar-open'); const c = $('.sidebar__close'); if (c) c.focus(); };
-  const closeSidebar = () => body.classList.remove('sidebar-open');
+  // Restore the saved width / collapsed state (the root layout's inline script
+  // already applied it before first paint; this keeps both in sync).
+  const prefs = readPrefs();
+  if (prefs.width) setWidth(prefs.width);
+  root.classList.toggle('sidebar-collapsed', !!prefs.collapsed);
+
+  const openSidebar = () => { body.classList.add('sidebar-open'); syncToggles(); const c = $('.sidebar__close'); if (c) c.focus(); };
+  const closeSidebar = () => { body.classList.remove('sidebar-open'); syncToggles(); };
   $$('[data-sidebar-toggle]').forEach((b) => b.addEventListener('click', () => {
     if (desktop.matches) setCollapsed(!root.classList.contains('sidebar-collapsed'));
     else openSidebar();
   }));
   $$('[data-sidebar-close]').forEach((b) => b.addEventListener('click', closeSidebar));
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSidebar(); });
-  desktop.addEventListener('change', (m) => { if (m.matches) closeSidebar(); });
+  desktop.addEventListener('change', (m) => { if (m.matches) closeSidebar(); syncToggles(); });
+  syncToggles();
 
   const resizer = $('[data-sidebar-resizer]');
   if (resizer) {
@@ -81,6 +94,48 @@
       }
     });
   }
+
+  /* ---------- Collapsed-sidebar tooltips ----------
+     When the desktop sidebar is icon-only, hovering or focusing an item shows its
+     label to the right of the sidebar after a short delay. */
+  const TOOLTIP_DELAY = 400;
+  const tooltip = document.createElement('div');
+  tooltip.className = 'sidebar-tooltip';
+  tooltip.setAttribute('role', 'presentation');
+  tooltip.hidden = true;
+  body.appendChild(tooltip);
+  let tipTimer = null;
+  let tipFor = null;
+  const hideTip = () => {
+    clearTimeout(tipTimer);
+    tipFor = null;
+    tooltip.classList.remove('is-visible');
+    tooltip.hidden = true;
+  };
+  const showTip = (link, delay) => {
+    if (!desktop.matches || !root.classList.contains('sidebar-collapsed')) return;
+    const text = $('.nav__text', link);
+    if (!text || tipFor === link) return;
+    clearTimeout(tipTimer);
+    tipFor = link;
+    tipTimer = setTimeout(() => {
+      const r = link.getBoundingClientRect();
+      const sb = $('.sidebar').getBoundingClientRect();
+      tooltip.textContent = text.textContent.trim();
+      tooltip.style.left = `${sb.right + 10}px`;
+      tooltip.style.top = `${r.top + r.height / 2}px`;
+      tooltip.hidden = false;
+      requestAnimationFrame(() => tooltip.classList.add('is-visible'));
+    }, delay);
+  };
+  const navLinkFrom = (e) => e.target.closest && e.target.closest('.sidebar .nav__link');
+  document.addEventListener('pointerover', (e) => { const l = navLinkFrom(e); if (l) showTip(l, TOOLTIP_DELAY); });
+  document.addEventListener('pointerout', (e) => { const l = navLinkFrom(e); if (l && !l.contains(e.relatedTarget)) hideTip(); });
+  document.addEventListener('focusin', (e) => { const l = navLinkFrom(e); if (l && l.matches(':focus-visible')) showTip(l, 0); else hideTip(); });
+  document.addEventListener('click', hideTip, true);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideTip(); });
+  $('.sidebar') && $('.sidebar').addEventListener('scroll', hideTip, { passive: true });
+  new MutationObserver(() => { if (!root.classList.contains('sidebar-collapsed')) hideTip(); }).observe(root, { attributes: true, attributeFilter: ['class'] });
 
   /* ---------- Dropdowns ---------- */
   const dropdowns = $$('[data-dropdown]');

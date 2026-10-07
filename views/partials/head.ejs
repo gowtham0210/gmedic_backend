@@ -14,7 +14,7 @@
     // Apply the saved sidebar width / collapsed state before first paint.
     try {
       var s = JSON.parse(localStorage.getItem('gmedic.sidebar') || '{}');
-      if (s.width >= 220 && s.width <= 360) document.documentElement.style.setProperty('--sidebar-w-open', s.width + 'px');
+      if (s.width >= 220 && s.width <= 300) document.documentElement.style.setProperty('--sidebar-w-open', s.width + 'px');
       if (s.collapsed) document.documentElement.classList.add('sidebar-collapsed');
     } catch (e) {}
   </script>

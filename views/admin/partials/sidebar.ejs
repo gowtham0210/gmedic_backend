@@ -33,21 +33,19 @@
 
   <nav class="nav">
     <% nav.filter(canSee).forEach((item) => { %>
-      <a href="<%= item.href %>" class="nav__link<%= active === item.key ? ' is-active' : '' %>" title="<%= item.label %>"<%- active === item.key ? ' aria-current="page"' : '' %>>
+      <a href="<%= item.href %>" class="nav__link<%= active === item.key ? ' is-active' : '' %>"<%- active === item.key ? ' aria-current="page"' : '' %>>
         <%- icon(item.icon) %><span class="nav__text"><%= item.label %></span>
       </a>
     <% }) %>
   </nav>
 
-  <p class="sidebar__tagline">Gmedic Platform<br>Super Admin Console</p>
-
   <nav class="nav nav--footer" aria-label="Platform">
     <% footNav.filter(canSee).forEach((item) => { %>
-      <a href="<%= item.href %>" class="nav__link<%= active === item.key ? ' is-active' : '' %>" title="<%= item.label %>"<%- active === item.key ? ' aria-current="page"' : '' %>>
+      <a href="<%= item.href %>" class="nav__link<%= active === item.key ? ' is-active' : '' %>"<%- active === item.key ? ' aria-current="page"' : '' %>>
         <%- icon(item.icon) %><span class="nav__text"><%= item.label %></span>
       </a>
     <% }) %>
-    <button type="button" class="nav__link" title="Logout" data-logout><%- icon('log-out') %><span class="nav__text">Logout</span></button>
+    <button type="button" class="nav__link" data-logout><%- icon('log-out') %><span class="nav__text">Logout</span></button>
   </nav>
 
   <div class="sidebar__resizer" role="separator" aria-orientation="vertical" aria-label="Resize sidebar (arrow keys to resize, Enter to collapse)" tabindex="0" title="Drag to resize · double-click to collapse" data-sidebar-resizer></div>

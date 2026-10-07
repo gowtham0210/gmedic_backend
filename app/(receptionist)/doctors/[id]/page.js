@@ -32,7 +32,7 @@ export default async function DoctorDetailPage({ params }) {
         <div>
           <article className="card">
             <div className="profile-hero" data-doctor-hero>
-              <div className="skeleton" style={{ width: 76, height: 76, borderRadius: 22 }}></div>
+              <div className="skeleton" style={{ width: 76, height: 76, borderRadius: 8 }}></div>
               <div className="profile-hero__main"><div className="skeleton skeleton--text" style={{ width: '50%', height: 20 }}></div><div className="skeleton skeleton--text" style={{ width: '35%', marginTop: 12 }}></div></div>
             </div>
             <div className="kpis" data-doctor-kpis></div>

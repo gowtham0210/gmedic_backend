@@ -1,6 +1,6 @@
 // Helpers available in every EJS view.
 
-const ICON_SPRITE = '/images/icons.svg';
+const ICON_SPRITE = '/images/fa-icons.svg';
 
 function icon(name, className = '') {
   return `<svg class="icon${className ? ` ${className}` : ''}" aria-hidden="true" focusable="false"><use href="${ICON_SPRITE}#${name}"></use></svg>`;

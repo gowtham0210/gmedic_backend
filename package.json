@@ -11,13 +11,17 @@
     "db:setup": "node scripts/db-setup.js",
     "db:verify": "node db/verifyIntegrity.js",
     "legacy:start": "node server.js",
-    "legacy:dev": "node --watch server.js"
+    "legacy:dev": "node --watch server.js",
+    "icons:build": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/build-icon-sprite.mjs"
   },
   "engines": {
     "node": ">=18.18"
   },
   "dependencies": {
     "@fontsource/plus-jakarta-sans": "^5.3.0",
+    "@fortawesome/fontawesome-svg-core": "^7.3.1",
+    "@fortawesome/free-solid-svg-icons": "^7.3.1",
+    "@fortawesome/react-fontawesome": "^3.5.0",
     "chart.js": "^4.5.1",
     "cors": "^2.8.6",
     "dotenv": "^18.0.4",

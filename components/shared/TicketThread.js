@@ -15,7 +15,7 @@ export default function TicketThread({ messages, viewerSide }) {
             <div className="text-muted" style={{ fontSize: 12, marginBottom: 3, textAlign: mine ? 'right' : 'left' }}>
               <strong>{m.senderName}</strong> · {ROLE_LABEL[m.senderRole] || m.senderRole} · <time suppressHydrationWarning>{new Date(m.createdAt).toLocaleString()}</time>
             </div>
-            <div style={{ padding: '10px 14px', borderRadius: 12, background: mine ? 'var(--teal-50)' : 'var(--surface-2)', border: '1px solid var(--border-2)', whiteSpace: 'pre-wrap', fontSize: 14 }}>
+            <div style={{ padding: '10px 14px', borderRadius: 6, background: mine ? 'var(--teal-50)' : 'var(--surface-2)', border: '1px solid var(--border-2)', whiteSpace: 'pre-wrap', fontSize: 14 }}>
               {m.message}
             </div>
           </div>

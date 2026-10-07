@@ -125,7 +125,7 @@ export default async function HospitalPage() {
             <div className="card__head" style={{ justifyContent: 'center' }}>
               <h2 className="card__title"><Icon name="qr-code" />Unique Hospital QR Code</h2>
             </div>
-            <button type="button" className="qr-card__poster" data-open-qr aria-label="View QR poster full size" style={{ display: 'block', width: 'min(340px,100%)', margin: '0 auto', padding: 0, border: '1px solid var(--border)', borderRadius: 14, overflow: 'hidden', background: '#fff', cursor: 'zoom-in' }}>
+            <button type="button" className="qr-card__poster" data-open-qr aria-label="View QR poster full size" style={{ display: 'block', width: 'min(340px,100%)', margin: '0 auto', padding: 0, border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', background: '#fff', cursor: 'zoom-in' }}>
               <img src="/api/hospital/qr-poster.svg" alt={`Gmedic QR poster for ${hospital.name}`} width="1060" height="1500" style={{ width: '100%', height: 'auto' }} />
             </button>
             <p className="qr-card__id">Hospital ID · {hospital.id} · Display this poster at your reception desk.</p>

@@ -39,13 +39,13 @@ function DetailModal({ entry, onClose }) {
           {entry.previousValue && (
             <div style={{ marginTop: 14 }}>
               <strong>Before</strong>
-              <pre className="mono" style={{ background: 'var(--surface-2, #f4f6f8)', padding: 10, borderRadius: 8, overflowX: 'auto', fontSize: 12 }}>{JSON.stringify(entry.previousValue, null, 2)}</pre>
+              <pre className="mono" style={{ background: 'var(--surface-2, #f4f6f8)', padding: 10, borderRadius: 4, overflowX: 'auto', fontSize: 12 }}>{JSON.stringify(entry.previousValue, null, 2)}</pre>
             </div>
           )}
           {entry.newValue && (
             <div style={{ marginTop: 14 }}>
               <strong>After</strong>
-              <pre className="mono" style={{ background: 'var(--surface-2, #f4f6f8)', padding: 10, borderRadius: 8, overflowX: 'auto', fontSize: 12 }}>{JSON.stringify(entry.newValue, null, 2)}</pre>
+              <pre className="mono" style={{ background: 'var(--surface-2, #f4f6f8)', padding: 10, borderRadius: 4, overflowX: 'auto', fontSize: 12 }}>{JSON.stringify(entry.newValue, null, 2)}</pre>
             </div>
           )}
         </div>

@@ -108,7 +108,7 @@ function Drawer({ appointment, onClose, onChanged }) {
           </div>
           <div className="modal__body" style={{ flex: 1 }}>
             <dl className="kv" style={{ marginBottom: 20 }}>
-              <div><dt>Token / mobile</dt><dd className="mono">{maskedMobile}</dd></div>
+              <div><dt>Mobile</dt><dd className="mono">{maskedMobile}</dd></div>
               <div><dt>Date</dt><dd>{a.date}</dd></div>
               <div><dt>Time</dt><dd>{time12(a.time)}</dd></div>
               <div><dt>Hospital</dt><dd>{a.hospitalName}</dd></div>
@@ -176,6 +176,14 @@ function AppointmentsPageInner() {
     cancelled: items.filter((a) => a.status === 'cancelled').length,
   };
 
+  // Open the drawer straight away with the row we have, then refresh it from the detail endpoint.
+  function openDetail(a) {
+    setSelected(a);
+    api(`/api/doctor/appointments/${a.id}`)
+      .then((r) => setSelected((cur) => (cur && cur.id === a.id ? { ...cur, ...r.appointment } : cur)))
+      .catch(() => {});
+  }
+
   function onChanged(updated) {
     setItems((list) => list.map((a) => (a.id === updated.id ? { ...a, ...updated } : a)));
     setSelected((cur) => (cur && cur.id === updated.id ? { ...cur, ...updated } : cur));
@@ -241,7 +249,7 @@ function AppointmentsPageInner() {
                   <td data-label="Fee" className="num fee">{money(a.fee)}</td>
                   <td data-label="Payment"><span className={`badge badge--${a.paymentStatus === 'paid' ? 'confirmed' : 'pending'}`}>{a.paymentStatus}</span></td>
                   <td data-label="Status"><span className={`badge badge--${STATUS_TONE[a.status]}`}>{a.status}</span></td>
-                  <td className="col-actions"><button type="button" className="action-btn" onClick={() => setSelected(a)}><Icon name="eye" />View</button></td>
+                  <td className="col-actions"><button type="button" className="action-btn" onClick={() => openDetail(a)}><Icon name="eye" />View</button></td>
                 </tr>
               ))}
             </tbody>

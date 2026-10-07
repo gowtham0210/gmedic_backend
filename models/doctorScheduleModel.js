@@ -12,6 +12,7 @@ function fromRow(row) {
     startTime: row.start_time,
     endTime: row.end_time,
     slotMinutes: row.slot_minutes,
+    capacityPerSlot: row.capacity_per_slot,
   };
 }
 
@@ -24,14 +25,14 @@ function overlaps(aStart, aEnd, bStart, bEnd) {
   return aStart < bEnd && bStart < aEnd;
 }
 
-async function create(doctorId, { dayOfWeek, startTime, endTime, slotMinutes }) {
+async function create(doctorId, { dayOfWeek, startTime, endTime, slotMinutes, capacityPerSlot }) {
   const existing = await db.query('SELECT * FROM doctor_schedules WHERE doctor_id = ? AND day_of_week = ?', [doctorId, dayOfWeek]);
   if (existing.some((row) => overlaps(startTime, endTime, row.start_time, row.end_time))) {
     return { error: 'This time block overlaps with an existing one on that day.' };
   }
   const result = await db.query(
-    'INSERT INTO doctor_schedules (doctor_id, day_of_week, start_time, end_time, slot_minutes) VALUES (?, ?, ?, ?, ?)',
-    [doctorId, dayOfWeek, startTime, endTime, slotMinutes || 15]
+    'INSERT INTO doctor_schedules (doctor_id, day_of_week, start_time, end_time, slot_minutes, capacity_per_slot) VALUES (?, ?, ?, ?, ?, ?)',
+    [doctorId, dayOfWeek, startTime, endTime, slotMinutes || 15, capacityPerSlot || 1]
   );
   return { id: result.insertId };
 }

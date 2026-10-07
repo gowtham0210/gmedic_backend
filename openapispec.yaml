@@ -577,6 +577,37 @@ paths:
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
         '404': {description: Not found}
+  /api/admin/qr/{id}/qr.png:
+    get:
+      tags: ["Admin: QR"]
+      summary: "QR code image (PNG) for an ACTIVE code; 400 if revoked"
+      operationId: getApiAdminQrIdQrPng
+      x-access: "qr.view"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+        - {name: size, in: query, schema: {type: integer}}
+        - {name: download, in: query, schema: {type: string, enum: [1]}}
+      responses:
+        '200': {description: OK, content: {image/png: {schema: {type: string, format: binary}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/admin/qr/{id}/poster.svg:
+    get:
+      tags: ["Admin: QR"]
+      summary: "Skip the Queue poster (SVG) encoding this code's link; 400 if revoked"
+      operationId: getApiAdminQrIdPosterSvg
+      x-access: "qr.view"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+        - {name: download, in: query, schema: {type: string, enum: [1]}}
+      responses:
+        '200': {description: OK, content: {image/svg+xml: {schema: {type: string, format: binary}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
   /api/admin/appointments:
     get:
       tags: ["Admin: Appointments"]

@@ -159,9 +159,11 @@ function appStoreBadge(x, y) {
 }
 
 // ---- Poster ------------------------------------------------------------------
-async function buildPosterSvg(hospital) {
+// `link` defaults to the hospital's current active QR link; pass a specific QR
+// code's link to build the poster for that code (Super Admin QR Management).
+async function buildPosterSvg(hospital, link) {
   const { fontFaces, logo, logoRatio } = loadAssets();
-  const qr = qrPath(await hospitalModel.qrPayload(hospital));
+  const qr = qrPath(link || (await hospitalModel.qrPayload(hospital)));
   const name = hospital.name;
 
   // Keep the "Scan to add <name>" line inside the poster for long names.

@@ -1,9 +1,14 @@
 const crypto = require('crypto');
+const QRCode = require('qrcode');
 const db = require('../../db');
 const config = require('../../config');
 const { validate } = require('../../utils/validate');
 const { badRequest, notFound } = require('../../utils/http');
 const auditLog = require('../../services/auditLog');
+const hospitalModel = require('../../models/hospitalModel');
+const { buildPosterSvg } = require('../../services/qrPoster');
+
+const QR_COLORS = { dark: '#0F263D', light: '#FFFFFF' };
 
 function fromRow(row) {
   return {
@@ -72,6 +77,37 @@ exports.reissue = async (req, res) => {
   await db.query("UPDATE qr_codes SET status='REVOKED', revoked_reason='Reissued', revoked_at=CURRENT_TIMESTAMP, revoked_by=?, replaced_by=? WHERE id=?", [req.user.id, newId, req.params.id]);
   await auditLog.record({ req, action: 'QR_REISSUED', entityType: 'QR_CODE', entityId: newId, summary: `Reissued QR for hospital ${qr.hospital_id} (replaces ${req.params.id})` });
   res.status(201).json({ ok: true, message: 'A new QR code was issued; the old one is revoked.', id: newId });
+};
+
+// Loads an ACTIVE QR code for download. Revoked codes no longer resolve in the
+// patient app, so printing one would only produce a dead poster.
+async function loadActive(id) {
+  const row = await db.one('SELECT q.*, h.name AS hospital_name FROM qr_codes q JOIN hospitals h ON h.id = q.hospital_id WHERE q.id = ?', [id]);
+  if (!row) throw notFound('QR code not found.');
+  if (row.status !== 'ACTIVE') throw badRequest('This QR code is revoked and can no longer be downloaded.');
+  return fromRow(row);
+}
+
+const fileSlug = (qr) => `gmedic-qr-${qr.id.toLowerCase()}-${`${qr.hospitalName}-${qr.deskLabel}`.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
+
+exports.png = async (req, res) => {
+  const qr = await loadActive(req.params.id);
+  const size = Math.min(Math.max(Number(req.query.size) || 1024, 256), 2048);
+  const buffer = await QRCode.toBuffer(qr.link, { type: 'png', errorCorrectionLevel: 'H', margin: 2, width: size, color: QR_COLORS });
+  res.type('image/png').set('Cache-Control', 'no-store');
+  if (req.query.download === '1') res.attachment(`${fileSlug(qr)}.png`);
+  res.send(buffer);
+};
+
+// The branded "Skip the Queue" poster, encoding this specific QR code's link.
+exports.poster = async (req, res) => {
+  const qr = await loadActive(req.params.id);
+  const hospital = await hospitalModel.findById(qr.hospitalId);
+  if (!hospital) throw notFound('Hospital not found.');
+  const svg = await buildPosterSvg(hospital, qr.link);
+  res.type('image/svg+xml').set('Cache-Control', 'no-store');
+  if (req.query.download === '1') res.attachment(`${fileSlug(qr)}-poster.svg`);
+  res.send(svg);
 };
 
 exports.analytics = async (req, res) => {

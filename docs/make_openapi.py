@@ -42,6 +42,8 @@ E = [
  ("get", "/api/admin/qr/analytics", "Admin: QR", "QR scan analytics", "qr.view", None, []),
  ("post", "/api/admin/qr/{id}/revoke", "Admin: QR", "Revoke QR code", "qr.manage", "Reason", []),
  ("post", "/api/admin/qr/{id}/reissue", "Admin: QR", "Reissue QR code", "qr.manage", None, []),
+ ("get", "/api/admin/qr/{id}/qr.png", "Admin: QR", "QR code image (PNG) for an ACTIVE code; 400 if revoked", "qr.view", None, []),
+ ("get", "/api/admin/qr/{id}/poster.svg", "Admin: QR", "Skip the Queue poster (SVG) encoding this code's link; 400 if revoked", "qr.view", None, []),
  ("get", "/api/admin/appointments", "Admin: Appointments", "List appointments (READ-ONLY)", "appointments.view", None, ["q", "hospitalId", "doctorId", "status", "paymentStatus", "from", "to"] + Q_PAGE),
  ("get", "/api/admin/appointments/{id}", "Admin: Appointments", "Appointment detail (READ-ONLY)", "appointments.view", None, []),
  ("get", "/api/admin/patients/search", "Admin: Patients", "Search patients", "patients.view", None, ["q"]),
@@ -287,6 +289,8 @@ PARAMS.update({
     ("get", "/api/payments"): ["q", "date", "from", "to", "doctorId", "paymentStatus", "page", "pageSize"],
     ("get", "/api/hospital/qr.png"): ["size", "download"],
     ("get", "/api/hospital/qr-poster.svg"): ["download"],
+    ("get", "/api/admin/qr/{id}/qr.png"): ["size", "download"],
+    ("get", "/api/admin/qr/{id}/poster.svg"): ["download"],
     ("get", "/api/support"): ["status", "q"],
 })
 QENUM.update({
@@ -298,6 +302,8 @@ QENUM.update({
     ("/api/tokens", "status"): ["waiting", "called", "in_consultation", "completed", "cancelled", "skipped"],
     ("/api/hospital/qr.png", "download"): ["1"],
     ("/api/hospital/qr-poster.svg", "download"): ["1"],
+    ("/api/admin/qr/{id}/qr.png", "download"): ["1"],
+    ("/api/admin/qr/{id}/poster.svg", "download"): ["1"],
     ("/api/support", "status"): ["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"],
 })
 

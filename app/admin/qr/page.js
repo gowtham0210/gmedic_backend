@@ -119,6 +119,108 @@ function RevokeModal({ target, onClose, onDone }) {
   );
 }
 
+const POSTER_W = 1060;
+const POSTER_H = 1500;
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Could not load the QR poster.'));
+    img.src = src;
+  });
+}
+
+function saveBlob(blob, filename) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+
+// Preview + download for one QR code: the branded poster (rasterised to a
+// 2120×3000 PNG in the browser, same as the Receptionist portal) or the bare QR.
+function DownloadModal({ target, onClose }) {
+  const [busy, setBusy] = useState('');
+  if (!target) return null;
+  const base = `/api/admin/qr/${encodeURIComponent(target.id)}`;
+  const slug = `gmedic-qr-${target.id.toLowerCase()}-${`${target.hospitalName}-${target.deskLabel}`.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
+
+  async function fetchOk(url) {
+    const res = await fetch(url, { credentials: 'same-origin' });
+    if (res.status === 401) { window.location.href = '/login?expired=1&role=SUPER_ADMIN'; throw new Error('Session expired'); }
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Could not generate the QR code.');
+    return res;
+  }
+
+  async function downloadPoster() {
+    setBusy('poster');
+    let svgUrl;
+    try {
+      const res = await fetchOk(`${base}/poster.svg`);
+      svgUrl = URL.createObjectURL(new Blob([await res.text()], { type: 'image/svg+xml' }));
+      const img = await loadImage(svgUrl);
+      await new Promise((r) => setTimeout(r, 120)); // let embedded fonts settle
+      const scale = 2;
+      const canvas = document.createElement('canvas');
+      canvas.width = POSTER_W * scale;
+      canvas.height = POSTER_H * scale;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+      if (!blob) throw new Error('Could not create the PNG file.');
+      saveBlob(blob, `${slug}-poster.png`);
+      toast('QR poster downloaded.', 'success');
+    } catch (err) {
+      toast(err.message, 'error');
+    } finally {
+      if (svgUrl) URL.revokeObjectURL(svgUrl);
+      setBusy('');
+    }
+  }
+
+  async function downloadQr() {
+    setBusy('qr');
+    try {
+      const res = await fetchOk(`${base}/qr.png?size=2048`);
+      saveBlob(await res.blob(), `${slug}.png`);
+      toast('QR code downloaded.', 'success');
+    } catch (err) {
+      toast(err.message, 'error');
+    } finally {
+      setBusy('');
+    }
+  }
+
+  return (
+    <div className="modal" role="dialog" aria-modal="true" aria-labelledby="qr-download-title">
+      <div className="modal__backdrop" onClick={onClose}></div>
+      <div className="modal__panel modal__panel--poster">
+        <div className="modal__head">
+          <div className="modal__icon tone-teal"><Icon name="qr-code" /></div>
+          <div><h2 id="qr-download-title">Download QR · {target.deskLabel}</h2><p>{target.hospitalName} · <span className="mono">{target.id}</span></p></div>
+          <button type="button" className="icon-btn" onClick={onClose} aria-label="Close"><Icon name="x" /></button>
+        </div>
+        <div className="modal__body">
+          <div className="qr-download__preview">
+            <img src={`${base}/poster.svg`} alt={`Skip the Queue poster for ${target.hospitalName}, ${target.deskLabel}`} />
+          </div>
+          <p className="qr-download__link">Opens <span className="mono">{target.link}</span></p>
+        </div>
+        <div className="modal__foot">
+          <button type="button" className={`btn btn--ghost${busy === 'qr' ? ' is-loading' : ''}`} disabled={!!busy} onClick={downloadQr}><Icon name="qr-code" /><span>QR only (PNG)</span></button>
+          <button type="button" className={`btn btn--primary${busy === 'poster' ? ' is-loading' : ''}`} disabled={!!busy} onClick={downloadPoster}><Icon name="download" /><span>Download poster</span></button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function QrPage() {
   const [items, setItems] = useState([]);
   const [hospitals, setHospitals] = useState([]);
@@ -129,6 +231,7 @@ export default function QrPage() {
   const [q, setQ] = useState('');
   const [showGenerate, setShowGenerate] = useState(false);
   const [revokeTarget, setRevokeTarget] = useState(null);
+  const [downloadTarget, setDownloadTarget] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -232,6 +335,7 @@ export default function QrPage() {
                   <td data-label="Status"><span className={`badge badge--${qr.status === 'ACTIVE' ? 'confirmed' : 'cancelled'}`}>{qr.status}</span></td>
                   <td className="col-actions">
                     <div className="action-group">
+                      {qr.status === 'ACTIVE' && <button type="button" className="action-btn" onClick={() => setDownloadTarget(qr)}><Icon name="download" />Download</button>}
                       {qr.status === 'ACTIVE' && <button type="button" className="action-btn" onClick={() => setRevokeTarget(qr)}><Icon name="alert" />Revoke</button>}
                       {qr.status === 'ACTIVE' && <button type="button" className="action-btn" onClick={() => reissue(qr)}><Icon name="refresh" />Reissue</button>}
                     </div>
@@ -246,6 +350,7 @@ export default function QrPage() {
 
       <GenerateModal open={showGenerate} hospitals={hospitals} onClose={() => setShowGenerate(false)} onCreated={load} />
       <RevokeModal target={revokeTarget} onClose={() => setRevokeTarget(null)} onDone={load} />
+      <DownloadModal target={downloadTarget} onClose={() => setDownloadTarget(null)} />
     </>
   );
 }

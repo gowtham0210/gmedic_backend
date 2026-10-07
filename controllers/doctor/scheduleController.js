@@ -9,7 +9,7 @@ exports.list = async (req, res) => {
 };
 
 exports.create = async (req, res) => {
-  const { dayOfWeek, startTime, endTime, slotMinutes } = req.body || {};
+  const { dayOfWeek, startTime, endTime, slotMinutes, capacityPerSlot } = req.body || {};
   const day = Number(dayOfWeek);
   if (!Number.isInteger(day) || day < 0 || day > 6) throw badRequest('Choose a valid day.', { dayOfWeek: 'Choose a day.' });
   if (!TIME_RE.test(startTime) || !TIME_RE.test(endTime)) throw badRequest('Enter valid start and end times.');
@@ -17,9 +17,12 @@ exports.create = async (req, res) => {
   const minutes = Number(slotMinutes) || 15;
   if (minutes < 5 || minutes > 120) throw badRequest('Appointment duration must be between 5 and 120 minutes.');
 
-  const result = await scheduleModel.create(req.doctorId, { dayOfWeek: day, startTime, endTime, slotMinutes: minutes });
+  const capacity = capacityPerSlot === undefined || capacityPerSlot === '' ? 1 : Number(capacityPerSlot);
+  if (!Number.isInteger(capacity) || capacity < 1 || capacity > 50) throw badRequest('Patients per slot must be a whole number between 1 and 50.', { capacityPerSlot: 'Enter 1 to 50.' });
+
+  const result = await scheduleModel.create(req.doctorId, { dayOfWeek: day, startTime, endTime, slotMinutes: minutes, capacityPerSlot: capacity });
   if (result.error) throw badRequest(result.error);
-  res.status(201).json({ ok: true, message: 'Working hours added.', id: result.id });
+  res.json({ ok: true, message: 'Working hours added.', id: result.id });
 };
 
 exports.remove = async (req, res) => {

@@ -46,7 +46,7 @@ exports.create = async (req, res) => {
     support_ticket_id: ticket.ticketNumber, ticket_subject: ticket.subject, raised_by: req.user.name,
     raised_by_role: ticket.createdByRole === 'DOCTOR' ? 'Doctor' : 'Receptionist',
   }, { link: '/admin/support' });
-  res.status(201).json({ ok: true, message: `Ticket ${ticket.ticketNumber} submitted.`, ticket });
+  res.json({ ok: true, message: `Ticket ${ticket.ticketNumber} submitted.`, ticket });
 };
 
 exports.get = async (req, res) => {
@@ -67,5 +67,5 @@ exports.reply = async (req, res) => {
   await notifications.trigger('SUPPORT_TICKET_UPDATED', recipients, {
     support_ticket_id: ticket.ticketNumber, ticket_subject: ticket.subject, ticket_status: ticket.status === 'RESOLVED' ? 'Open' : ticket.status.replace('_', ' ').toLowerCase().replace(/^./, (c) => c.toUpperCase()), update_summary: `${req.user.name} replied`,
   }, { link: '/admin/support' });
-  res.status(201).json({ ok: true, message: 'Reply sent.', messages: await support.messages(ticket.id) });
+  res.json({ ok: true, message: 'Reply sent.', messages: await support.messages(ticket.id) });
 };

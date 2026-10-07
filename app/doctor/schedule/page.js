@@ -26,7 +26,7 @@ const time12 = (hhmm) => {
 };
 
 function AddModal({ open, onClose, onCreated }) {
-  const [form, setForm] = useState({ dayOfWeek: '1', startTime: '09:00', endTime: '13:00', slotMinutes: '15' });
+  const [form, setForm] = useState({ dayOfWeek: '1', startTime: '09:00', endTime: '13:00', slotMinutes: '15', capacityPerSlot: '1' });
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
   if (!open) return null;
@@ -37,7 +37,7 @@ function AddModal({ open, onClose, onCreated }) {
     setSaving(true);
     setErrors({});
     try {
-      const res = await api('/api/doctor/schedule', { method: 'POST', body: { ...form, dayOfWeek: Number(form.dayOfWeek), slotMinutes: Number(form.slotMinutes) } });
+      const res = await api('/api/doctor/schedule', { method: 'POST', body: { ...form, dayOfWeek: Number(form.dayOfWeek), slotMinutes: Number(form.slotMinutes), capacityPerSlot: Number(form.capacityPerSlot) } });
       toast(res.message, 'success');
       onCreated();
       onClose();
@@ -75,6 +75,11 @@ function AddModal({ open, onClose, onCreated }) {
                   {[10, 15, 20, 30, 45, 60].map((m) => <option key={m} value={m}>{m} minutes</option>)}
                 </select>
               </div>
+              <div className={`field field--full${errors.capacityPerSlot ? ' has-error' : ''}`}>
+                <label>Patients per slot</label>
+                <input className="input" type="number" min="1" max="50" value={form.capacityPerSlot} onChange={set('capacityPerSlot')} required />
+                {errors.capacityPerSlot && <p className="field__error">{errors.capacityPerSlot}</p>}
+              </div>
             </div>
             <p className="text-muted" style={{ fontSize: 12.5, marginTop: 10 }}>Tip: for a lunch break, add two separate blocks for the same day (e.g. 09:00–13:00 and 16:00–19:00).</p>
           </div>
@@ -85,6 +90,62 @@ function AddModal({ open, onClose, onCreated }) {
         </form>
       </div>
     </div>
+  );
+}
+
+function LeavesCard() {
+  const [items, setItems] = useState([]);
+  const [form, setForm] = useState({ startDate: '', endDate: '', reason: '' });
+  const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(async () => {
+    try { setItems((await api('/api/doctor/leaves')).items); } catch (err) { toast(err.message, 'error'); }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  async function add(e) {
+    e.preventDefault();
+    setSaving(true);
+    setErrors({});
+    try {
+      const res = await api('/api/doctor/leaves', { method: 'POST', body: form });
+      toast(res.message, 'success');
+      setForm({ startDate: '', endDate: '', reason: '' });
+      load();
+    } catch (err) {
+      setErrors(err.fields || {});
+      if (!err.fields) toast(err.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function remove(id) {
+    try { toast((await api(`/api/doctor/leaves/${id}`, { method: 'DELETE' })).message, 'success'); load(); } catch (err) { toast(err.message, 'error'); }
+  }
+
+  return (
+    <article className="card" style={{ marginTop: 24 }}>
+      <div className="card__head"><h2 className="card__title"><Icon name="calendar-x" />My Leaves</h2></div>
+      <form onSubmit={add} className="action-group" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: 12 }}>
+        <div className={`field${errors.startDate ? ' has-error' : ''}`}><label>From</label><input className="input" type="date" value={form.startDate} onChange={set('startDate')} required />{errors.startDate && <p className="field__error">{errors.startDate}</p>}</div>
+        <div className={`field${errors.endDate ? ' has-error' : ''}`}><label>To</label><input className="input" type="date" value={form.endDate} onChange={set('endDate')} required />{errors.endDate && <p className="field__error">{errors.endDate}</p>}</div>
+        <div className={`field${errors.reason ? ' has-error' : ''}`}><label>Reason (optional)</label><input className="input" type="text" maxLength={200} value={form.reason} onChange={set('reason')} />{errors.reason && <p className="field__error">{errors.reason}</p>}</div>
+        <button type="submit" className={`btn btn--primary${saving ? ' is-loading' : ''}`} disabled={saving}><Icon name="plus" /><span>Add Leave</span></button>
+      </form>
+      <div className="action-group" style={{ flexWrap: 'wrap', marginTop: 12 }}>
+        {items.length === 0 && <span className="text-muted">No leaves added.</span>}
+        {items.map((l) => (
+          <span key={l.id} className="chip" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            {l.startDate} → {l.endDate}{l.reason && <span className="text-muted">({l.reason})</span>}
+            <button type="button" className="icon-btn icon-btn--sm" aria-label="Remove leave" onClick={() => remove(l.id)}><Icon name="x" /></button>
+          </span>
+        ))}
+      </div>
+    </article>
   );
 }
 
@@ -140,7 +201,7 @@ export default function SchedulePage() {
                 <div className="action-group" style={{ flexWrap: 'wrap' }}>
                   {d.blocks.map((b) => (
                     <span key={b.id} className="chip" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                      {time12(b.startTime)} – {time12(b.endTime)} <span className="text-muted">({b.slotMinutes} min slots)</span>
+                      {time12(b.startTime)} – {time12(b.endTime)} <span className="text-muted">({b.slotMinutes} min slots · {b.capacityPerSlot} per slot)</span>
                       <button type="button" className="icon-btn icon-btn--sm" aria-label="Remove" onClick={() => remove(b.id)}><Icon name="x" /></button>
                     </span>
                   ))}
@@ -150,6 +211,8 @@ export default function SchedulePage() {
           ))}
         </div>
       )}
+
+      <LeavesCard />
 
       <AddModal open={showAdd} onClose={() => setShowAdd(false)} onCreated={load} />
     </>

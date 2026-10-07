@@ -10,6 +10,7 @@ const NAV = [
   { href: '/doctor/queue', label: "Today's Queue", icon: 'activity' },
   { href: '/doctor/patients', label: 'Patients', icon: 'users' },
   { href: '/doctor/schedule', label: 'Schedule', icon: 'clock' },
+  { href: '/doctor/earnings', label: 'Earnings', icon: 'rupee' },
   { href: '/doctor/availability', label: 'Availability', icon: 'toggle-left' },
   { href: '/doctor/profile', label: 'My Profile', icon: 'user' },
   { href: '/doctor/notifications', label: 'Notifications', icon: 'bell' },

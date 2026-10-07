@@ -46,8 +46,11 @@ paths:
           application/json:
             schema: {$ref: '#/components/schemas/LoginRequest'}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/LoginResponse'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Incorrect email/username or password}
+        '403': {description: Account is not active}
+        '429': {description: Too many failed attempts - wait a few minutes}
   /api/auth/logout:
     post:
       tags: ["Auth"]
@@ -56,7 +59,7 @@ paths:
       x-access: "public"
       security: []
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/LogoutResponse'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
   /api/auth/forgot-password:
     post:
@@ -87,84 +90,82 @@ paths:
           application/json:
             schema: {$ref: '#/components/schemas/InternalEventRequest'}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/InternalEventResult'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
-        '401': {description: Not signed in / session ended}
+        '401': {description: Missing or wrong x-internal-key}
+        '404': {description: Unknown appointment}
+        '503': {description: INTERNAL_EVENT_KEY is not configured}
   /api/admin/dashboard:
     get:
       tags: ["Admin: Dashboard"]
-      summary: "Dashboard summary"
+      summary: "Operational dashboard: KPI cards, 14-day booking and revenue trends, QR funnel, hospital growth, recent activity and pending work"
       operationId: getApiAdminDashboard
-      x-access: "any admin"
+      x-access: "dashboard.view"
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/DashboardSummary'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
   /api/admin/analytics:
     get:
       tags: ["Admin: Dashboard"]
-      summary: "Analytics summary"
+      summary: "Same payload as the dashboard, behind the separate analytics.view permission (so Finance can see trends without the full dashboard). Takes no filters: always platform-wide, last 14 days for trends and 30 days for rates and the QR funnel"
       operationId: getApiAdminAnalytics
       x-access: "analytics.view"
-      parameters:
-        - {name: from, in: query, schema: {type: string}}
-        - {name: to, in: query, schema: {type: string}}
-        - {name: hospitalId, in: query, schema: {type: string}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/DashboardSummary'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
   /api/admin/hospitals:
     get:
       tags: ["Admin: Hospitals"]
-      summary: "List hospitals"
+      summary: "List hospitals with doctor counts and a status summary"
       operationId: getApiAdminHospitals
       x-access: "hospitals.view"
       parameters:
-        - {name: status, in: query, schema: {type: string}}
-        - {name: kycStatus, in: query, schema: {type: string}}
+        - {name: status, in: query, schema: {type: string, enum: [ONBOARDING, ACTIVE, SUSPENDED, OFFBOARDED]}}
+        - {name: kycStatus, in: query, schema: {type: string, enum: [PENDING, UNDER_REVIEW, VERIFIED, REJECTED]}}
         - {name: q, in: query, schema: {type: string}}
-        - {name: page, in: query, schema: {type: string}}
-        - {name: pageSize, in: query, schema: {type: string}}
+        - {name: page, in: query, schema: {type: integer}}
+        - {name: pageSize, in: query, schema: {type: integer}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/HospitalList'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
     post:
       tags: ["Admin: Hospitals"]
-      summary: "Onboard a hospital"
+      summary: "Onboard a hospital (starts ONBOARDING / KYC PENDING and gets a Main Reception QR code)"
       operationId: postApiAdminHospitals
       x-access: "hospitals.manage"
       requestBody:
         required: true
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/Object'}
+            schema: {$ref: '#/components/schemas/HospitalCreate'}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/HospitalResult'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
   /api/admin/hospitals/{id}:
     get:
       tags: ["Admin: Hospitals"]
-      summary: "Hospital detail"
+      summary: "Hospital detail with branch, doctor, receptionist and appointment counts"
       operationId: getApiAdminHospitalsId
       x-access: "hospitals.view"
       parameters:
         - {name: id, in: path, required: true, schema: {type: string}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/HospitalDetail'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
         '404': {description: Not found}
     put:
       tags: ["Admin: Hospitals"]
-      summary: "Update hospital"
+      summary: "Update hospital details (send only the fields to change)"
       operationId: putApiAdminHospitalsId
       x-access: "hospitals.manage"
       parameters:
@@ -173,9 +174,9 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/Object'}
+            schema: {$ref: '#/components/schemas/HospitalUpdate'}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/HospitalResult'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -183,7 +184,7 @@ paths:
   /api/admin/hospitals/{id}/status:
     patch:
       tags: ["Admin: Hospitals"]
-      summary: "Activate / suspend a hospital"
+      summary: "Change status; a reason is required for SUSPENDED and OFFBOARDED. Data is never deleted"
       operationId: patchApiAdminHospitalsIdStatus
       x-access: "hospitals.manage"
       parameters:
@@ -192,9 +193,9 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/StatusChange'}
+            schema: {$ref: '#/components/schemas/HospitalStatus'}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/HospitalResult'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -202,7 +203,7 @@ paths:
   /api/admin/hospitals/{id}/fees:
     put:
       tags: ["Admin: Hospitals"]
-      summary: "Set booking model, fees and COMMISSION (type + value)"
+      summary: "Set booking model, fees and COMMISSION (type + value). Every change is recorded in the rate history"
       operationId: putApiAdminHospitalsIdFees
       x-access: "hospitals.manage"
       parameters:
@@ -213,7 +214,21 @@ paths:
           application/json:
             schema: {$ref: '#/components/schemas/FeeCommission'}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/HospitalResult'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+  /api/admin/hospitals/{id}/rates:
+    get:
+      tags: ["Admin: Hospitals"]
+      summary: "Fee and commission history, newest first"
+      operationId: getApiAdminHospitalsIdRates
+      x-access: "hospitals.view"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/RateHistory'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -221,7 +236,7 @@ paths:
   /api/admin/hospitals/{id}/kyc:
     patch:
       tags: ["Admin: Hospitals"]
-      summary: "Set KYC status"
+      summary: "Set the hospital's KYC status"
       operationId: patchApiAdminHospitalsIdKyc
       x-access: "kyc.manage"
       parameters:
@@ -230,9 +245,9 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/StatusChange'}
+            schema: {$ref: '#/components/schemas/KycStatus'}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/HospitalResult'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -246,15 +261,47 @@ paths:
       parameters:
         - {name: id, in: path, required: true, schema: {type: string}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/DocumentList'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
+    post:
+      tags: ["Admin: Hospitals"]
+      summary: "Upload a KYC document (multipart; PDF, PNG or JPEG up to 8 MB). Moves KYC from PENDING to UNDER_REVIEW"
+      operationId: postApiAdminHospitalsIdDocuments
+      x-access: "kyc.manage"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: {$ref: '#/components/schemas/DocumentUpload'}
+      responses:
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
         '404': {description: Not found}
   /api/admin/hospitals/{id}/documents/{docId}:
+    get:
+      tags: ["Admin: Hospitals"]
+      summary: "Download / view the stored document file"
+      operationId: getApiAdminHospitalsIdDocumentsDocid
+      x-access: "kyc.view"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+        - {name: docId, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: The stored file, content: {application/pdf: {schema: {type: string, format: binary}}, image/png: {schema: {type: string, format: binary}}, image/jpeg: {schema: {type: string, format: binary}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Not found}
     patch:
       tags: ["Admin: Hospitals"]
-      summary: "Approve / reject a KYC document"
+      summary: "Verify or reject a document (rejection needs a reason)"
       operationId: patchApiAdminHospitalsIdDocumentsDocid
       x-access: "kyc.manage"
       parameters:
@@ -264,7 +311,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/StatusChange'}
+            schema: {$ref: '#/components/schemas/DocumentReview'}
       responses:
         '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
@@ -280,14 +327,14 @@ paths:
       parameters:
         - {name: id, in: path, required: true, schema: {type: string}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/BranchList'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
         '404': {description: Not found}
     post:
       tags: ["Admin: Hospitals"]
-      summary: "Create branch"
+      summary: "Add a branch"
       operationId: postApiAdminHospitalsIdBranches
       x-access: "branches.manage"
       parameters:
@@ -296,9 +343,9 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/Object'}
+            schema: {$ref: '#/components/schemas/BranchCreate'}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -306,7 +353,7 @@ paths:
   /api/admin/branches/{id}:
     patch:
       tags: ["Admin: Hospitals"]
-      summary: "Update branch"
+      summary: "Activate or deactivate a branch"
       operationId: patchApiAdminBranchesId
       x-access: "branches.manage"
       parameters:
@@ -315,7 +362,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/Object'}
+            schema: {$ref: '#/components/schemas/BranchUpdate'}
       responses:
         '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
@@ -330,12 +377,13 @@ paths:
       x-access: "doctors.view"
       parameters:
         - {name: hospitalId, in: query, schema: {type: string}}
-        - {name: verificationStatus, in: query, schema: {type: string}}
+        - {name: specialization, in: query, schema: {type: string}}
+        - {name: verificationStatus, in: query, schema: {type: string, enum: [PENDING, VERIFIED, REJECTED]}}
         - {name: q, in: query, schema: {type: string}}
-        - {name: page, in: query, schema: {type: string}}
-        - {name: pageSize, in: query, schema: {type: string}}
+        - {name: page, in: query, schema: {type: integer}}
+        - {name: pageSize, in: query, schema: {type: integer}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/DoctorList'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -348,7 +396,7 @@ paths:
       parameters:
         - {name: id, in: path, required: true, schema: {type: string}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/DoctorDetail'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -364,9 +412,9 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/Object'}
+            schema: {$ref: '#/components/schemas/DoctorUpdate'}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/DoctorResult'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -383,9 +431,9 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/StatusChange'}
+            schema: {$ref: '#/components/schemas/DoctorVerification'}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/DoctorResult'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -398,11 +446,12 @@ paths:
       x-access: "receptionists.view"
       parameters:
         - {name: hospitalId, in: query, schema: {type: string}}
+        - {name: status, in: query, schema: {type: string, enum: [ACTIVE, INACTIVE, PENDING_APPROVAL, REJECTED]}}
         - {name: q, in: query, schema: {type: string}}
-        - {name: page, in: query, schema: {type: string}}
-        - {name: pageSize, in: query, schema: {type: string}}
+        - {name: page, in: query, schema: {type: integer}}
+        - {name: pageSize, in: query, schema: {type: integer}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/ReceptionistList'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -415,9 +464,9 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/Object'}
+            schema: {$ref: '#/components/schemas/ReceptionistCreate'}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/ReceptionistCreated'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -433,7 +482,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/StatusChange'}
+            schema: {$ref: '#/components/schemas/ActiveStatus'}
       responses:
         '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
@@ -449,7 +498,7 @@ paths:
       parameters:
         - {name: id, in: path, required: true, schema: {type: string}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/TempPassword'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -462,11 +511,10 @@ paths:
       x-access: "qr.view"
       parameters:
         - {name: hospitalId, in: query, schema: {type: string}}
-        - {name: status, in: query, schema: {type: string}}
-        - {name: page, in: query, schema: {type: string}}
-        - {name: pageSize, in: query, schema: {type: string}}
+        - {name: status, in: query, schema: {type: string, enum: [ACTIVE, REVOKED]}}
+        - {name: q, in: query, schema: {type: string}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/QrList'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -479,9 +527,9 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/Object'}
+            schema: {$ref: '#/components/schemas/QrCreate'}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -492,7 +540,7 @@ paths:
       operationId: getApiAdminQrAnalytics
       x-access: "qr.view"
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/QrAnalytics'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -508,7 +556,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/Reason'}
+            schema: {$ref: '#/components/schemas/QrRevoke'}
       responses:
         '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
@@ -524,7 +572,7 @@ paths:
       parameters:
         - {name: id, in: path, required: true, schema: {type: string}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -536,17 +584,19 @@ paths:
       operationId: getApiAdminAppointments
       x-access: "appointments.view"
       parameters:
-        - {name: q, in: query, schema: {type: string}}
+        - {name: id, in: query, schema: {type: string}}
+        - {name: mobile, in: query, schema: {type: string}}
         - {name: hospitalId, in: query, schema: {type: string}}
         - {name: doctorId, in: query, schema: {type: string}}
-        - {name: status, in: query, schema: {type: string}}
-        - {name: paymentStatus, in: query, schema: {type: string}}
+        - {name: date, in: query, schema: {type: string}}
         - {name: from, in: query, schema: {type: string}}
         - {name: to, in: query, schema: {type: string}}
-        - {name: page, in: query, schema: {type: string}}
-        - {name: pageSize, in: query, schema: {type: string}}
+        - {name: status, in: query, schema: {type: string, enum: [pending, confirmed, completed, cancelled]}}
+        - {name: paymentStatus, in: query, schema: {type: string, enum: [paid, pending]}}
+        - {name: page, in: query, schema: {type: integer}}
+        - {name: pageSize, in: query, schema: {type: integer}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/AppointmentList'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -559,7 +609,7 @@ paths:
       parameters:
         - {name: id, in: path, required: true, schema: {type: string}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/AppointmentDetail'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -572,8 +622,11 @@ paths:
       x-access: "patients.view"
       parameters:
         - {name: q, in: query, schema: {type: string}}
+        - {name: mobile, in: query, schema: {type: string}}
+        - {name: patientId, in: query, schema: {type: string}}
+        - {name: appointmentId, in: query, schema: {type: string}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/PatientSearch'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -586,7 +639,7 @@ paths:
       parameters:
         - {name: id, in: path, required: true, schema: {type: string}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/PatientDetail'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -598,14 +651,16 @@ paths:
       operationId: getApiAdminPayments
       x-access: "payments.view"
       parameters:
-        - {name: status, in: query, schema: {type: string}}
         - {name: hospitalId, in: query, schema: {type: string}}
+        - {name: doctorId, in: query, schema: {type: string}}
         - {name: from, in: query, schema: {type: string}}
         - {name: to, in: query, schema: {type: string}}
-        - {name: page, in: query, schema: {type: string}}
-        - {name: pageSize, in: query, schema: {type: string}}
+        - {name: status, in: query, schema: {type: string, enum: [PAID, PENDING, FAILED]}}
+        - {name: q, in: query, schema: {type: string}}
+        - {name: page, in: query, schema: {type: integer}}
+        - {name: pageSize, in: query, schema: {type: integer}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/PaymentList'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -616,11 +671,12 @@ paths:
       operationId: getApiAdminRefunds
       x-access: "refunds.view"
       parameters:
-        - {name: status, in: query, schema: {type: string}}
-        - {name: page, in: query, schema: {type: string}}
-        - {name: pageSize, in: query, schema: {type: string}}
+        - {name: hospitalId, in: query, schema: {type: string}}
+        - {name: status, in: query, schema: {type: string, enum: [PENDING, APPROVED, REJECTED, PROCESSING, COMPLETED]}}
+        - {name: page, in: query, schema: {type: integer}}
+        - {name: pageSize, in: query, schema: {type: integer}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/RefundList'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -650,12 +706,12 @@ paths:
       operationId: getApiAdminDisputes
       x-access: "disputes.view"
       parameters:
-        - {name: status, in: query, schema: {type: string}}
         - {name: hospitalId, in: query, schema: {type: string}}
-        - {name: page, in: query, schema: {type: string}}
-        - {name: pageSize, in: query, schema: {type: string}}
+        - {name: status, in: query, schema: {type: string, enum: [OPEN, UNDER_REVIEW, RESOLVED, REJECTED]}}
+        - {name: page, in: query, schema: {type: integer}}
+        - {name: pageSize, in: query, schema: {type: integer}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/DisputeList'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -687,7 +743,7 @@ paths:
       parameters:
         - {name: id, in: path, required: true, schema: {type: string}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/DisputeNotes'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -705,7 +761,7 @@ paths:
           application/json:
             schema: {$ref: '#/components/schemas/Note'}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -718,11 +774,11 @@ paths:
       x-access: "settlements.view"
       parameters:
         - {name: hospitalId, in: query, schema: {type: string}}
-        - {name: status, in: query, schema: {type: string}}
-        - {name: page, in: query, schema: {type: string}}
-        - {name: pageSize, in: query, schema: {type: string}}
+        - {name: status, in: query, schema: {type: string, enum: [PENDING, PROCESSING, PAID, ON_HOLD]}}
+        - {name: page, in: query, schema: {type: integer}}
+        - {name: pageSize, in: query, schema: {type: integer}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/SettlementList'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -737,7 +793,7 @@ paths:
           application/json:
             schema: {$ref: '#/components/schemas/SettlementGenerate'}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -767,11 +823,11 @@ paths:
       operationId: getApiAdminWebhooks
       x-access: "webhooks.view"
       parameters:
-        - {name: status, in: query, schema: {type: string}}
-        - {name: page, in: query, schema: {type: string}}
-        - {name: pageSize, in: query, schema: {type: string}}
+        - {name: status, in: query, schema: {type: string, enum: [RECEIVED, PROCESSED, FAILED]}}
+        - {name: page, in: query, schema: {type: integer}}
+        - {name: pageSize, in: query, schema: {type: integer}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/WebhookList'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -796,18 +852,18 @@ paths:
       operationId: getApiAdminSupport
       x-access: "support.view_all"
       parameters:
-        - {name: source, in: query, schema: {type: string}}
-        - {name: category, in: query, schema: {type: string}}
-        - {name: priority, in: query, schema: {type: string}}
-        - {name: status, in: query, schema: {type: string}}
+        - {name: source, in: query, schema: {type: string, enum: [PATIENT, DOCTOR, RECEPTIONIST, ADMIN]}}
+        - {name: category, in: query, schema: {type: string, enum: [APPOINTMENT, PAYMENT, REFUND, HOSPITAL, DOCTOR, ACCOUNT, QR, SCHEDULE, TECHNICAL, OTHER]}}
+        - {name: priority, in: query, schema: {type: string, enum: [LOW, MEDIUM, HIGH, URGENT]}}
+        - {name: status, in: query, schema: {type: string, enum: [OPEN, IN_PROGRESS, RESOLVED, CLOSED]}}
         - {name: hospitalId, in: query, schema: {type: string}}
         - {name: from, in: query, schema: {type: string}}
         - {name: to, in: query, schema: {type: string}}
         - {name: q, in: query, schema: {type: string}}
-        - {name: page, in: query, schema: {type: string}}
-        - {name: pageSize, in: query, schema: {type: string}}
+        - {name: page, in: query, schema: {type: integer}}
+        - {name: pageSize, in: query, schema: {type: integer}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/TicketList'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -818,7 +874,7 @@ paths:
       operationId: getApiAdminSupportAssignees
       x-access: "support.view_all"
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/TicketAssignees'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -831,7 +887,7 @@ paths:
       parameters:
         - {name: id, in: path, required: true, schema: {type: string}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/TicketDetail'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -850,7 +906,7 @@ paths:
           application/json:
             schema: {$ref: '#/components/schemas/Message'}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -919,7 +975,7 @@ paths:
       operationId: getApiAdminCommunicationsTemplates
       x-access: "communications.templates.view"
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/TemplateList'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -934,7 +990,7 @@ paths:
           application/json:
             schema: {$ref: '#/components/schemas/TemplateWrite'}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -969,7 +1025,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/StatusChange'}
+            schema: {$ref: '#/components/schemas/TemplateStatus'}
       responses:
         '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
@@ -983,12 +1039,12 @@ paths:
       operationId: getApiAdminCommunicationsLogs
       x-access: "communications.templates.view"
       parameters:
-        - {name: status, in: query, schema: {type: string}}
+        - {name: status, in: query, schema: {type: string, enum: [DELIVERED, SKIPPED, FAILED, UNAVAILABLE]}}
         - {name: eventKey, in: query, schema: {type: string}}
-        - {name: page, in: query, schema: {type: string}}
-        - {name: pageSize, in: query, schema: {type: string}}
+        - {name: page, in: query, schema: {type: integer}}
+        - {name: pageSize, in: query, schema: {type: integer}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/NotificationLogs'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -999,7 +1055,7 @@ paths:
       operationId: getApiAdminCommunicationsAnnouncements
       x-access: "communications.announcements.view"
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/AnnouncementList'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1012,9 +1068,9 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/Announcement'}
+            schema: {$ref: '#/components/schemas/AnnouncementCreate'}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1030,7 +1086,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/StatusChange'}
+            schema: {$ref: '#/components/schemas/AnnouncementStatus'}
       responses:
         '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
@@ -1044,7 +1100,7 @@ paths:
       operationId: getApiAdminCommunicationsBanners
       x-access: "communications.banners.view"
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/BannerList'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1059,7 +1115,7 @@ paths:
           application/json:
             schema: {$ref: '#/components/schemas/Banner'}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1094,7 +1150,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/StatusChange'}
+            schema: {$ref: '#/components/schemas/ActiveStatus'}
       responses:
         '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
@@ -1108,7 +1164,7 @@ paths:
       operationId: getApiAdminSettings
       x-access: "settings.view"
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/SettingList'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1121,7 +1177,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/Object'}
+            schema: {$ref: '#/components/schemas/SettingUpdate'}
       responses:
         '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
@@ -1134,7 +1190,7 @@ paths:
       operationId: getApiAdminFeatureFlags
       x-access: "feature_flags.view"
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/FeatureFlagList'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1150,7 +1206,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/Object'}
+            schema: {$ref: '#/components/schemas/FeatureFlagUpdate'}
       responses:
         '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
@@ -1164,7 +1220,7 @@ paths:
       operationId: getApiAdminAppVersions
       x-access: "app_versions.view"
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/AppVersionList'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1180,7 +1236,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/Object'}
+            schema: {$ref: '#/components/schemas/AppVersionUpdate'}
       responses:
         '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
@@ -1197,12 +1253,13 @@ paths:
         - {name: action, in: query, schema: {type: string}}
         - {name: entityType, in: query, schema: {type: string}}
         - {name: userId, in: query, schema: {type: string}}
+        - {name: q, in: query, schema: {type: string}}
         - {name: from, in: query, schema: {type: string}}
         - {name: to, in: query, schema: {type: string}}
-        - {name: page, in: query, schema: {type: string}}
-        - {name: pageSize, in: query, schema: {type: string}}
+        - {name: page, in: query, schema: {type: integer}}
+        - {name: pageSize, in: query, schema: {type: integer}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/AuditLogList'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1213,7 +1270,7 @@ paths:
       operationId: getApiMe
       x-access: "receptionist"
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/RecMe'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1224,7 +1281,7 @@ paths:
       operationId: getApiDashboard
       x-access: "receptionist"
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/RecDashboard'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1237,7 +1294,7 @@ paths:
       parameters:
         - {name: q, in: query, schema: {type: string}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/RecSearch'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1249,13 +1306,17 @@ paths:
       x-access: "receptionist"
       parameters:
         - {name: q, in: query, schema: {type: string}}
-        - {name: status, in: query, schema: {type: string}}
-        - {name: doctorId, in: query, schema: {type: string}}
         - {name: date, in: query, schema: {type: string}}
-        - {name: page, in: query, schema: {type: string}}
-        - {name: pageSize, in: query, schema: {type: string}}
+        - {name: from, in: query, schema: {type: string}}
+        - {name: to, in: query, schema: {type: string}}
+        - {name: doctorId, in: query, schema: {type: string}}
+        - {name: status, in: query, schema: {type: string, enum: [confirmed, pending, completed, cancelled]}}
+        - {name: paymentStatus, in: query, schema: {type: string, enum: [paid, pending]}}
+        - {name: sort, in: query, schema: {type: string, enum: [date_asc, date_desc]}}
+        - {name: page, in: query, schema: {type: integer}}
+        - {name: pageSize, in: query, schema: {type: integer}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/RecAppointmentList'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1268,7 +1329,7 @@ paths:
       parameters:
         - {name: id, in: path, required: true, schema: {type: string}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/RecAppointmentDetail'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1285,9 +1346,9 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/StatusChange'}
+            schema: {$ref: '#/components/schemas/AppointmentStatus'}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/AppointmentResult'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1300,8 +1361,10 @@ paths:
       x-access: "receptionist"
       parameters:
         - {name: q, in: query, schema: {type: string}}
+        - {name: specialization, in: query, schema: {type: string}}
+        - {name: availability, in: query, schema: {type: string, enum: [present, absent]}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/RecDoctorList'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1314,9 +1377,9 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/Object'}
+            schema: {$ref: '#/components/schemas/DoctorCreate'}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/RecDoctorResult'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1329,7 +1392,7 @@ paths:
       parameters:
         - {name: id, in: path, required: true, schema: {type: string}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/RecDoctorDetail'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1345,9 +1408,9 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/Object'}
+            schema: {$ref: '#/components/schemas/DoctorEdit'}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/RecDoctorResult'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1366,7 +1429,7 @@ paths:
           application/json:
             schema: {$ref: '#/components/schemas/Availability'}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/RecDoctorResult'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1381,9 +1444,9 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/Object'}
+            schema: {$ref: '#/components/schemas/AvailabilityBulk'}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/AvailabilityBulkResult'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1396,9 +1459,10 @@ paths:
       parameters:
         - {name: date, in: query, schema: {type: string}}
         - {name: doctorId, in: query, schema: {type: string}}
-        - {name: status, in: query, schema: {type: string}}
+        - {name: status, in: query, schema: {type: string, enum: [waiting, called, in_consultation, completed, cancelled, skipped]}}
+        - {name: q, in: query, schema: {type: string}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/RecTokenList'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1411,9 +1475,9 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/Object'}
+            schema: {$ref: '#/components/schemas/TokenCreate'}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/TokenResult'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1423,8 +1487,12 @@ paths:
       summary: "Appointments eligible for a token"
       operationId: getApiTokensEligible
       x-access: "receptionist"
+      parameters:
+        - {name: date, in: query, schema: {type: string}}
+        - {name: doctorId, in: query, schema: {type: string}}
+        - {name: q, in: query, schema: {type: string}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/RecTokenEligible'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1437,7 +1505,7 @@ paths:
       parameters:
         - {name: id, in: path, required: true, schema: {type: string}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/RecTokenDetail'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1454,9 +1522,9 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/StatusChange'}
+            schema: {$ref: '#/components/schemas/TokenStatus'}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/TokenResult'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1468,13 +1536,16 @@ paths:
       operationId: getApiPayments
       x-access: "receptionist"
       parameters:
-        - {name: status, in: query, schema: {type: string}}
+        - {name: q, in: query, schema: {type: string}}
+        - {name: date, in: query, schema: {type: string}}
         - {name: from, in: query, schema: {type: string}}
         - {name: to, in: query, schema: {type: string}}
-        - {name: page, in: query, schema: {type: string}}
-        - {name: pageSize, in: query, schema: {type: string}}
+        - {name: doctorId, in: query, schema: {type: string}}
+        - {name: paymentStatus, in: query, schema: {type: string, enum: [paid, pending]}}
+        - {name: page, in: query, schema: {type: integer}}
+        - {name: pageSize, in: query, schema: {type: integer}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/RecPaymentList'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1490,7 +1561,7 @@ paths:
           application/json:
             schema: {$ref: '#/components/schemas/RefundRequest'}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1501,7 +1572,7 @@ paths:
       operationId: getApiHospital
       x-access: "receptionist"
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/RecHospital'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1514,9 +1585,9 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/Object'}
+            schema: {$ref: '#/components/schemas/HospitalProfile'}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/RecHospitalResult'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1526,6 +1597,9 @@ paths:
       summary: "Hospital QR (PNG)"
       operationId: getApiHospitalQrPng
       x-access: "receptionist"
+      parameters:
+        - {name: size, in: query, schema: {type: integer}}
+        - {name: download, in: query, schema: {type: string, enum: [1]}}
       responses:
         '200': {description: OK, content: {image/png: {schema: {type: string, format: binary}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
@@ -1548,6 +1622,8 @@ paths:
       summary: "QR poster (SVG)"
       operationId: getApiHospitalQrPosterSvg
       x-access: "receptionist"
+      parameters:
+        - {name: download, in: query, schema: {type: string, enum: [1]}}
       responses:
         '200': {description: OK, content: {image/svg+xml: {schema: {type: string, format: binary}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
@@ -1563,9 +1639,9 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/Object'}
+            schema: {$ref: '#/components/schemas/ProfileUpdate'}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/ProfileResult'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1592,7 +1668,7 @@ paths:
       operationId: getApiNotifications
       x-access: "receptionist"
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/NotificationList'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1602,13 +1678,8 @@ paths:
       summary: "Mark notifications read"
       operationId: postApiNotificationsRead
       x-access: "receptionist"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {$ref: '#/components/schemas/Object'}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/NotificationsReadResult'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1619,9 +1690,10 @@ paths:
       operationId: getApiSupport
       x-access: "support.view_own"
       parameters:
-        - {name: status, in: query, schema: {type: string}}
+        - {name: status, in: query, schema: {type: string, enum: [OPEN, IN_PROGRESS, RESOLVED, CLOSED]}}
+        - {name: q, in: query, schema: {type: string}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/RecTicketList'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1636,7 +1708,7 @@ paths:
           application/json:
             schema: {$ref: '#/components/schemas/TicketCreate'}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/TicketCreated'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1649,7 +1721,7 @@ paths:
       parameters:
         - {name: id, in: path, required: true, schema: {type: string}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/RecTicketDetail'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1668,7 +1740,7 @@ paths:
           application/json:
             schema: {$ref: '#/components/schemas/Message'}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/TicketReply'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1752,25 +1824,27 @@ paths:
       operationId: getApiDoctorAppointments
       x-access: "doctor"
       parameters:
-        - {name: status, in: query, schema: {type: string}}
         - {name: date, in: query, schema: {type: string}}
-        - {name: page, in: query, schema: {type: string}}
-        - {name: pageSize, in: query, schema: {type: string}}
+        - {name: status, in: query, schema: {type: string, enum: [confirmed, pending, completed, cancelled]}}
+        - {name: paymentStatus, in: query, schema: {type: string, enum: [paid, pending]}}
+        - {name: q, in: query, schema: {type: string}}
+        - {name: page, in: query, schema: {type: integer}}
+        - {name: pageSize, in: query, schema: {type: integer}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/DocAppointmentList'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
   /api/doctor/appointments/{id}:
     get:
       tags: ["Doctor"]
-      summary: "Appointment detail"
+      summary: "Appointment detail (404 if it is not mine)"
       operationId: getApiDoctorAppointmentsId
       x-access: "doctor"
       parameters:
         - {name: id, in: path, required: true, schema: {type: string}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/DocAppointmentDetail'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1778,7 +1852,7 @@ paths:
   /api/doctor/appointments/{id}/status:
     patch:
       tags: ["Doctor"]
-      summary: "Update status / cancel (notifies receptionists)"
+      summary: "Mark completed, or cancel with a reason (notifies receptionists)"
       operationId: patchApiDoctorAppointmentsIdStatus
       x-access: "doctor"
       parameters:
@@ -1787,9 +1861,9 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/StatusChange'}
+            schema: {$ref: '#/components/schemas/DoctorAppointmentStatus'}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/AppointmentResult'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1797,7 +1871,7 @@ paths:
   /api/doctor/availability:
     patch:
       tags: ["Doctor"]
-      summary: "Set my availability"
+      summary: "Set my availability (notifies receptionists)"
       operationId: patchApiDoctorAvailability
       x-access: "doctor"
       requestBody:
@@ -1806,7 +1880,7 @@ paths:
           application/json:
             schema: {$ref: '#/components/schemas/Availability'}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/RecDoctorResult'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1851,24 +1925,29 @@ paths:
   /api/doctor/queue:
     get:
       tags: ["Doctor"]
-      summary: "Queue for a date"
+      summary: "My queue for a date (default today)"
       operationId: getApiDoctorQueue
       x-access: "doctor"
       parameters:
         - {name: date, in: query, schema: {type: string}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/DocQueue'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
   /api/doctor/queue/call-next:
     post:
       tags: ["Doctor"]
-      summary: "Call next patient"
+      summary: "Call the next waiting patient"
       operationId: postApiDoctorQueueCallNext
       x-access: "doctor"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/QueueCallNext'}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/TokenResult'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1881,7 +1960,7 @@ paths:
       parameters:
         - {name: id, in: path, required: true, schema: {type: string}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/TokenResult'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1895,7 +1974,7 @@ paths:
       parameters:
         - {name: id, in: path, required: true, schema: {type: string}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/TokenResult'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1909,7 +1988,7 @@ paths:
       parameters:
         - {name: id, in: path, required: true, schema: {type: string}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/TokenResult'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1917,13 +1996,13 @@ paths:
   /api/doctor/queue/{id}/recall:
     post:
       tags: ["Doctor"]
-      summary: "Recall token"
+      summary: "Call a skipped patient back"
       operationId: postApiDoctorQueueIdRecall
       x-access: "doctor"
       parameters:
         - {name: id, in: path, required: true, schema: {type: string}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/TokenResult'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -1931,17 +2010,17 @@ paths:
   /api/doctor/schedule:
     get:
       tags: ["Doctor"]
-      summary: "My weekly schedule"
+      summary: "My weekly working hours"
       operationId: getApiDoctorSchedule
       x-access: "doctor"
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/DocScheduleList'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
     post:
       tags: ["Doctor"]
-      summary: "Add schedule slot"
+      summary: "Add a working-hours block (no overlaps)"
       operationId: postApiDoctorSchedule
       x-access: "doctor"
       requestBody:
@@ -1950,14 +2029,14 @@ paths:
           application/json:
             schema: {$ref: '#/components/schemas/ScheduleSlot'}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
   /api/doctor/schedule/{id}:
     delete:
       tags: ["Doctor"]
-      summary: "Remove schedule slot"
+      summary: "Remove a working-hours block"
       operationId: deleteApiDoctorScheduleId
       x-access: "doctor"
       parameters:
@@ -1971,28 +2050,26 @@ paths:
   /api/doctor/patients:
     get:
       tags: ["Doctor"]
-      summary: "My patients"
+      summary: "Patients who have booked with me"
       operationId: getApiDoctorPatients
       x-access: "doctor"
       parameters:
         - {name: q, in: query, schema: {type: string}}
-        - {name: page, in: query, schema: {type: string}}
-        - {name: pageSize, in: query, schema: {type: string}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/DocPatientList'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
   /api/doctor/patients/{id}:
     get:
       tags: ["Doctor"]
-      summary: "Patient detail"
+      summary: "Patient detail (404 if not my patient)"
       operationId: getApiDoctorPatientsId
       x-access: "doctor"
       parameters:
         - {name: id, in: path, required: true, schema: {type: string}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/DocPatientDetail'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -2004,13 +2081,13 @@ paths:
       operationId: getApiDoctorProfile
       x-access: "doctor"
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/DocProfile'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
     put:
       tags: ["Doctor"]
-      summary: "Update profile"
+      summary: "Update my bio, languages and experience"
       operationId: putApiDoctorProfile
       x-access: "doctor"
       requestBody:
@@ -2019,7 +2096,7 @@ paths:
           application/json:
             schema: {$ref: '#/components/schemas/DoctorProfileUpdate'}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/DoctorProfileResult'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -2046,23 +2123,18 @@ paths:
       operationId: getApiDoctorNotifications
       x-access: "doctor"
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/NotificationList'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
   /api/doctor/notifications/read:
     post:
       tags: ["Doctor"]
-      summary: "Mark read"
+      summary: "Mark notifications read"
       operationId: postApiDoctorNotificationsRead
       x-access: "doctor"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {$ref: '#/components/schemas/Object'}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/NotificationsReadResult'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -2073,9 +2145,10 @@ paths:
       operationId: getApiDoctorSupport
       x-access: "support.view_own"
       parameters:
-        - {name: status, in: query, schema: {type: string}}
+        - {name: status, in: query, schema: {type: string, enum: [OPEN, IN_PROGRESS, RESOLVED, CLOSED]}}
+        - {name: q, in: query, schema: {type: string}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/DocTicketList'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -2090,7 +2163,7 @@ paths:
           application/json:
             schema: {$ref: '#/components/schemas/TicketCreate'}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/TicketCreated'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -2103,7 +2176,7 @@ paths:
       parameters:
         - {name: id, in: path, required: true, schema: {type: string}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/DocTicketDetail'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -2122,7 +2195,7 @@ paths:
           application/json:
             schema: {$ref: '#/components/schemas/Message'}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/TicketReply'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
@@ -2132,6 +2205,507 @@ components:
     sessionCookie: {type: apiKey, in: cookie, name: gmedic.sid}
     internalKey: {type: apiKey, in: header, name: x-internal-key, description: Value of the INTERNAL_EVENT_KEY env var}
   schemas:
+    DoctorAppointmentStatus:
+      type: object
+      required: [status]
+      properties:
+        status: {type: string, enum: [completed, cancelled]}
+        reason: {type: string, description: Required when cancelling}
+    QueueCallNext:
+      type: object
+      description: Calls the lowest-numbered waiting token
+      properties:
+        date: {type: string, format: date, description: Defaults to today}
+    DoctorProfileUpdate:
+      type: object
+      description: A doctor can edit only these fields (specialization, fee and registration stay admin-managed)
+      properties:
+        bio: {type: string, maxLength: 500}
+        languages: {type: string, maxLength: 120, example: "English, Hindi, Tamil", description: Comma-separated}
+        yearsExperience: {type: integer, minimum: 0, maximum: 70}
+    DoctorProfileResult:
+      type: object
+      properties:
+        ok: {type: boolean}
+        message: {type: string}
+        doctor: {type: object, additionalProperties: true, description: Same shape as the doctor in DocProfile}
+    NotificationList:
+      type: object
+      properties:
+        items:
+          type: array
+          description: Newest first. Bookings and reminders are derived from appointments; the rest come from notification templates
+          items:
+            type: object
+            additionalProperties: true
+            required: [id, type, unread]
+            properties:
+              id: {type: string}
+              type: {type: string, enum: [booking, reminder, system]}
+              at: {type: string, format: date-time}
+              title: {type: string, description: System notifications}
+              body: {type: string, description: System notifications}
+              link: {type: string, description: Portal page to open}
+              appointmentId: {type: string, description: Booking and reminder notifications}
+              patientName: {type: string, nullable: true}
+              doctorName: {type: string}
+              date: {type: string, format: date}
+              time: {type: string}
+              unread: {type: boolean}
+        unread: {type: integer}
+    AppointmentStatus:
+      type: object
+      required: [status]
+      properties:
+        status: {type: string, enum: [confirmed, pending, completed, cancelled]}
+    AppointmentResult:
+      type: object
+      properties:
+        ok: {type: boolean}
+        message: {type: string}
+        appointment: {type: object, additionalProperties: true, description: Same shape as the appointment in RecAppointmentDetail}
+    DoctorCreate:
+      type: object
+      required: [name, specialization, fee, availability]
+      properties:
+        name: {type: string, minLength: 3, maxLength: 60, description: "Stored with a single Dr. prefix"}
+        specialization: {type: string, description: One of the configured specializations}
+        fee: {type: integer, minimum: 50, maximum: 20000}
+        availability: {type: string, enum: [present, absent]}
+    DoctorEdit:
+      type: object
+      description: Same fields as DoctorCreate, all optional
+      properties:
+        name: {type: string}
+        specialization: {type: string}
+        fee: {type: integer, minimum: 50, maximum: 20000}
+        availability: {type: string, enum: [present, absent]}
+    RecDoctorResult:
+      type: object
+      properties:
+        ok: {type: boolean}
+        message: {type: string}
+        doctor: {type: object, additionalProperties: true, description: Same shape as the doctor in RecDoctorDetail}
+    AvailabilityBulk:
+      type: object
+      required: [changes]
+      properties:
+        changes:
+          type: array
+          items:
+            type: object
+            required: [id, availability]
+            properties: {id: {type: string, example: DOC101}, availability: {type: string, enum: [present, absent]}}
+    AvailabilityBulkResult:
+      type: object
+      properties:
+        ok: {type: boolean}
+        message: {type: string}
+        updated: {type: array, items: {type: string}, description: Ids of doctors that actually changed}
+    TokenCreate:
+      type: object
+      required: [appointmentId]
+      description: The appointment must be paid and not cancelled, dated today or later, and not already have a token
+      properties:
+        appointmentId: {type: string, example: APT10555}
+    TokenStatus:
+      type: object
+      required: [status]
+      properties:
+        status: {type: string, enum: [waiting, called, in_consultation, completed, cancelled, skipped], description: A cancelled token cannot be changed}
+    TokenResult:
+      type: object
+      properties:
+        ok: {type: boolean}
+        message: {type: string}
+        token: {type: object, additionalProperties: true, description: Same shape as the token in RecTokenDetail}
+    HospitalProfile:
+      type: object
+      required: [phone, email, address]
+      description: The receptionist can edit contact details and address only, not the hospital's name, fees or status
+      properties:
+        phone: {type: string}
+        email: {type: string, format: email}
+        address:
+          type: object
+          required: [line1, city, state, pincode]
+          properties:
+            line1: {type: string, minLength: 5, maxLength: 160}
+            city: {type: string, maxLength: 60}
+            state: {type: string, maxLength: 60}
+            pincode: {type: string, pattern: '^[0-9]{6}$'}
+    RecHospitalResult:
+      type: object
+      properties:
+        ok: {type: boolean}
+        message: {type: string}
+        hospital: {$ref: '#/components/schemas/RecHospital/properties/hospital'}
+    ProfileUpdate:
+      type: object
+      required: [name, phone]
+      properties:
+        name: {type: string, minLength: 3, maxLength: 60}
+        phone: {type: string}
+    ProfileResult:
+      type: object
+      properties:
+        ok: {type: boolean}
+        message: {type: string}
+        user: {$ref: '#/components/schemas/RecMe/properties/user'}
+    NotificationsReadResult:
+      type: object
+      properties:
+        ok: {type: boolean}
+        unread: {type: integer}
+    TicketCreated:
+      type: object
+      properties:
+        ok: {type: boolean}
+        message: {type: string}
+        ticket: {type: object, additionalProperties: true, description: Same shape as the ticket in RecTicketDetail}
+    TicketReply:
+      type: object
+      properties:
+        ok: {type: boolean}
+        message: {type: string}
+        messages: {type: array, items: {type: object, additionalProperties: true}, description: The full conversation after the reply}
+    AnnouncementCreate:
+      type: object
+      required: [title, message]
+      description: Created as a DRAFT for every hospital; publish it with the publish endpoint
+      properties:
+        title: {type: string, minLength: 3, maxLength: 160}
+        message: {type: string, minLength: 5, maxLength: 1000}
+    AnnouncementStatus:
+      type: object
+      required: [status]
+      properties:
+        status: {type: string, enum: [PUBLISHED, ARCHIVED], description: "PUBLISHED needs communications.announcements.publish, ARCHIVED needs ...archive; an archived announcement cannot be republished"}
+    TemplateStatus:
+      type: object
+      required: [status]
+      properties:
+        status: {type: string, enum: [ACTIVE, INACTIVE], description: Enable or disable the template (separate permissions)}
+    ActiveStatus:
+      type: object
+      required: [status]
+      properties:
+        status: {type: string, enum: [ACTIVE, INACTIVE]}
+    DoctorUpdate:
+      type: object
+      description: Send only the fields to change
+      properties:
+        specialization: {type: string, description: One of the configured specializations}
+        fee: {type: integer, minimum: 50, maximum: 20000}
+        department: {type: string, maxLength: 80, description: Created in the departments table if new}
+        qualifications: {type: string, maxLength: 160}
+        registrationNumber: {type: string, maxLength: 40}
+    DoctorVerification:
+      type: object
+      required: [status]
+      properties:
+        status: {type: string, enum: [PENDING, VERIFIED, REJECTED]}
+        note: {type: string, description: Required when REJECTED}
+    DoctorResult:
+      type: object
+      properties:
+        ok: {type: boolean}
+        message: {type: string}
+        doctor: {type: object, additionalProperties: true, description: Same shape as the doctor in DoctorDetail}
+    ReceptionistCreate:
+      type: object
+      required: [name, email, phone, hospitalId]
+      properties:
+        name: {type: string, minLength: 3, maxLength: 60}
+        email: {type: string, format: email}
+        phone: {type: string}
+        hospitalId: {type: string, example: HSP001}
+    ReceptionistCreated:
+      type: object
+      properties:
+        ok: {type: boolean}
+        message: {type: string}
+        receptionist:
+          type: object
+          properties: {id: {type: string}, username: {type: string}, tempPassword: {type: string, description: Shown once; the user must change it at first login}}
+    TempPassword:
+      type: object
+      properties: {ok: {type: boolean}, message: {type: string}, tempPassword: {type: string}}
+    QrCreate:
+      type: object
+      required: [hospitalId, deskLabel]
+      properties:
+        hospitalId: {type: string}
+        deskLabel: {type: string, maxLength: 60}
+    QrRevoke:
+      type: object
+      required: [reason]
+      properties:
+        reason: {type: string}
+    SettingUpdate:
+      type: object
+      required: [key, value]
+      properties:
+        key: {type: string, example: appointment_hold_minutes}
+        value: {description: Any JSON value (stored as JSON)}
+    FeatureFlagUpdate:
+      type: object
+      required: [enabled]
+      properties:
+        enabled: {type: boolean}
+    AppVersionUpdate:
+      type: object
+      properties:
+        minSupportedVersion: {type: string, example: 1.2.0}
+        latestVersion: {type: string, example: 1.4.0}
+        forceUpdate: {type: boolean}
+        updateMessage: {type: string}
+    LoginResponse:
+      type: object
+      properties:
+        ok: {type: boolean}
+        redirect: {type: string, example: /admin/dashboard, description: Where the portal sends the user next (honours a safe `next`)}
+    LogoutResponse:
+      type: object
+      properties: {ok: {type: boolean}, redirect: {type: string, example: "/login?loggedOut=1"}}
+    InternalEventResult:
+      type: object
+      properties:
+        ok: {type: boolean}
+        event: {type: string, example: New Appointment}
+        delivered: {type: integer, description: Recipients that got an in-app notification}
+        results: {type: array, items: {type: object, additionalProperties: true}, description: "One entry per recipient: DELIVERED, SKIPPED, FAILED or UNAVAILABLE"}
+    DisputeNotes:
+      type: object
+      properties:
+        notes:
+          type: array
+          items:
+            type: object
+            properties: {id: {type: integer}, userName: {type: string}, note: {type: string}, createdAt: {type: string, format: date-time}}
+    NotificationLogs:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+            description: Delivery attempt (eventKey, recipient, channel, status DELIVERED / SKIPPED / FAILED / UNAVAILABLE, failureReason, createdAt)
+        total: {type: integer}
+        page: {type: integer}
+        pageSize: {type: integer}
+        pages: {type: integer}
+    Hospital:
+      type: object
+      properties:
+        id: {type: string, example: HSP001}
+        name: {type: string}
+        address: {type: object, properties: {line1: {type: string}, city: {type: string}, state: {type: string}, pincode: {type: string}}}
+        contactPerson: {type: string, nullable: true}
+        phone: {type: string}
+        email: {type: string}
+        gstin: {type: string, nullable: true}
+        registrationNumber: {type: string, nullable: true}
+        status: {type: string, enum: [ONBOARDING, ACTIVE, SUSPENDED, OFFBOARDED]}
+        statusReason: {type: string, nullable: true}
+        kycStatus: {type: string, enum: [PENDING, UNDER_REVIEW, VERIFIED, REJECTED]}
+        bookingModel: {type: string, enum: [FULL_PREPAY, BOOKING_FEE, TOKEN]}
+        bookingFee: {type: number}
+        convenienceFee: {type: number}
+        commissionType: {type: string, enum: [PERCENT, FLAT]}
+        commissionValue: {type: number}
+        currency: {type: string, example: INR}
+        timezone: {type: string, example: Asia/Kolkata}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+    HospitalList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            allOf:
+              - $ref: '#/components/schemas/Hospital'
+              - {type: object, properties: {doctorCount: {type: integer}}}
+        total: {type: integer}
+        page: {type: integer}
+        pageSize: {type: integer}
+        pages: {type: integer}
+        summary: {type: object, description: Hospital count per status across the platform, properties: {ONBOARDING: {type: integer}, ACTIVE: {type: integer}, SUSPENDED: {type: integer}, OFFBOARDED: {type: integer}}}
+    HospitalDetail:
+      type: object
+      properties:
+        hospital: {$ref: '#/components/schemas/Hospital'}
+        stats: {type: object, properties: {branches: {type: integer}, doctors: {type: integer}, receptionists: {type: integer}, appointments: {type: integer}}}
+    HospitalResult:
+      type: object
+      properties:
+        ok: {type: boolean}
+        message: {type: string}
+        hospital: {$ref: '#/components/schemas/Hospital'}
+    HospitalCreate:
+      type: object
+      required: [name, phone, email, line1, city, state, pincode]
+      properties:
+        name: {type: string, minLength: 3, maxLength: 120}
+        phone: {type: string, example: "+91 98765 43210"}
+        email: {type: string, format: email}
+        contactPerson: {type: string, maxLength: 80}
+        line1: {type: string, minLength: 5, maxLength: 160, description: Street address}
+        city: {type: string, maxLength: 60}
+        state: {type: string, maxLength: 60}
+        pincode: {type: string, pattern: '^[0-9]{6}$'}
+        gstin: {type: string, maxLength: 15}
+        registrationNumber: {type: string, maxLength: 40}
+    HospitalUpdate:
+      type: object
+      description: Same fields as HospitalCreate, all optional
+      properties:
+        name: {type: string}
+        phone: {type: string}
+        email: {type: string, format: email}
+        contactPerson: {type: string}
+        line1: {type: string}
+        city: {type: string}
+        state: {type: string}
+        pincode: {type: string, pattern: '^[0-9]{6}$'}
+        gstin: {type: string}
+        registrationNumber: {type: string}
+    HospitalStatus:
+      type: object
+      required: [status]
+      properties:
+        status: {type: string, enum: [ONBOARDING, ACTIVE, SUSPENDED, OFFBOARDED]}
+        reason: {type: string, description: Required for SUSPENDED and OFFBOARDED}
+    KycStatus:
+      type: object
+      required: [status]
+      properties:
+        status: {type: string, enum: [PENDING, UNDER_REVIEW, VERIFIED, REJECTED]}
+        reason: {type: string}
+    RateHistory:
+      type: object
+      properties:
+        rates:
+          type: array
+          items:
+            type: object
+            properties:
+              id: {type: integer}
+              bookingModel: {type: string, nullable: true}
+              bookingFee: {type: number, nullable: true}
+              convenienceFee: {type: number, nullable: true}
+              commissionType: {type: string, enum: [PERCENT, FLAT]}
+              commissionValue: {type: number}
+              effectiveFrom: {type: string, format: date-time}
+    DocumentUpload:
+      type: object
+      required: [docType, file]
+      properties:
+        docType: {type: string, enum: [LICENCE, BANK_PROOF, GST_CERTIFICATE, REGISTRATION]}
+        file: {type: string, format: binary, description: "PDF, PNG or JPEG up to 8 MB"}
+    DocumentReview:
+      type: object
+      required: [status]
+      properties:
+        status: {type: string, enum: [VERIFIED, REJECTED]}
+        reason: {type: string, description: Required when REJECTED}
+    DocumentList:
+      type: object
+      properties:
+        documents:
+          type: array
+          items:
+            type: object
+            properties:
+              id: {type: string, example: DOC1}
+              docType: {type: string}
+              fileName: {type: string}
+              status: {type: string, enum: [PENDING, VERIFIED, REJECTED]}
+              rejectionReason: {type: string, nullable: true}
+              reviewerName: {type: string, nullable: true}
+              reviewedAt: {type: string, format: date-time, nullable: true}
+              createdAt: {type: string, format: date-time}
+    BranchList:
+      type: object
+      properties:
+        branches:
+          type: array
+          items:
+            type: object
+            properties: {id: {type: string, example: BR1}, name: {type: string}, address: {type: string}, contactPerson: {type: string, nullable: true}, phone: {type: string}, status: {type: string, enum: [ACTIVE, INACTIVE]}}
+    BranchCreate:
+      type: object
+      required: [name, address, phone]
+      properties:
+        name: {type: string, minLength: 2, maxLength: 120}
+        address: {type: string, minLength: 5, maxLength: 255}
+        phone: {type: string}
+        contactPerson: {type: string, maxLength: 80}
+    BranchUpdate:
+      type: object
+      properties:
+        status: {type: string, enum: [ACTIVE, INACTIVE]}
+    DashboardSummary:
+      type: object
+      required: [cards, bookingTrend, revenueTrend, qrFunnel, hospitalGrowth, recentHospitals, recentAppointments, pending]
+      properties:
+        cards:
+          type: object
+          properties:
+            totalHospitals: {type: integer}
+            activeHospitals: {type: integer}
+            suspendedHospitals: {type: integer}
+            totalDoctors: {type: integer}
+            totalReceptionists: {type: integer}
+            totalPatients: {type: integer}
+            todayAppointments: {type: integer, description: Non-cancelled appointments dated today}
+            todayRevenue: {type: number, description: PAID payments captured today (INR)}
+            paymentSuccessRate: {type: integer, minimum: 0, maximum: 100, description: "Paid / (paid + failed) over the last 30 days; 100 when there were no attempts"}
+            pendingKyc: {type: integer}
+            pendingRefunds: {type: integer}
+            todayQrScans: {type: integer}
+        bookingTrend:
+          type: array
+          description: Last 14 days, one row per appointment date that has data
+          items:
+            type: object
+            properties: {date: {type: string, format: date}, booked: {type: integer}, completed: {type: integer}, cancelled: {type: integer}}
+        revenueTrend:
+          type: array
+          items:
+            type: object
+            properties: {date: {type: string, format: date}, gross: {type: number}, refunded: {type: number}}
+        qrFunnel:
+          type: object
+          description: Last 30 days
+          properties: {scans: {type: integer}, linked: {type: integer}, bookings: {type: integer}, payments: {type: integer}}
+        hospitalGrowth:
+          type: array
+          description: Hospitals onboarded per month, last 6 months
+          items:
+            type: object
+            properties: {month: {type: string, example: 2026-09}, count: {type: integer}}
+        recentHospitals:
+          type: array
+          items:
+            type: object
+            properties: {id: {type: string}, name: {type: string}, location: {type: string}, status: {type: string}, kycStatus: {type: string}, createdAt: {type: string, format: date-time}}
+        recentAppointments:
+          type: array
+          items:
+            type: object
+            properties: {id: {type: string}, patientName: {type: string, nullable: true}, hospitalName: {type: string}, doctorName: {type: string}, date: {type: string, format: date}, paymentStatus: {type: string, enum: [paid, pending]}}
+        pending:
+          type: object
+          description: Work waiting for a Super Admin (up to 5 of each)
+          properties:
+            kyc: {type: array, items: {type: object, properties: {id: {type: string}, name: {type: string}, kycStatus: {type: string}}}}
+            doctorVerification: {type: array, items: {type: object, properties: {id: {type: string}, name: {type: string}, hospitalId: {type: string}}}}
+            refunds: {type: array, items: {type: object, properties: {id: {type: string}, amount: {type: number}, hospitalName: {type: string}}}}
+            supportTickets: {type: array, items: {type: object, properties: {id: {type: string}, subject: {type: string}, priority: {type: string}}}}
+            paymentIssues: {type: array, items: {type: object, properties: {id: {type: string}, transactionId: {type: string}, reason: {type: string, nullable: true}}}}
     Object: {type: object, additionalProperties: true, description: Free-form payload; see the portal form for fields}
     Error:
       type: object
@@ -2174,7 +2748,7 @@ components:
       type: object
       required: [bookingModel, commissionType, commissionValue]
       properties:
-        bookingModel: {type: string}
+        bookingModel: {type: string, enum: [FULL_PREPAY, BOOKING_FEE, TOKEN]}
         bookingFee: {type: number}
         convenienceFee: {type: number}
         commissionType: {type: string, enum: [PERCENT, FLAT], description: "PERCENT of collection, or FLAT amount per paid appointment"}
@@ -2219,19 +2793,15 @@ components:
         title: {type: string}
         body: {type: string, description: "May only use {{variables}} defined for the event"}
         channels: {type: array, items: {type: string, enum: [IN_APP, PUSH, SMS, WHATSAPP, EMAIL]}, description: Only IN_APP delivers; others are logged UNAVAILABLE}
-    Announcement:
-      type: object
-      properties: {title: {type: string}, message: {type: string}, audience: {type: string}, hospitalIds: {type: array, items: {type: string}}}
     Banner:
       type: object
-      properties: {title: {type: string}, message: {type: string}, ctaLabel: {type: string}, ctaUrl: {type: string}, startsAt: {type: string}, endsAt: {type: string}}
-    Availability: {type: object, required: [availability], properties: {availability: {type: string}}}
-    DoctorProfileUpdate:
-      type: object
+      required: [title, message]
       properties:
-        bio: {type: string, maxLength: 500}
-        languages: {type: string, maxLength: 120}
-        yearsExperience: {type: integer, minimum: 0, maximum: 70}
+        title: {type: string, minLength: 3, maxLength: 160}
+        message: {type: string, minLength: 5, maxLength: 300}
+        ctaLabel: {type: string, maxLength: 40, description: Required when ctaUrl is set}
+        ctaUrl: {type: string, maxLength: 300}
+    Availability: {type: object, required: [availability], properties: {availability: {type: string, enum: [present, absent]}}}
     DoctorSummary:
       type: object
       required: [id, name, specialization, fee, availability]
@@ -2403,8 +2973,66 @@ components:
       properties: {startDate: {type: string, format: date}, endDate: {type: string, format: date}, reason: {type: string, maxLength: 200}}
     ScheduleSlot:
       type: object
-      properties: {dayOfWeek: {type: integer}, startTime: {type: string}, endTime: {type: string}, slotMinutes: {type: integer}, capacityPerSlot: {type: integer, minimum: 1, maximum: 50, default: 1, description: Patients per slot}}
+      required: [dayOfWeek, startTime, endTime]
+      description: A weekly working-hours block. It may not overlap another block on the same day
+      properties:
+        dayOfWeek: {type: integer, minimum: 0, maximum: 6, description: 0 = Sunday}
+        startTime: {type: string, example: "09:00", pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'}
+        endTime: {type: string, example: "13:00", description: Must be after startTime}
+        slotMinutes: {type: integer, minimum: 5, maximum: 120, default: 15, description: Appointment length in minutes}
+        capacityPerSlot: {type: integer, minimum: 1, maximum: 50, default: 1, description: Patients per slot}
     PasswordChange:
       type: object
       required: [currentPassword, newPassword, confirmPassword]
-      properties: {currentPassword: {type: string, format: password}, newPassword: {type: string, format: password}, confirmPassword: {type: string, format: password, description: Must equal newPassword}}
+      properties:
+        currentPassword: {type: string, format: password}
+        newPassword: {type: string, format: password, description: At least 8 characters with a letter and a number; must differ from the current one}
+        confirmPassword: {type: string, format: password, description: Must equal newPassword}
+    DoctorList: {"type": "object", "properties": {"items": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "hospitalId": {"type": "string"}, "branchId": {"nullable": true, "type": "string"}, "name": {"type": "string"}, "photoUrl": {"nullable": true, "type": "string"}, "department": {"nullable": true, "type": "string"}, "specialization": {"type": "string"}, "registrationNumber": {"nullable": true, "type": "string"}, "qualifications": {"nullable": true, "type": "string"}, "fee": {"type": "integer"}, "availability": {"type": "string"}, "availabilityUpdatedAt": {"type": "string", "format": "date-time"}, "verificationStatus": {"type": "string"}, "verificationNote": {"nullable": true, "type": "string"}, "bio": {"type": "string", "nullable": true}, "yearsExperience": {"type": "integer", "nullable": true}, "languages": {"type": "string", "nullable": true}, "createdAt": {"type": "string", "format": "date-time"}, "updatedAt": {"type": "string", "format": "date-time"}, "hospitalName": {"type": "string"}}}}, "total": {"type": "integer"}, "page": {"type": "integer"}, "pageSize": {"type": "integer"}, "pages": {"type": "integer"}, "specializations": {"type": "array", "items": {"type": "string"}}}}
+    DoctorDetail: {"type": "object", "properties": {"doctor": {"type": "object", "properties": {"id": {"type": "string"}, "hospitalId": {"type": "string"}, "branchId": {"nullable": true, "type": "string"}, "name": {"type": "string"}, "photoUrl": {"nullable": true, "type": "string"}, "department": {"nullable": true, "type": "string"}, "specialization": {"type": "string"}, "registrationNumber": {"nullable": true, "type": "string"}, "qualifications": {"nullable": true, "type": "string"}, "fee": {"type": "integer"}, "availability": {"type": "string"}, "availabilityUpdatedAt": {"type": "string", "format": "date-time"}, "verificationStatus": {"type": "string"}, "verificationNote": {"nullable": true, "type": "string"}, "bio": {"type": "string"}, "yearsExperience": {"type": "integer"}, "languages": {"type": "string"}, "createdAt": {"type": "string", "format": "date-time"}, "updatedAt": {"type": "string", "format": "date-time"}, "hospitalName": {"type": "string"}}}}}
+    ReceptionistList: {"type": "object", "properties": {"items": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "name": {"type": "string"}, "email": {"type": "string"}, "phone": {"type": "string"}, "hospitalId": {"type": "string"}, "hospitalName": {"type": "string"}, "status": {"type": "string"}, "createdAt": {"type": "string", "format": "date-time"}}}}, "total": {"type": "integer"}, "page": {"type": "integer"}, "pageSize": {"type": "integer"}, "pages": {"type": "integer"}}}
+    QrList: {"type": "object", "properties": {"items": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "qrKey": {"type": "string"}, "hospitalId": {"type": "string"}, "hospitalName": {"type": "string"}, "branchId": {"nullable": true, "type": "string"}, "deskLabel": {"type": "string"}, "status": {"type": "string"}, "revokedReason": {"nullable": true, "type": "string"}, "link": {"type": "string"}, "createdAt": {"type": "string", "format": "date-time"}, "scanCount": {"type": "integer"}}}}}}
+    QrAnalytics: {"type": "object", "properties": {"series": {"type": "array", "items": {"type": "object", "properties": {"date": {"type": "string", "format": "date"}, "linked": {"type": "integer"}, "alreadyLinked": {"type": "integer"}, "failed": {"type": "integer"}}}}, "isSample": {"type": "boolean"}, "spikes": {"type": "array", "items": {}}}}
+    AppointmentList: {"type": "object", "properties": {"items": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "hospitalId": {"type": "string"}, "hospitalName": {"type": "string"}, "doctorId": {"type": "string"}, "doctorName": {"type": "string"}, "specialization": {"type": "string"}, "department": {"nullable": true, "type": "string"}, "branchName": {"nullable": true, "type": "string"}, "tokenCode": {"type": "string", "nullable": true}, "transactionId": {"type": "string", "nullable": true}, "patientId": {"type": "string"}, "patientName": {"type": "string"}, "patientMobile": {"type": "string"}, "date": {"type": "string", "format": "date"}, "time": {"type": "string"}, "fee": {"type": "integer"}, "status": {"type": "string"}, "paymentStatus": {"type": "string"}, "source": {"type": "string"}, "cancelReason": {"nullable": true, "type": "string"}, "createdAt": {"type": "string", "format": "date-time"}, "updatedAt": {"type": "string", "format": "date-time"}}}}, "total": {"type": "integer"}, "page": {"type": "integer"}, "pageSize": {"type": "integer"}, "pages": {"type": "integer"}}}
+    AppointmentDetail: {"type": "object", "properties": {"appointment": {"type": "object", "properties": {"id": {"type": "string"}, "hospitalId": {"type": "string"}, "hospitalName": {"type": "string"}, "doctorId": {"type": "string"}, "doctorName": {"type": "string"}, "specialization": {"type": "string"}, "department": {"nullable": true, "type": "string"}, "branchName": {"nullable": true, "type": "string"}, "tokenCode": {"nullable": true, "type": "string"}, "transactionId": {"type": "string"}, "patientId": {"type": "string"}, "patientName": {"type": "string"}, "patientMobile": {"type": "string"}, "date": {"type": "string", "format": "date"}, "time": {"type": "string"}, "fee": {"type": "integer"}, "status": {"type": "string"}, "paymentStatus": {"type": "string"}, "source": {"type": "string"}, "cancelReason": {"nullable": true, "type": "string"}, "createdAt": {"type": "string", "format": "date-time"}, "updatedAt": {"type": "string", "format": "date-time"}}}}}
+    PatientSearch: {"type": "object", "properties": {"items": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "name": {"type": "string"}, "mobile": {"type": "string"}, "email": {"nullable": true, "type": "string"}, "appointmentCount": {"type": "integer"}}}}}}
+    PatientDetail: {"type": "object", "properties": {"patient": {"type": "object", "properties": {"id": {"type": "string"}, "name": {"type": "string"}, "mobile": {"type": "string"}, "email": {"nullable": true, "type": "string"}, "createdAt": {"type": "string", "format": "date-time"}}}, "hospitals": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "name": {"type": "string"}, "linkedAt": {"type": "string", "format": "date-time"}}}}, "appointments": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "date": {"type": "string", "format": "date"}, "time": {"type": "string"}, "status": {"type": "string"}, "paymentStatus": {"type": "string"}, "fee": {"type": "integer"}, "hospitalName": {"type": "string"}, "doctorName": {"type": "string"}}}}, "payments": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "amount": {"type": "integer"}, "status": {"type": "string"}, "method": {"type": "string"}, "transactionId": {"type": "string"}, "paidAt": {"type": "string", "format": "date-time"}, "hospitalName": {"type": "string"}}}}, "refunds": {"type": "array", "items": {}}}}
+    PaymentList: {"type": "object", "properties": {"items": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "appointmentId": {"type": "string"}, "hospitalId": {"type": "string"}, "hospitalName": {"type": "string"}, "patientName": {"type": "string"}, "doctorId": {"type": "string"}, "doctorName": {"type": "string"}, "specialization": {"type": "string"}, "date": {"type": "string", "format": "date"}, "time": {"type": "string"}, "fee": {"type": "integer"}, "appointmentStatus": {"type": "string"}, "paymentStatus": {"type": "string"}, "payment": {"type": "object", "properties": {"method": {"type": "string"}, "transactionId": {"type": "string"}, "paidAt": {"type": "string", "format": "date-time"}}}, "createdAt": {"type": "string", "format": "date-time"}}}}, "total": {"type": "integer"}, "page": {"type": "integer"}, "pageSize": {"type": "integer"}, "pages": {"type": "integer"}, "summary": {"type": "object", "properties": {"collected": {"type": "integer"}, "failedAmount": {"type": "integer"}, "paidCount": {"type": "integer"}, "failedCount": {"type": "integer"}}}}}
+    RefundList: {"type": "object", "properties": {"items": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "paymentId": {"type": "string"}, "appointmentId": {"type": "string"}, "transactionId": {"type": "string"}, "hospitalId": {"type": "string"}, "hospitalName": {"type": "string"}, "patientName": {"type": "string"}, "amount": {"type": "integer"}, "reason": {"type": "string"}, "status": {"type": "string"}, "requiresChecker": {"type": "boolean"}, "decisionNote": {"type": "string", "nullable": true}, "createdAt": {"type": "string", "format": "date-time"}}}}, "total": {"type": "integer"}, "page": {"type": "integer"}, "pageSize": {"type": "integer"}, "pages": {"type": "integer"}}}
+    DisputeList: {"type": "object", "properties": {"items": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "paymentId": {"type": "string"}, "transactionId": {"type": "string"}, "hospitalId": {"type": "string"}, "hospitalName": {"type": "string"}, "patientName": {"type": "string"}, "appointmentId": {"type": "string"}, "amount": {"type": "integer"}, "reason": {"type": "string"}, "status": {"type": "string"}, "resolution": {"type": "string", "nullable": true}, "createdAt": {"type": "string", "format": "date-time"}}}}, "total": {"type": "integer"}, "page": {"type": "integer"}, "pageSize": {"type": "integer"}, "pages": {"type": "integer"}}}
+    SettlementList: {"type": "object", "properties": {"items": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "hospitalId": {"type": "string"}, "hospitalName": {"type": "string"}, "periodStart": {"type": "string", "format": "date"}, "periodEnd": {"type": "string", "format": "date"}, "grossCollection": {"type": "integer"}, "refundsAmount": {"type": "integer"}, "commissionAmount": {"type": "integer"}, "convenienceFees": {"type": "integer"}, "netPayout": {"type": "integer"}, "payoutDate": {"type": "string", "format": "date", "nullable": true}, "payoutReference": {"type": "string", "nullable": true}, "appointmentsCount": {"type": "integer"}, "commissionType": {"type": "string", "nullable": true}, "commissionValue": {"type": "integer", "nullable": true}, "autoGenerated": {"type": "boolean"}, "status": {"type": "string"}, "createdAt": {"type": "string", "format": "date-time"}}}}, "total": {"type": "integer"}, "page": {"type": "integer"}, "pageSize": {"type": "integer"}, "pages": {"type": "integer"}}}
+    WebhookList: {"type": "object", "properties": {"items": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "integer"}, "gateway": {"type": "string"}, "eventType": {"type": "string"}, "transactionId": {"type": "string"}, "status": {"type": "string"}, "failureReason": {"type": "string", "nullable": true}, "syncStatus": {"type": "string"}, "retryCount": {"type": "integer"}, "isSample": {"type": "boolean"}, "receivedAt": {"type": "string", "format": "date-time"}}}}, "total": {"type": "integer"}, "page": {"type": "integer"}, "pageSize": {"type": "integer"}, "pages": {"type": "integer"}}}
+    TicketList: {"type": "object", "properties": {"items": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "ticketNumber": {"type": "string"}, "createdBy": {"type": "string"}, "createdByName": {"type": "string"}, "createdByRole": {"type": "string"}, "hospitalId": {"type": "string", "nullable": true}, "hospitalName": {"type": "string", "nullable": true}, "category": {"type": "string"}, "subject": {"type": "string"}, "description": {"type": "string"}, "priority": {"type": "string"}, "status": {"type": "string"}, "assignedTo": {"type": "string"}, "assigneeName": {"type": "string"}, "slaDueAt": {"type": "string", "format": "date-time"}, "createdAt": {"type": "string", "format": "date-time"}, "updatedAt": {"type": "string", "format": "date-time"}, "resolvedAt": {"type": "string", "format": "date-time", "nullable": true}, "closedAt": {"nullable": true, "type": "string"}}}}, "total": {"type": "integer"}, "page": {"type": "integer"}, "pageSize": {"type": "integer"}, "pages": {"type": "integer"}, "counts": {"type": "object", "properties": {"CLOSED": {"type": "integer"}, "IN_PROGRESS": {"type": "integer"}}}, "categories": {"type": "array", "items": {"type": "string"}}}}
+    TicketAssignees: {"type": "object", "properties": {"items": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "name": {"type": "string"}, "role": {"type": "string"}}}}}}
+    TicketDetail: {"type": "object", "properties": {"ticket": {"type": "object", "properties": {"id": {"type": "string"}, "ticketNumber": {"type": "string"}, "createdBy": {"type": "string"}, "createdByName": {"type": "string"}, "createdByRole": {"type": "string"}, "hospitalId": {"nullable": true, "type": "string"}, "hospitalName": {"nullable": true, "type": "string"}, "category": {"type": "string"}, "subject": {"type": "string"}, "description": {"type": "string"}, "priority": {"type": "string"}, "status": {"type": "string"}, "assignedTo": {"type": "string"}, "assigneeName": {"type": "string"}, "slaDueAt": {"type": "string", "format": "date-time"}, "createdAt": {"type": "string", "format": "date-time"}, "updatedAt": {"type": "string", "format": "date-time"}, "resolvedAt": {"type": "string", "format": "date-time"}, "closedAt": {"nullable": true, "type": "string"}}}, "messages": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "integer"}, "senderId": {"type": "string"}, "senderRole": {"type": "string"}, "senderName": {"type": "string"}, "message": {"type": "string"}, "createdAt": {"type": "string", "format": "date-time"}}}}}}
+    TemplateList: {"type": "object", "properties": {"templates": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "eventKey": {"type": "string"}, "name": {"type": "string"}, "title": {"type": "string"}, "body": {"type": "string"}, "channels": {"type": "array", "items": {"type": "string"}}, "status": {"type": "string"}, "updatedAt": {"type": "string", "format": "date-time"}, "updatedByName": {"type": "string", "nullable": true}, "variables": {"type": "array", "items": {"type": "string"}}, "audience": {"type": "string"}, "sample": {"type": "object", "properties": {"patient_name": {"type": "string", "nullable": true}, "doctor_name": {"type": "string", "nullable": true}, "hospital_name": {"type": "string", "nullable": true}, "branch_name": {"type": "string", "nullable": true}, "appointment_id": {"type": "string", "nullable": true}, "appointment_date": {"type": "string", "format": "date", "nullable": true}, "appointment_time": {"type": "string", "nullable": true}, "availability": {"type": "string", "nullable": true}, "payment_amount": {"type": "string", "nullable": true}, "transaction_id": {"type": "string", "nullable": true}, "refund_id": {"type": "string", "nullable": true}, "refund_amount": {"type": "string", "nullable": true}, "decision_note": {"type": "string", "nullable": true}, "requested_by": {"type": "string", "nullable": true}, "support_ticket_id": {"type": "string", "nullable": true}, "ticket_subject": {"type": "string", "nullable": true}, "raised_by": {"type": "string", "nullable": true}, "raised_by_role": {"type": "string", "nullable": true}, "ticket_status": {"type": "string", "nullable": true}, "update_summary": {"type": "string", "nullable": true}, "token_number": {"type": "string", "nullable": true}, "token_status": {"type": "string", "nullable": true}}}}}}, "channels": {"type": "array", "items": {"type": "object", "properties": {"key": {"type": "string"}, "label": {"type": "string"}, "available": {"type": "boolean"}, "note": {"type": "string", "nullable": true}}}}, "unusedEvents": {"type": "array", "items": {}}}}
+    AnnouncementList: {"type": "object", "properties": {"announcements": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "title": {"type": "string"}, "message": {"type": "string"}, "target": {"type": "string"}, "status": {"type": "string"}, "publishedAt": {"type": "string", "format": "date-time"}, "createdAt": {"type": "string", "format": "date-time"}}}}}}
+    BannerList: {"type": "object", "properties": {"banners": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "title": {"type": "string"}, "message": {"type": "string"}, "ctaLabel": {"nullable": true, "type": "string"}, "ctaUrl": {"nullable": true, "type": "string"}, "startsAt": {"type": "string"}, "endsAt": {"nullable": true, "type": "string"}, "status": {"type": "string"}, "createdAt": {"type": "string", "format": "date-time"}}}}}}
+    SettingList: {"type": "object", "properties": {"settings": {"type": "array", "items": {"type": "object", "properties": {"key": {"type": "string"}, "value": {"type": "integer"}, "updatedAt": {"type": "string", "format": "date-time"}}}}}}
+    FeatureFlagList: {"type": "object", "properties": {"flags": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "integer"}, "flagKey": {"type": "string"}, "hospitalId": {"type": "string", "nullable": true}, "hospitalName": {"type": "string", "nullable": true}, "scopeKey": {"type": "string"}, "enabled": {"type": "boolean"}, "updatedAt": {"type": "string", "format": "date-time"}}}}}}
+    AppVersionList: {"type": "object", "properties": {"versions": {"type": "array", "items": {"type": "object", "properties": {"platform": {"type": "string"}, "currentVersion": {"type": "string"}, "minSupportedVersion": {"type": "string"}, "latestVersion": {"type": "string"}, "forceUpdate": {"type": "boolean"}, "updateMessage": {"nullable": true, "type": "string"}, "updatedAt": {"type": "string", "format": "date-time"}}}}}}
+    AuditLogList: {"type": "object", "properties": {"items": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "integer"}, "userId": {"type": "string"}, "userName": {"type": "string"}, "role": {"type": "string"}, "action": {"type": "string"}, "entityType": {"type": "string"}, "entityId": {"type": "string"}, "summary": {"type": "string"}, "previousValue": {"description": "Any JSON value (null when not applicable)"}, "newValue": {"description": "Any JSON value (null when not applicable)"}, "ipAddress": {"type": "string"}, "createdAt": {"type": "string", "format": "date-time"}}}}, "total": {"type": "integer"}, "page": {"type": "integer"}, "pageSize": {"type": "integer"}, "pages": {"type": "integer"}, "actions": {"type": "array", "items": {"type": "string"}}}}
+    RecMe: {"type": "object", "properties": {"user": {"type": "object", "properties": {"id": {"type": "string"}, "role": {"type": "string"}, "name": {"type": "string"}, "firstName": {"type": "string"}, "initials": {"type": "string"}, "username": {"type": "string"}, "email": {"type": "string"}, "phone": {"type": "string"}, "hospitalId": {"type": "string"}, "status": {"type": "string"}, "passwordChangedAt": {"nullable": true, "type": "string"}, "createdAt": {"type": "string", "format": "date-time"}}}, "hospital": {"type": "object", "properties": {"id": {"type": "string"}, "name": {"type": "string"}, "phone": {"type": "string"}, "email": {"type": "string"}, "address": {"type": "object", "properties": {"line1": {"type": "string"}, "city": {"type": "string"}, "state": {"type": "string"}, "pincode": {"type": "string"}}}, "addressText": {"type": "string"}, "qrLink": {"type": "string"}, "updatedAt": {"type": "string", "format": "date-time"}}}}}
+    RecDashboard: {"type": "object", "properties": {"date": {"type": "string", "format": "date"}, "stats": {"type": "object", "properties": {"totalDoctors": {"type": "integer"}, "newThisMonth": {"type": "integer"}, "present": {"type": "integer"}, "absent": {"type": "integer"}, "presentPct": {"type": "integer"}, "absentPct": {"type": "integer"}, "todayAppointments": {"type": "integer"}, "yesterdayAppointments": {"type": "integer"}, "changePct": {"type": "integer"}, "paidToday": {"type": "integer"}, "paidPct": {"type": "integer"}}}, "availability": {"type": "object", "properties": {"total": {"type": "integer"}, "present": {"type": "integer"}, "absent": {"type": "integer"}, "bySpecialization": {"type": "array", "items": {"type": "object", "properties": {"name": {"type": "string"}, "total": {"type": "integer"}, "present": {"type": "integer"}}}}}}, "today": {"type": "array", "items": {}}, "todayTotal": {"type": "integer"}, "recent": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "hospitalId": {"type": "string"}, "hospitalName": {"type": "string"}, "doctorId": {"type": "string"}, "doctorName": {"type": "string"}, "specialization": {"type": "string"}, "department": {"nullable": true, "type": "string"}, "branchName": {"nullable": true, "type": "string"}, "tokenCode": {"type": "string", "nullable": true}, "transactionId": {"type": "string", "nullable": true}, "patientId": {"type": "string"}, "patientName": {"type": "string"}, "patientMobile": {"type": "string"}, "date": {"type": "string", "format": "date"}, "time": {"type": "string"}, "fee": {"type": "integer"}, "status": {"type": "string"}, "paymentStatus": {"type": "string"}, "source": {"type": "string"}, "cancelReason": {"nullable": true, "type": "string"}, "createdAt": {"type": "string", "format": "date-time"}, "updatedAt": {"type": "string", "format": "date-time"}}}}, "tokens": {"type": "object", "properties": {"total": {"type": "integer"}, "waiting": {"type": "integer"}, "called": {"type": "integer"}, "in_consultation": {"type": "integer"}, "completed": {"type": "integer"}, "cancelled": {"type": "integer"}, "skipped": {"type": "integer"}, "nowCalling": {"type": "array", "items": {}}}}, "hospital": {"type": "object", "properties": {"id": {"type": "string"}, "name": {"type": "string"}, "phone": {"type": "string"}, "email": {"type": "string"}, "address": {"type": "object", "properties": {"line1": {"type": "string"}, "city": {"type": "string"}, "state": {"type": "string"}, "pincode": {"type": "string"}}}, "addressText": {"type": "string"}, "qrLink": {"type": "string"}, "updatedAt": {"type": "string", "format": "date-time"}}}}}
+    RecSearch: {"type": "object", "properties": {"doctors": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "name": {"type": "string"}, "specialization": {"type": "string"}, "availability": {"type": "string"}}}}, "patients": {"type": "array", "items": {"type": "object", "properties": {"name": {"type": "string"}, "visits": {"type": "integer"}, "lastDate": {"type": "string", "format": "date"}, "lastTime": {"type": "string"}, "doctorName": {"type": "string"}}}}}}
+    RecAppointmentList: {"type": "object", "properties": {"items": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "hospitalId": {"type": "string"}, "hospitalName": {"type": "string"}, "doctorId": {"type": "string"}, "doctorName": {"type": "string"}, "specialization": {"type": "string"}, "department": {"nullable": true, "type": "string"}, "branchName": {"nullable": true, "type": "string"}, "tokenCode": {"type": "string", "nullable": true}, "transactionId": {"type": "string", "nullable": true}, "patientId": {"type": "string"}, "patientName": {"type": "string"}, "patientMobile": {"type": "string"}, "date": {"type": "string", "format": "date"}, "time": {"type": "string"}, "fee": {"type": "integer"}, "status": {"type": "string"}, "paymentStatus": {"type": "string"}, "source": {"type": "string"}, "cancelReason": {"nullable": true, "type": "string"}, "createdAt": {"type": "string", "format": "date-time"}, "updatedAt": {"type": "string", "format": "date-time"}}}}, "total": {"type": "integer"}, "page": {"type": "integer"}, "pageSize": {"type": "integer"}, "pages": {"type": "integer"}, "counts": {"type": "object", "properties": {"all": {"type": "integer"}, "confirmed": {"type": "integer"}, "pending": {"type": "integer"}, "completed": {"type": "integer"}, "cancelled": {"type": "integer"}}}}}
+    RecAppointmentDetail: {"type": "object", "properties": {"appointment": {"type": "object", "properties": {"id": {"type": "string"}, "hospitalId": {"type": "string"}, "hospitalName": {"type": "string"}, "doctorId": {"type": "string"}, "doctorName": {"type": "string"}, "specialization": {"type": "string"}, "department": {"nullable": true, "type": "string"}, "branchName": {"nullable": true, "type": "string"}, "tokenCode": {"nullable": true, "type": "string"}, "transactionId": {"type": "string"}, "patientId": {"type": "string"}, "patientName": {"type": "string"}, "patientMobile": {"type": "string"}, "date": {"type": "string", "format": "date"}, "time": {"type": "string"}, "fee": {"type": "integer"}, "status": {"type": "string"}, "paymentStatus": {"type": "string"}, "source": {"type": "string"}, "cancelReason": {"nullable": true, "type": "string"}, "createdAt": {"type": "string", "format": "date-time"}, "updatedAt": {"type": "string", "format": "date-time"}}}}}
+    RecDoctorList: {"type": "object", "properties": {"doctors": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "hospitalId": {"type": "string"}, "branchId": {"nullable": true, "type": "string"}, "name": {"type": "string"}, "photoUrl": {"nullable": true, "type": "string"}, "department": {"nullable": true, "type": "string"}, "specialization": {"type": "string"}, "registrationNumber": {"nullable": true, "type": "string"}, "qualifications": {"nullable": true, "type": "string"}, "fee": {"type": "integer"}, "availability": {"type": "string"}, "availabilityUpdatedAt": {"type": "string", "format": "date-time"}, "verificationStatus": {"type": "string"}, "verificationNote": {"nullable": true, "type": "string"}, "bio": {"type": "string", "nullable": true}, "yearsExperience": {"type": "integer", "nullable": true}, "languages": {"type": "string", "nullable": true}, "createdAt": {"type": "string", "format": "date-time"}, "updatedAt": {"type": "string", "format": "date-time"}, "todayAppointments": {"type": "integer"}}}}, "summary": {"type": "object", "properties": {"total": {"type": "integer"}, "present": {"type": "integer"}, "absent": {"type": "integer"}}}, "specializations": {"type": "array", "items": {"type": "string"}}}}
+    RecDoctorDetail: {"type": "object", "properties": {"doctor": {"type": "object", "properties": {"id": {"type": "string"}, "hospitalId": {"type": "string"}, "branchId": {"nullable": true, "type": "string"}, "name": {"type": "string"}, "photoUrl": {"nullable": true, "type": "string"}, "department": {"nullable": true, "type": "string"}, "specialization": {"type": "string"}, "registrationNumber": {"nullable": true, "type": "string"}, "qualifications": {"nullable": true, "type": "string"}, "fee": {"type": "integer"}, "availability": {"type": "string"}, "availabilityUpdatedAt": {"type": "string", "format": "date-time"}, "verificationStatus": {"type": "string"}, "verificationNote": {"nullable": true, "type": "string"}, "bio": {"type": "string"}, "yearsExperience": {"type": "integer"}, "languages": {"type": "string"}, "createdAt": {"type": "string", "format": "date-time"}, "updatedAt": {"type": "string", "format": "date-time"}, "stats": {"type": "object", "properties": {"today": {"type": "integer"}, "upcoming": {"type": "integer"}, "completed": {"type": "integer"}}}}}, "schedule": {"type": "array", "items": {}}}}
+    RecTokenList: {"type": "object", "properties": {"date": {"type": "string", "format": "date"}, "items": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "hospitalId": {"type": "string"}, "appointmentId": {"type": "string"}, "doctorId": {"type": "string"}, "doctorName": {"type": "string"}, "specialization": {"type": "string"}, "patientName": {"type": "string"}, "date": {"type": "string", "format": "date"}, "number": {"type": "integer"}, "code": {"type": "string"}, "status": {"type": "string"}, "time": {"type": "string"}, "appointmentStatus": {"type": "string"}, "paymentStatus": {"type": "string"}, "fee": {"type": "integer"}, "createdAt": {"type": "string", "format": "date-time"}, "updatedAt": {"type": "string", "format": "date-time"}, "calledAt": {"type": "string", "format": "date-time", "nullable": true}, "completedAt": {"type": "string", "format": "date-time", "nullable": true}, "cancelledAt": {"nullable": true, "type": "string"}, "skippedAt": {"nullable": true, "type": "string"}}}}, "summary": {"type": "object", "properties": {"total": {"type": "integer"}, "waiting": {"type": "integer"}, "called": {"type": "integer"}, "in_consultation": {"type": "integer"}, "completed": {"type": "integer"}, "cancelled": {"type": "integer"}, "skipped": {"type": "integer"}}}}}
+    RecTokenEligible: {"type": "object", "properties": {"date": {"type": "string", "format": "date"}, "items": {"type": "array", "items": {"type": "object", "properties": {"appointmentId": {"type": "string"}, "patientName": {"type": "string"}, "doctorId": {"type": "string"}, "doctorName": {"type": "string"}, "specialization": {"type": "string"}, "time": {"type": "string"}, "status": {"type": "string"}, "paymentStatus": {"type": "string"}}}}, "canIssue": {"type": "boolean"}, "nextCode": {"type": "string"}}}
+    RecPaymentList: {"type": "object", "properties": {"items": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "patientName": {"type": "string"}, "doctorId": {"type": "string"}, "doctorName": {"type": "string"}, "specialization": {"type": "string"}, "date": {"type": "string", "format": "date"}, "time": {"type": "string"}, "fee": {"type": "integer"}, "paymentStatus": {"type": "string"}, "payment": {"type": "object", "properties": {"method": {"type": "string"}, "transactionId": {"type": "string"}, "paidAt": {"type": "string", "format": "date-time"}}, "nullable": true}}}}, "total": {"type": "integer"}, "page": {"type": "integer"}, "pageSize": {"type": "integer"}, "pages": {"type": "integer"}, "summary": {"type": "object", "properties": {"collected": {"type": "integer"}, "pendingAmount": {"type": "integer"}, "paidCount": {"type": "integer"}, "pendingCount": {"type": "integer"}, "total": {"type": "integer"}}}}}
+    RecHospital: {"type": "object", "properties": {"hospital": {"type": "object", "properties": {"id": {"type": "string"}, "name": {"type": "string"}, "phone": {"type": "string"}, "email": {"type": "string"}, "address": {"type": "object", "properties": {"line1": {"type": "string"}, "city": {"type": "string"}, "state": {"type": "string"}, "pincode": {"type": "string"}}}, "addressText": {"type": "string"}, "qrLink": {"type": "string"}, "updatedAt": {"type": "string", "format": "date-time"}}}}}
+    RecNotificationList: {"type": "object", "properties": {"items": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "type": {"type": "string"}, "eventKey": {"type": "string"}, "title": {"type": "string"}, "body": {"type": "string"}, "link": {"type": "string"}, "at": {"type": "string", "format": "date-time"}, "unread": {"type": "boolean"}}}}, "unread": {"type": "integer"}}}
+    RecTicketList: {"type": "object", "properties": {"items": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "ticketNumber": {"type": "string"}, "createdBy": {"type": "string"}, "createdByName": {"type": "string"}, "createdByRole": {"type": "string"}, "hospitalId": {"type": "string"}, "hospitalName": {"type": "string"}, "category": {"type": "string"}, "subject": {"type": "string"}, "description": {"type": "string"}, "priority": {"type": "string"}, "status": {"type": "string"}, "assignedTo": {"type": "string"}, "assigneeName": {"type": "string"}, "slaDueAt": {"type": "string", "format": "date-time"}, "createdAt": {"type": "string", "format": "date-time"}, "updatedAt": {"type": "string", "format": "date-time"}, "resolvedAt": {"nullable": true, "type": "string"}, "closedAt": {"nullable": true, "type": "string"}}}}, "categories": {"type": "array", "items": {"type": "string"}}}}
+    RecTicketDetail: {"type": "object", "properties": {"ticket": {"type": "object", "properties": {"id": {"type": "string"}, "ticketNumber": {"type": "string"}, "createdBy": {"type": "string"}, "createdByName": {"type": "string"}, "createdByRole": {"type": "string"}, "hospitalId": {"type": "string"}, "hospitalName": {"type": "string"}, "category": {"type": "string"}, "subject": {"type": "string"}, "description": {"type": "string"}, "priority": {"type": "string"}, "status": {"type": "string"}, "assignedTo": {"type": "string"}, "assigneeName": {"type": "string"}, "slaDueAt": {"type": "string", "format": "date-time"}, "createdAt": {"type": "string", "format": "date-time"}, "updatedAt": {"type": "string", "format": "date-time"}, "resolvedAt": {"nullable": true, "type": "string"}, "closedAt": {"nullable": true, "type": "string"}}}, "messages": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "integer"}, "senderId": {"type": "string"}, "senderRole": {"type": "string"}, "senderName": {"type": "string"}, "message": {"type": "string"}, "createdAt": {"type": "string", "format": "date-time"}}}}}}
+    RecTokenDetail: {"type": "object", "properties": {"token": {"type": "object", "properties": {"id": {"type": "string"}, "hospitalId": {"type": "string"}, "appointmentId": {"type": "string"}, "doctorId": {"type": "string"}, "doctorName": {"type": "string"}, "specialization": {"type": "string"}, "patientName": {"type": "string"}, "date": {"type": "string", "format": "date"}, "number": {"type": "integer"}, "code": {"type": "string"}, "status": {"type": "string"}, "time": {"type": "string"}, "appointmentStatus": {"type": "string"}, "paymentStatus": {"type": "string"}, "fee": {"type": "integer"}, "createdAt": {"type": "string", "format": "date-time"}, "updatedAt": {"type": "string", "format": "date-time"}, "calledAt": {"type": "string", "format": "date-time"}, "completedAt": {"type": "string", "format": "date-time"}, "cancelledAt": {"nullable": true, "type": "string"}, "skippedAt": {"nullable": true, "type": "string"}}}}}
+    DocAppointmentList: {"type": "object", "properties": {"items": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "hospitalId": {"type": "string"}, "hospitalName": {"type": "string"}, "doctorId": {"type": "string"}, "doctorName": {"type": "string"}, "specialization": {"type": "string"}, "department": {"nullable": true, "type": "string"}, "branchName": {"nullable": true, "type": "string"}, "tokenCode": {"type": "string", "nullable": true}, "transactionId": {"type": "string", "nullable": true}, "patientId": {"type": "string"}, "patientName": {"type": "string"}, "patientMobile": {"type": "string"}, "date": {"type": "string", "format": "date"}, "time": {"type": "string"}, "fee": {"type": "integer"}, "status": {"type": "string"}, "paymentStatus": {"type": "string"}, "source": {"type": "string"}, "cancelReason": {"nullable": true, "type": "string"}, "createdAt": {"type": "string", "format": "date-time"}, "updatedAt": {"type": "string", "format": "date-time"}}}}, "total": {"type": "integer"}, "page": {"type": "integer"}, "pageSize": {"type": "integer"}, "pages": {"type": "integer"}}}
+    DocAppointmentDetail: {"type": "object", "properties": {"appointment": {"type": "object", "properties": {"id": {"type": "string"}, "hospitalId": {"type": "string"}, "hospitalName": {"type": "string"}, "doctorId": {"type": "string"}, "doctorName": {"type": "string"}, "specialization": {"type": "string"}, "department": {"nullable": true, "type": "string"}, "branchName": {"nullable": true, "type": "string"}, "tokenCode": {"type": "string"}, "transactionId": {"type": "string"}, "patientId": {"type": "string"}, "patientName": {"type": "string"}, "patientMobile": {"type": "string"}, "date": {"type": "string", "format": "date"}, "time": {"type": "string"}, "fee": {"type": "integer"}, "status": {"type": "string"}, "paymentStatus": {"type": "string"}, "source": {"type": "string"}, "cancelReason": {"nullable": true, "type": "string"}, "createdAt": {"type": "string", "format": "date-time"}, "updatedAt": {"type": "string", "format": "date-time"}}}}}
+    DocQueue: {"type": "object", "properties": {"date": {"type": "string", "format": "date"}, "items": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "hospitalId": {"type": "string"}, "appointmentId": {"type": "string"}, "doctorId": {"type": "string"}, "doctorName": {"type": "string"}, "specialization": {"type": "string"}, "patientName": {"type": "string"}, "date": {"type": "string", "format": "date"}, "number": {"type": "integer"}, "code": {"type": "string"}, "status": {"type": "string"}, "time": {"type": "string"}, "appointmentStatus": {"type": "string"}, "paymentStatus": {"type": "string"}, "fee": {"type": "integer"}, "createdAt": {"type": "string", "format": "date-time"}, "updatedAt": {"type": "string", "format": "date-time"}, "calledAt": {"type": "string", "format": "date-time", "nullable": true}, "completedAt": {"nullable": true, "type": "string"}, "cancelledAt": {"nullable": true, "type": "string"}, "skippedAt": {"nullable": true, "type": "string"}}}}, "summary": {"type": "object", "properties": {"total": {"type": "integer"}, "waiting": {"type": "integer"}, "called": {"type": "integer"}, "in_consultation": {"type": "integer"}, "completed": {"type": "integer"}, "cancelled": {"type": "integer"}, "skipped": {"type": "integer"}}}}}
+    DocScheduleList: {"type": "object", "properties": {"items": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "integer"}, "doctorId": {"type": "string"}, "dayOfWeek": {"type": "integer"}, "startTime": {"type": "string"}, "endTime": {"type": "string"}, "slotMinutes": {"type": "integer"}}}}}}
+    DocPatientList: {"type": "object", "properties": {"items": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "name": {"type": "string"}, "mobile": {"type": "string"}, "totalVisits": {"type": "integer"}, "completedVisits": {"type": "integer"}, "lastAppointment": {"type": "string"}, "nextAppointment": {"nullable": true, "type": "string"}}}}, "summary": {"type": "object", "properties": {"total": {"type": "integer"}, "today": {"type": "integer"}, "upcoming": {"type": "integer"}, "completed": {"type": "integer"}}}}}
+    DocPatientDetail: {"type": "object", "properties": {"patient": {"type": "object", "properties": {"id": {"type": "string"}, "name": {"type": "string"}, "mobile": {"type": "string"}, "email": {"nullable": true, "type": "string"}}}, "appointments": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "date": {"type": "string", "format": "date"}, "time": {"type": "string"}, "status": {"type": "string"}, "paymentStatus": {"type": "string"}, "fee": {"type": "integer"}}}}}}
+    DocProfile: {"type": "object", "properties": {"doctor": {"type": "object", "properties": {"id": {"type": "string"}, "hospitalId": {"type": "string"}, "branchId": {"nullable": true, "type": "string"}, "name": {"type": "string"}, "photoUrl": {"nullable": true, "type": "string"}, "department": {"nullable": true, "type": "string"}, "specialization": {"type": "string"}, "registrationNumber": {"nullable": true, "type": "string"}, "qualifications": {"nullable": true, "type": "string"}, "fee": {"type": "integer"}, "availability": {"type": "string"}, "availabilityUpdatedAt": {"type": "string", "format": "date-time"}, "verificationStatus": {"type": "string"}, "verificationNote": {"nullable": true, "type": "string"}, "bio": {"type": "string"}, "yearsExperience": {"type": "integer"}, "languages": {"type": "string"}, "createdAt": {"type": "string", "format": "date-time"}, "updatedAt": {"type": "string", "format": "date-time"}}}, "user": {"type": "object", "properties": {"name": {"type": "string"}, "email": {"type": "string"}, "phone": {"nullable": true, "type": "string"}}}, "hospital": {"type": "object", "properties": {"id": {"type": "string"}, "name": {"type": "string"}, "phone": {"type": "string"}, "email": {"type": "string"}, "address": {"type": "object", "properties": {"line1": {"type": "string"}, "city": {"type": "string"}, "state": {"type": "string"}, "pincode": {"type": "string"}}}, "addressText": {"type": "string"}, "qrLink": {"type": "string"}, "updatedAt": {"type": "string", "format": "date-time"}}}}}
+    DocTicketList: {"type": "object", "properties": {"items": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "ticketNumber": {"type": "string"}, "createdBy": {"type": "string"}, "createdByName": {"type": "string"}, "createdByRole": {"type": "string"}, "hospitalId": {"type": "string"}, "hospitalName": {"type": "string"}, "category": {"type": "string"}, "subject": {"type": "string"}, "description": {"type": "string"}, "priority": {"type": "string"}, "status": {"type": "string"}, "assignedTo": {"type": "string"}, "assigneeName": {"type": "string"}, "slaDueAt": {"type": "string", "format": "date-time"}, "createdAt": {"type": "string", "format": "date-time"}, "updatedAt": {"type": "string", "format": "date-time"}, "resolvedAt": {"nullable": true, "type": "string"}, "closedAt": {"nullable": true, "type": "string"}}}}, "categories": {"type": "array", "items": {"type": "string"}}}}
+    DocTicketDetail: {"type": "object", "properties": {"ticket": {"type": "object", "properties": {"id": {"type": "string"}, "ticketNumber": {"type": "string"}, "createdBy": {"type": "string"}, "createdByName": {"type": "string"}, "createdByRole": {"type": "string"}, "hospitalId": {"type": "string"}, "hospitalName": {"type": "string"}, "category": {"type": "string"}, "subject": {"type": "string"}, "description": {"type": "string"}, "priority": {"type": "string"}, "status": {"type": "string"}, "assignedTo": {"type": "string"}, "assigneeName": {"type": "string"}, "slaDueAt": {"type": "string", "format": "date-time"}, "createdAt": {"type": "string", "format": "date-time"}, "updatedAt": {"type": "string", "format": "date-time"}, "resolvedAt": {"nullable": true, "type": "string"}, "closedAt": {"nullable": true, "type": "string"}}}, "messages": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "integer"}, "senderId": {"type": "string"}, "senderRole": {"type": "string"}, "senderName": {"type": "string"}, "message": {"type": "string"}, "createdAt": {"type": "string", "format": "date-time"}}}}}}

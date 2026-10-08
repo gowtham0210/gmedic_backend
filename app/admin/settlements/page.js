@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Icon from '../../../components/Icon';
+import { formatDate } from '../../../lib/format';
 
 const STATUS_TONE = { PENDING: 'pending', PROCESSING: 'pending', PAID: 'confirmed', ON_HOLD: 'cancelled' };
 const toast = (msg, type = 'success') => { if (typeof window !== 'undefined' && window.G) window.G.toast(msg, type); };
@@ -204,7 +205,7 @@ export default function SettlementsPage() {
                 <tr key={s.id}>
                   <td data-label="Settlement" className="cell-primary mono">{s.id}</td>
                   <td data-label="Hospital" className="text-muted">{s.hospitalName}</td>
-                  <td data-label="Period" className="mono">{s.periodStart} → {s.periodEnd}</td>
+                  <td data-label="Period" className="nowrap">{formatDate(s.periodStart)} → {formatDate(s.periodEnd)}</td>
  <td data-label="Appts" className="num">{s.appointmentsCount}</td>
                   <td data-label="Gross" className="num fee">{money(s.grossCollection)}</td>
                   <td data-label="Refunds" className="num">{money(s.refundsAmount)}</td>

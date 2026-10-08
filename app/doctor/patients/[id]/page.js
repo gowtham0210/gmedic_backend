@@ -3,6 +3,7 @@
 import { useEffect, useState, use } from 'react';
 import Link from 'next/link';
 import Icon from '../../../../components/Icon';
+import { formatDate } from '../../../../lib/format';
 
 const toast = (msg, type = 'success') => { if (typeof window !== 'undefined' && window.G) window.G.toast(msg, type); };
 
@@ -79,7 +80,7 @@ export default function PatientDetailPage({ params }) {
                 {appointments.map((a) => (
                   <tr key={a.id}>
                     <td data-label="Appointment ID" className="mono">{a.id}</td>
-                    <td data-label="Date">{a.date}</td>
+                    <td data-label="Date" className="nowrap">{formatDate(a.date)}</td>
                     <td data-label="Time" className="mono">{a.time}</td>
                     <td data-label="Fee" className="num fee">{money(a.fee)}</td>
                     <td data-label="Payment"><span className={`badge badge--${a.paymentStatus === 'paid' ? 'confirmed' : 'pending'}`}>{a.paymentStatus}</span></td>
@@ -103,7 +104,7 @@ export default function PatientDetailPage({ params }) {
                 {paid.map((a) => (
                   <tr key={a.id}>
                     <td data-label="Appointment ID" className="mono">{a.id}</td>
-                    <td data-label="Date">{a.date}</td>
+                    <td data-label="Date" className="nowrap">{formatDate(a.date)}</td>
                     <td data-label="Amount" className="num fee">{money(a.fee)}</td>
                     <td data-label="Status"><span className="badge badge--confirmed">Paid</span></td>
                   </tr>

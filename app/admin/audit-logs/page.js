@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Icon from '../../../components/Icon';
+import { formatDateTime } from '../../../lib/format';
 
 const toast = (msg, type = 'success') => { if (typeof window !== 'undefined' && window.G) window.G.toast(msg, type); };
 
@@ -26,7 +27,7 @@ function DetailModal({ entry, onClose }) {
       <div className="modal__panel">
         <div className="modal__head">
           <div className="modal__icon tone-teal"><Icon name="clipboard-list" /></div>
-          <div><h2>{entry.action}</h2><p>{new Date(entry.createdAt).toLocaleString()}</p></div>
+          <div><h2>{entry.action}</h2><p>{formatDateTime(entry.createdAt)}</p></div>
           <button type="button" className="icon-btn" onClick={onClose} aria-label="Close"><Icon name="x" /></button>
         </div>
         <div className="modal__body">
@@ -127,7 +128,7 @@ export default function AuditLogsPage() {
               )}
               {items.map((e) => (
                 <tr key={e.id}>
-                  <td data-label="When" className="text-muted mono">{new Date(e.createdAt).toLocaleString()}</td>
+                  <td data-label="When" className="text-muted nowrap">{formatDateTime(e.createdAt)}</td>
                   <td data-label="User">{e.userName}<span className="cell-sub">{e.role}</span></td>
                   <td data-label="Action" className="mono">{e.action}</td>
                   <td data-label="Entity">{e.entityType}{e.entityId ? <span className="cell-sub mono">{e.entityId}</span> : null}</td>

@@ -266,6 +266,12 @@ Shared config in [`components/admin/DashboardCharts.js`](../components/admin/Das
   with the figures. Amounts use `₹` with Indian grouping (`toLocaleString('en-IN')`).
 - Name the value precisely: `Consultation Fee`, not `Fee`; keep the column header,
   the cell `data-label` (used as the label on phones) and any edit-form label the same.
+- **Dates read as `14 Oct 2026`** everywhere (date + time: `7 Oct 2026, 02:30 PM`;
+  chart axes: `14 Oct`). Use `lib/format.js` in React (`formatDate`,
+  `formatDateTime`, `formatShortDate`, `formatTime`) and `G.date` / `G.time` in
+  plain-JS pages — they produce identical output. Never render raw ISO
+  (`2026-10-14`) or call `toLocaleString()` without a locale (ambiguous 7/10 vs 10/7).
+  Dates are not monospace; use `nowrap`.
 - Empty tables follow §5 (nothing exists yet vs no match).
 - **Identifiers are human-referenceable and consistent.** QR codes use
   `QR-<hospital>-<NN>` (e.g. `QR-HSP001-02`), generated only via

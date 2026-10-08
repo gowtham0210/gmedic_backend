@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Icon from '../../../components/Icon';
+import { formatDate } from '../../../lib/format';
 
 const STATUS_TONE = { confirmed: 'confirmed', pending: 'pending', completed: 'completed', cancelled: 'cancelled' };
 const toast = (msg, type = 'success') => { if (typeof window !== 'undefined' && window.G) window.G.toast(msg, type); };
@@ -109,7 +110,7 @@ function Drawer({ appointment, onClose, onChanged }) {
           <div className="modal__body" style={{ flex: 1 }}>
             <dl className="kv" style={{ marginBottom: 20 }}>
               <div><dt>Mobile</dt><dd className="mono">{maskedMobile}</dd></div>
-              <div><dt>Date</dt><dd>{a.date}</dd></div>
+              <div><dt>Date</dt><dd>{formatDate(a.date)}</dd></div>
               <div><dt>Time</dt><dd>{time12(a.time)}</dd></div>
               <div><dt>Hospital</dt><dd>{a.hospitalName}</dd></div>
               <div><dt>Fee</dt><dd>{money(a.fee)}</dd></div>
@@ -245,7 +246,7 @@ function AppointmentsPageInner() {
                 <tr key={a.id}>
                   <td data-label="Patient" className="cell-primary">{a.patientName}</td>
                   <td data-label="Appointment ID" className="mono">{a.id}</td>
-                  <td data-label="Date & Time" className="mono">{a.date} {time12(a.time)}</td>
+                  <td data-label="Date & Time" className="nowrap">{formatDate(a.date)}, {time12(a.time)}</td>
                   <td data-label="Fee" className="num fee">{money(a.fee)}</td>
                   <td data-label="Payment"><span className={`badge badge--${a.paymentStatus === 'paid' ? 'confirmed' : 'pending'}`}>{a.paymentStatus}</span></td>
                   <td data-label="Status"><span className={`badge badge--${STATUS_TONE[a.status]}`}>{a.status}</span></td>

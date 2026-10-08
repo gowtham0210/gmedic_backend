@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Icon from '../../../components/Icon';
+import { formatDate, formatTime } from '../../../lib/format';
 
 const toast = (msg, type = 'success') => { if (typeof window !== 'undefined' && window.G) window.G.toast(msg, type); };
 
@@ -123,7 +124,7 @@ export default function PatientsPage() {
                 <div><dt>Patient ID</dt><dd className="mono">{detail.patient.id}</dd></div>
                 <div><dt>Mobile</dt><dd>{detail.patient.mobile}</dd></div>
                 <div><dt>Email</dt><dd>{detail.patient.email || '—'}</dd></div>
-                <div><dt>Registered</dt><dd>{detail.patient.createdAt ? new Date(detail.patient.createdAt).toLocaleDateString() : '—'}</dd></div>
+                <div><dt>Registered</dt><dd>{detail.patient.createdAt ? formatDate(detail.patient.createdAt) : '—'}</dd></div>
               </dl>
             </article>
 
@@ -135,7 +136,7 @@ export default function PatientsPage() {
                   <tbody>
                     {detail.appointments.length === 0 && <tr><td colSpan={5} style={{ whiteSpace: 'normal' }}><p className="text-muted">No appointments yet.</p></td></tr>}
                     {detail.appointments.map((a) => (
-                      <tr key={a.id}><td data-label="Hospital">{a.hospitalName}</td><td data-label="Doctor">{a.doctorName}</td><td data-label="Date" className="mono">{a.date} {a.time}</td><td data-label="Fee" className="num fee">{money(a.fee)}</td><td data-label="Status"><span className={`badge badge--${a.status}`}>{a.status}</span></td></tr>
+                      <tr key={a.id}><td data-label="Hospital">{a.hospitalName}</td><td data-label="Doctor">{a.doctorName}</td><td data-label="Date" className="nowrap">{formatDate(a.date)}, {formatTime(a.time)}</td><td data-label="Fee" className="num fee">{money(a.fee)}</td><td data-label="Status"><span className={`badge badge--${a.status}`}>{a.status}</span></td></tr>
                     ))}
                   </tbody>
                 </table>
@@ -147,7 +148,7 @@ export default function PatientsPage() {
             <article className="card">
               <div className="card__head"><h2 className="card__title"><Icon name="hospital" />Linked Hospitals</h2></div>
               {detail.hospitals.length === 0 && <p className="text-muted">Not linked to any hospital yet.</p>}
-              {detail.hospitals.map((h) => <div key={h.id} className="kv"><div><dt>{h.name}</dt><dd className="text-muted">Linked {h.linkedAt ? new Date(h.linkedAt).toLocaleDateString() : '—'}</dd></div></div>)}
+              {detail.hospitals.map((h) => <div key={h.id} className="kv"><div><dt>{h.name}</dt><dd className="text-muted">Linked {h.linkedAt ? formatDate(h.linkedAt) : '—'}</dd></div></div>)}
             </article>
 
             <article className="card">

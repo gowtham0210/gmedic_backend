@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Icon from '../Icon';
+import { formatDate, formatDateTime, formatTime } from '../../lib/format';
 
 const toast = (msg, type = 'success') => { if (typeof window !== 'undefined' && window.G) window.G.toast(msg, type); };
 
@@ -78,9 +79,9 @@ export default function NotificationBell() {
                   ? <><strong>{n.title}</strong> — {n.body}</>
                   : n.type === 'reminder'
                     ? <>Upcoming today: <strong>{n.patientName}</strong> at {n.time}</>
-                    : <>New appointment booked: <strong>{n.patientName}</strong> on {n.date} at {n.time}</>}
+                    : <>New appointment booked: <strong>{n.patientName}</strong> on {formatDate(n.date)} at {formatTime(n.time)}</>}
                 </p>
-                <small>{n.at ? new Date(n.at).toLocaleString() : ''}</small>
+                <small>{n.at ? formatDateTime(n.at) : ''}</small>
               </span>
             </Link>
           ))}

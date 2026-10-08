@@ -2,17 +2,18 @@
 
 import { useState, useEffect } from 'react';
 import Icon from '../Icon';
+import { formatDateTime } from '../../lib/format';
 
 const toast = (msg, type = 'success') => { if (typeof window !== 'undefined' && window.G) window.G.toast(msg, type); };
 
 export default function AvailabilityStatus({ initial, updatedAt }) {
   const [availability, setAvailability] = useState(initial);
   const [saving, setSaving] = useState(false);
-  // Formatted client-side only (after mount): toLocaleString() depends on the
-  // runtime's locale, which differs between the Node server and the browser,
-  // so rendering it during SSR causes a hydration mismatch.
+  // Formatted client-side only (after mount): the time depends on the viewer's
+  // time zone, which can differ between the Node server and the browser, so
+  // rendering it during SSR could cause a hydration mismatch.
   const [updatedLabel, setUpdatedLabel] = useState('');
-  useEffect(() => { if (updatedAt) setUpdatedLabel(new Date(updatedAt).toLocaleString()); }, [updatedAt]);
+  useEffect(() => { if (updatedAt) setUpdatedLabel(formatDateTime(updatedAt)); }, [updatedAt]);
 
   async function setStatus(next) {
     if (next === availability) return;

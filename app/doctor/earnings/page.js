@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Icon from '../../../components/Icon';
+import { formatDate } from '../../../lib/format';
 
 const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
 const time12 = (hhmm) => {
@@ -69,7 +70,7 @@ export default function EarningsPage() {
                   {data.items.length === 0 && <tr><td colSpan={5} className="text-muted">No paid appointments in this period.</td></tr>}
                   {data.items.map((i) => (
                     <tr key={i.appointmentId}>
-                      <td data-label="Date" className="mono">{i.date}</td>
+                      <td data-label="Date" className="nowrap">{formatDate(i.date)}</td>
                       <td data-label="Time" className="mono">{time12(i.time)}</td>
                       <td data-label="Patient" className="cell-primary">{i.patientName}</td>
                       <td data-label="Fee" className="num fee">{money(i.fee)}</td>

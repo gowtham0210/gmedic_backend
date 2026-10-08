@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import Icon from '../Icon';
 import TicketThread from './TicketThread';
+import { formatDateTime } from '../../lib/format';
 
 const STATUS_TONE = { OPEN: 'pending', IN_PROGRESS: 'pending', RESOLVED: 'confirmed', CLOSED: 'neutral' };
 const PRIORITY_TONE = { LOW: 'neutral', MEDIUM: 'pending', HIGH: 'cancelled', URGENT: 'cancelled' };
@@ -212,7 +213,7 @@ export default function SupportCenter({ apiBase, loginRole }) {
                   <td data-label="Category">{CATEGORY_LABEL[t.category] || t.category}</td>
                   <td data-label="Priority"><span className={`badge badge--${PRIORITY_TONE[t.priority]}`}>{t.priority}</span></td>
                   <td data-label="Status"><span className={`badge badge--${STATUS_TONE[t.status]}`}>{t.status.replace('_', ' ')}</span></td>
-                  <td data-label="Updated" className="text-muted"><time suppressHydrationWarning>{new Date(t.updatedAt).toLocaleString()}</time></td>
+                  <td data-label="Updated" className="text-muted"><time suppressHydrationWarning>{formatDateTime(t.updatedAt)}</time></td>
                   <td className="col-actions"><button type="button" className="action-btn" onClick={() => setOpenId(t.id)}><Icon name="eye" />Open</button></td>
                 </tr>
               ))}

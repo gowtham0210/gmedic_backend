@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Icon from '../Icon';
 import AvailabilityToggle from './AvailabilityToggle';
+import { formatDate } from '../../lib/format';
 
 const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
 const time12 = (hhmm) => {
@@ -158,7 +159,7 @@ export default function DashboardView() {
                 {stats.byDay.length === 0 && <tr><td colSpan={5} className="text-muted">No appointments in this period.</td></tr>}
                 {stats.byDay.map((d) => (
                   <tr key={d.date}>
-                    <td data-label="Date" className="mono">{d.date}</td>
+                    <td data-label="Date" className="nowrap">{formatDate(d.date)}</td>
                     <td data-label="Booked" className="num">{d.booked}</td>
                     <td data-label="Completed" className="num">{d.completed}</td>
                     <td data-label="Cancelled" className="num">{d.cancelled}</td>

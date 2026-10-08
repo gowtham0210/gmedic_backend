@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import Icon from '../../../components/Icon';
 import TicketThread from '../../../components/shared/TicketThread';
+import { formatDateTime } from '../../../lib/format';
 
 const STATUS_TONE = { OPEN: 'pending', IN_PROGRESS: 'pending', RESOLVED: 'confirmed', CLOSED: 'neutral' };
 const PRIORITY_TONE = { LOW: 'neutral', MEDIUM: 'pending', HIGH: 'cancelled', URGENT: 'cancelled' };
@@ -70,8 +71,8 @@ function TicketDrawer({ ticketId, assignees, onClose, onChanged }) {
                 <div><dt>Hospital</dt><dd>{t.hospitalName || '—'}</dd></div>
                 <div><dt>Category</dt><dd>{CATEGORY_LABEL[t.category] || t.category}</dd></div>
                 <div><dt>Status</dt><dd><span className={`badge badge--${STATUS_TONE[t.status]}`}>{t.status.replace('_', ' ')}</span></dd></div>
-                <div><dt>Created</dt><dd><time suppressHydrationWarning>{new Date(t.createdAt).toLocaleString()}</time></dd></div>
-                <div><dt>SLA due</dt><dd><time suppressHydrationWarning>{new Date(t.slaDueAt).toLocaleString()}</time></dd></div>
+                <div><dt>Created</dt><dd><time suppressHydrationWarning>{formatDateTime(t.createdAt)}</time></dd></div>
+                <div><dt>SLA due</dt><dd><time suppressHydrationWarning>{formatDateTime(t.slaDueAt)}</time></dd></div>
               </dl>
               {t.status !== 'CLOSED' && (
                 <div className="form-grid" style={{ marginBottom: 16 }}>
@@ -200,7 +201,7 @@ export default function SupportPage() {
                   <td data-label="Hospital" className="text-muted">{t.hospitalName || '—'}</td>
                   <td data-label="Priority"><span className={`badge badge--${PRIORITY_TONE[t.priority]}`}>{t.priority}</span></td>
                   <td data-label="Status"><span className={`badge badge--${STATUS_TONE[t.status]}`}>{t.status.replace('_', ' ')}</span></td>
-                  <td data-label="Updated" className="text-muted"><time suppressHydrationWarning>{new Date(t.updatedAt).toLocaleString()}</time></td>
+                  <td data-label="Updated" className="text-muted"><time suppressHydrationWarning>{formatDateTime(t.updatedAt)}</time></td>
                   <td className="col-actions"><button type="button" className="action-btn" onClick={() => setOpenId(t.id)}><Icon name="eye" />Open</button></td>
                 </tr>
               ))}

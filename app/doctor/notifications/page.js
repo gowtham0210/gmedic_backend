@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Icon from '../../../components/Icon';
+import { formatDate, formatDateTime, formatTime } from '../../../lib/format';
 
 const toast = (msg, type = 'success') => { if (typeof window !== 'undefined' && window.G) window.G.toast(msg, type); };
 
@@ -64,9 +65,9 @@ export default function NotificationsPage() {
                   ? <><strong>{n.title}</strong> — {n.body}</>
                   : n.type === 'reminder'
                     ? <>Your appointment with <strong>{n.patientName}</strong> starts at {n.time}.</>
-                    : <>New appointment: <strong>{n.patientName}</strong> on {n.date} at {n.time}.</>}
+                    : <>New appointment: <strong>{n.patientName}</strong> on {formatDate(n.date)} at {formatTime(n.time)}.</>}
                 </p>
-                <small className="text-muted">{n.at ? new Date(n.at).toLocaleString() : ''}</small>
+                <small className="text-muted">{n.at ? formatDateTime(n.at) : ''}</small>
               </span>
             </div>
           ))}

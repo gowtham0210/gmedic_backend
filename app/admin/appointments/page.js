@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Icon from '../../../components/Icon';
+import { formatDate, formatDateTime, formatTime } from '../../../lib/format';
 
 const STATUS_TONE = { confirmed: 'confirmed', pending: 'pending', completed: 'completed', cancelled: 'cancelled' };
 const toast = (msg, type = 'success') => { if (typeof window !== 'undefined' && window.G) window.G.toast(msg, type); };
@@ -15,10 +16,6 @@ async function api(url) {
 }
 
 const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
-const time12 = (hhmm) => {
-  const [h, m] = hhmm.split(':').map(Number);
-  return `${String(((h + 11) % 12) + 1).padStart(2, '0')}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
-};
 const maskMobile = (m) => (m ? `${m.slice(0, 2)}••••${m.slice(-2)}` : '—');
 
 function DetailDrawer({ appointment: a, onClose }) {
@@ -41,15 +38,15 @@ function DetailDrawer({ appointment: a, onClose }) {
             <div><dt>Branch</dt><dd>{a.branchName || '—'}</dd></div>
             <div><dt>Doctor</dt><dd>{a.doctorName}</dd></div>
             <div><dt>Department</dt><dd>{a.department || a.specialization || '—'}</dd></div>
-            <div><dt>Date</dt><dd>{a.date}</dd></div>
-            <div><dt>Time</dt><dd>{time12(a.time)}</dd></div>
+            <div><dt>Date</dt><dd>{formatDate(a.date)}</dd></div>
+            <div><dt>Time</dt><dd>{formatTime(a.time)}</dd></div>
             <div><dt>Booking status</dt><dd><span className={`badge badge--${STATUS_TONE[a.status]}`}>{a.status}</span></dd></div>
             <div><dt>Payment status</dt><dd><span className={`badge badge--${a.paymentStatus === 'paid' ? 'confirmed' : 'pending'}`}>{a.paymentStatus}</span></dd></div>
             <div><dt>Booking type</dt><dd>{a.source || '—'}</dd></div>
             <div><dt>Token number</dt><dd className="mono">{a.tokenCode || '—'}</dd></div>
             <div><dt>Fee</dt><dd>{money(a.fee)}</dd></div>
             <div><dt>Transaction ID</dt><dd className="mono">{a.transactionId || '—'}</dd></div>
-            <div><dt>Created</dt><dd>{a.createdAt ? new Date(a.createdAt).toLocaleString() : '—'}</dd></div>
+            <div><dt>Created</dt><dd>{formatDateTime(a.createdAt)}</dd></div>
             {a.cancelReason && <div className="kv--full"><dt>Cancellation reason</dt><dd>{a.cancelReason}</dd></div>}
           </dl>
         </div>
@@ -153,11 +150,11 @@ export default function AppointmentsPage() {
                   <td data-label="Patient">{a.patientName}<span className="cell-sub">{maskMobile(a.patientMobile)}</span></td>
                   <td data-label="Hospital" className="text-muted">{a.hospitalName}</td>
                   <td data-label="Doctor" className="text-muted">{a.doctorName}</td>
-                  <td data-label="Date" className="mono">{a.date}</td>
-                  <td data-label="Time" className="mono">{time12(a.time)}</td>
+                  <td data-label="Date" className="nowrap">{formatDate(a.date)}</td>
+                  <td data-label="Time" className="mono">{formatTime(a.time)}</td>
                   <td data-label="Status"><span className={`badge badge--${STATUS_TONE[a.status]}`}>{a.status}</span></td>
                   <td data-label="Payment"><span className={`badge badge--${a.paymentStatus === 'paid' ? 'confirmed' : 'pending'}`}>{a.paymentStatus}</span></td>
-                  <td data-label="Created" className="text-muted">{a.createdAt ? new Date(a.createdAt).toLocaleDateString() : '—'}</td>
+                  <td data-label="Created" className="text-muted nowrap">{formatDate(a.createdAt)}</td>
                   <td className="col-actions"><button type="button" className="action-btn" onClick={() => setSelected(a)}><Icon name="eye" />View</button></td>
                 </tr>
               ))}

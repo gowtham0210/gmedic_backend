@@ -3,12 +3,12 @@ import Icon from '../../../components/Icon';
 import DashboardCharts from '../../../components/admin/DashboardCharts';
 import getDashboardData from '../../../lib/admin/getDashboardData';
 import { paymentSuccessTone } from '../../../lib/admin/kpiTone';
+import { formatDate } from '../../../lib/format';
 
 export const metadata = { title: 'Super Admin Dashboard · Gmedic' };
 export const dynamic = 'force-dynamic';
 
 const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
-const fmtDate = (iso) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
 function StatCard({ icon, tone, label, value, href }) {
   const Wrap = href ? Link : 'div';
@@ -145,7 +145,7 @@ export default async function AdminDashboardPage() {
                     <td data-label="Location" className="text-muted">{h.location || '—'}</td>
                     <td data-label="Status">{statusBadge(h.status)}</td>
                     <td data-label="KYC">{kycBadge(h.kycStatus)}</td>
-                    <td data-label="Created" className="nowrap">{fmtDate(h.createdAt)}</td>
+                    <td data-label="Created" className="nowrap">{formatDate(h.createdAt)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -169,7 +169,7 @@ export default async function AdminDashboardPage() {
                     <td data-label="Patient">{a.patientName}</td>
                     <td data-label="Hospital" className="text-muted">{a.hospitalName}</td>
                     <td data-label="Doctor" className="text-muted">{a.doctorName}</td>
-                    <td data-label="Date" className="nowrap">{a.date}</td>
+                    <td data-label="Date" className="nowrap">{formatDate(a.date)}</td>
                     <td data-label="Payment"><span className={`badge badge--${a.paymentStatus}`}>{a.paymentStatus}</span></td>
                   </tr>
                 ))}

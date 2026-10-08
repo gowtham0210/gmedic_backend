@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Icon from '../../../components/Icon';
+import { formatDateTime } from '../../../lib/format';
 
 const toast = (msg, type = 'success') => { if (typeof window !== 'undefined' && window.G) window.G.toast(msg, type); };
 
@@ -162,7 +163,7 @@ export default function PaymentsPage() {
                     <td data-label="Transaction" className="mono">{w.transactionId}</td>
                     <td data-label="Status"><span className={`badge badge--${w.status === 'FAILED' ? 'cancelled' : 'confirmed'}`}>{w.status}</span></td>
                     <td data-label="Sync"><span className={`badge badge--${w.syncStatus === 'SYNCED' ? 'confirmed' : w.syncStatus === 'NOT_REQUIRED' ? 'neutral' : 'pending'}`}>{w.syncStatus}</span></td>
-                    <td data-label="Received" className="text-muted">{w.receivedAt ? new Date(w.receivedAt).toLocaleString() : '—'}</td>
+                    <td data-label="Received" className="text-muted">{w.receivedAt ? formatDateTime(w.receivedAt) : '—'}</td>
                     <td className="col-actions">{w.syncStatus === 'PENDING' && <button type="button" className="action-btn" onClick={() => resync(w.id)}><Icon name="refresh" />Resync</button>}</td>
                   </tr>
                 ))}

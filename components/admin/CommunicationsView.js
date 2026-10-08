@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Icon from '../Icon';
+import { formatDate, formatDateTime } from '../../lib/format';
 
 const toast = (msg, type = 'success') => { if (typeof window !== 'undefined' && window.G) window.G.toast(msg, type); };
 
@@ -146,7 +147,7 @@ function History() {
                 <td data-label="Recipient">{l.recipientName || '—'}<span className="cell-sub">{l.recipientRole || ''}</span></td>
                 <td data-label="Channel">{l.channel.replace('_', '-')}</td>
                 <td data-label="Status"><span className={`badge badge--${LOG_TONE[l.status]}`}>{l.status}</span></td>
-                <td data-label="Time" className="text-muted"><time suppressHydrationWarning>{new Date(l.createdAt).toLocaleString()}</time></td>
+                <td data-label="Time" className="text-muted"><time suppressHydrationWarning>{formatDateTime(l.createdAt)}</time></td>
                 <td data-label="Reason" className="text-muted">{l.failureReason || '—'}</td>
               </tr>
             ))}
@@ -210,7 +211,7 @@ function Templates() {
                   <td data-label="Audience" className="text-muted">{t.audience || '—'}</td>
                   <td data-label="Channels">{chLabel(t.channels)}</td>
                   <td data-label="Status"><span className={`badge badge--${t.status === 'ACTIVE' ? 'confirmed' : 'cancelled'}`}>{t.status === 'ACTIVE' ? 'Enabled' : 'Disabled'}</span></td>
-                  <td data-label="Updated" className="text-muted"><time suppressHydrationWarning>{new Date(t.updatedAt).toLocaleDateString()}</time>{t.updatedByName ? ` · ${t.updatedByName}` : ''}</td>
+                  <td data-label="Updated" className="text-muted"><time suppressHydrationWarning>{formatDate(t.updatedAt)}</time>{t.updatedByName ? ` · ${t.updatedByName}` : ''}</td>
                   <td className="col-actions">
                     <div className="action-group">
                       <button type="button" className="action-btn" onClick={() => setEditing(t)}><Icon name="pencil" />Edit</button>

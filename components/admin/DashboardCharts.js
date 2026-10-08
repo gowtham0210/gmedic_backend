@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { formatShortDate } from '../../lib/format';
 
 // Shared restrained styling: the data line is the primary visual, area fills
 // are a faint supporting layer, and gridlines are barely there (horizontal
@@ -35,7 +36,6 @@ export default function DashboardCharts({ bookingTrend, revenueTrend, qrFunnel, 
       const destroyAll = () => { chartsRef.current.forEach((c) => c.destroy()); chartsRef.current = []; };
       destroyAll();
 
-      const fmtDate = (d) => new Date(`${d}T00:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
       const teal = '#0A8F8C';
       const navy = '#0F263D';
       const red = '#EF6461';
@@ -44,7 +44,7 @@ export default function DashboardCharts({ bookingTrend, revenueTrend, qrFunnel, 
       chartsRef.current.push(new Chart(bookingRef.current, {
         type: 'line',
         data: {
-          labels: bookingTrend.map((r) => fmtDate(r.date)),
+          labels: bookingTrend.map((r) => formatShortDate(r.date)),
           datasets: [
             { label: 'Booked', data: bookingTrend.map((r) => r.booked), borderColor: teal, backgroundColor: AREA, fill: true, ...LINE, borderWidth: 2.5, pointBackgroundColor: teal },
             // Drawn on top (order -1): on days where every booking was completed the
@@ -68,7 +68,7 @@ export default function DashboardCharts({ bookingTrend, revenueTrend, qrFunnel, 
       ].filter(hasValues);
       chartsRef.current.push(new Chart(revenueRef.current, {
         type: 'bar',
-        data: { labels: revenueTrend.map((r) => fmtDate(r.date)), datasets: revenueSets },
+        data: { labels: revenueTrend.map((r) => formatShortDate(r.date)), datasets: revenueSets },
         // A one-series legend adds nothing; the totals in the card header name it.
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: revenueSets.length > 1, position: 'bottom', labels: { font, boxWidth: 10 } } }, scales: { x: categoryAxis({ stacked: true }), y: valueAxis({ stacked: true }) } },
       }));

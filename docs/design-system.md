@@ -212,6 +212,38 @@ Growth trends will appear as hospitals are added to the Gmedic platform.
   - Pending/waiting items → amber; failures/suspended → red.
 - Label wording is consistent: `Today's bookings`, `Today's revenue`,
   `Payment success rate`, `Today's QR scans`.
+- **Payments page** keeps exactly four cards, labelled so money vs. count is
+  unambiguous: `Collected amount` · `Failed amount` · `Successful payments` ·
+  `Failed payments`. Don't pad it with refund amount, average transaction,
+  conversion/success %, or today's revenue — broader performance analysis
+  belongs to Analytics.
+- **Every money/count KPI states its scope** in `.mini-stat__hint` under the
+  value, so the number has one meaning. On Payments the cards follow the table
+  filters: `All time` with no dates, otherwise `7 Oct 2026 – 8 Oct 2026` /
+  `Since …` / `Up to …`, plus `· filtered` when search or status is set.
+  `Collected amount` also says `gross, before refunds` (refunds live in their
+  own table and are not netted out).
+- **Payments transaction filters** stay as: Search (patient, doctor or
+  transaction ID) · Status · From · To · Reset. Don't add a Hospital filter just
+  because the table has a Hospital column; revisit only if multi-hospital use
+  becomes common.
+- **Webhook Inbox source notice** is driven by `PAYMENT_GATEWAY`, never
+  hard-coded. No gateway → info banner saying the inbox holds development
+  sample events. Gateway connected but `is_sample` rows remain → info banner
+  naming the gateway and asking for the setup test events to be removed.
+  Gateway connected, no sample rows → no banner, just a muted
+  `Receiving events from <gateway>.` line. "Sample" wording must never appear
+  once a live gateway is connected and the sample rows are gone.
+- **Webhook columns:** keep *Status* (gateway event: RECEIVED/PROCESSED/FAILED)
+  and *Sync* (our side: NOT_REQUIRED/PENDING/SYNCED/FAILED) as separate
+  columns — they are different dimensions and both matter when debugging.
+- The row action is **`Retry sync`** (not "Resync"/"Retry"): it retries our
+  sync step, it does not reprocess the gateway event. Shown only when Sync is
+  PENDING or FAILED; the backend ignores a retry on an already-synced event.
+- **Idempotency (backend):** a webhook receiver must store the gateway's event
+  id in `payment_webhooks.event_id` (unique per gateway, migration 013) and
+  skip processing when the insert conflicts. Payments are also unique on
+  `transaction_id` and one PAID row per appointment.
 
 ---
 

@@ -1,4 +1,4 @@
--- Gmedic database schema (SQLite). Generated from the live database after migrations 001-010.
+-- Gmedic database schema (SQLite). Generated from the live database after migrations 001-013.
 -- Load into an empty database:  sqlite3 gmedic.sqlite < database/schema.sql
 -- The application itself builds the same schema from database/migrations (npm run db:setup).
 
@@ -619,10 +619,12 @@ CREATE TABLE "payment_webhooks" (
   payload         TEXT,
   is_sample       INTEGER NOT NULL DEFAULT 0,
   received_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
+,
+  event_id        TEXT);
 
 CREATE INDEX ix_webhooks_status ON payment_webhooks (status, received_at);
 CREATE INDEX ix_webhooks_txn ON payment_webhooks (transaction_id);
+CREATE UNIQUE INDEX uq_webhooks_event ON payment_webhooks (gateway, event_id) WHERE event_id IS NOT NULL;
 
 CREATE TABLE "refunds" (
   id               TEXT PRIMARY KEY,

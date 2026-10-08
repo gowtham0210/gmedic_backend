@@ -85,7 +85,7 @@ export default function DashboardView() {
       <div className="two-col" style={{ marginBottom: 24 }}>
         <article className="card card--flush">
           <div className="card__head">
-            <h2 className="card__title"><Icon name="calendar" />Today&apos;s Appointments</h2>
+            <div><h2 className="card__title"><Icon name="calendar" />Today&apos;s Appointments</h2><p className="card__subtitle">Today · your bookings</p></div>
             <span className="badge badge--teal badge--plain">{todays.length}</span>
           </div>
           <div className="table-wrap" style={{ padding: '0 8px 8px' }}>
@@ -111,7 +111,7 @@ export default function DashboardView() {
 
         <div className="dash-stack">
           <article className="card">
-            <div className="card__head"><h2 className="card__title"><Icon name="activity" />Today&apos;s Queue</h2></div>
+            <div className="card__head"><div><h2 className="card__title"><Icon name="activity" />Today&apos;s Queue</h2><p className="card__subtitle">Today · current token and next in line</p></div></div>
             {current ? (
               <div style={{ textAlign: 'center', padding: '10px 0' }}>
                 <div className="text-muted" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase' }}>Current Token</div>
@@ -148,7 +148,7 @@ export default function DashboardView() {
       {stats && (
         <article className="card card--flush">
           <div className="card__head">
-            <h2 className="card__title"><Icon name="activity" />Last 14 Days</h2>
+            <div><h2 className="card__title"><Icon name="activity" />Activity</h2><p className="card__subtitle">Last 14 days · appointments, patients and earnings</p></div>
             <span className="text-muted">{stats.totals.appointments} appointments · {stats.totals.uniquePatients} patients · {money(stats.totals.earnings)}</span>
           </div>
           <div className="table-wrap" style={{ padding: '0 8px 8px' }}>

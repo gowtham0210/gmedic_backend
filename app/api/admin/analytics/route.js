@@ -1,7 +1,12 @@
-import { adapt } from '../../../../lib/adaptExpress';
-import dashboard from '../../../../controllers/admin/dashboardController';
+import { NextResponse } from 'next/server';
+import { requireAdminApi } from '../../../../lib/apiGuard';
+import getDashboardData from '../../../../lib/admin/getDashboardData';
 
-// Reuses the dashboard's query logic (bookings/revenue/QR-funnel/hospital
+// Same data as /api/admin/dashboard (bookings/revenue/QR-funnel/hospital
 // growth trends) gated behind the separate analytics.view permission, so
 // FINANCE-role admins can see trends without the full operational dashboard.
-export const GET = adapt(dashboard.summary, 'analytics.view');
+export async function GET() {
+  const { response } = await requireAdminApi('analytics.view');
+  if (response) return response;
+  return NextResponse.json(await getDashboardData());
+}

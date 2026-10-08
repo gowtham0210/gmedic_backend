@@ -807,6 +807,9 @@ SCHEMAS = """
             pendingKyc: {type: integer}
             pendingRefunds: {type: integer}
             todayQrScans: {type: integer}
+            pendingDoctorVerification: {type: integer, description: Doctors awaiting verification}
+            openSupportTickets: {type: integer, description: Support tickets OPEN or IN_PROGRESS}
+            failedPayments: {type: integer, description: Payments with status FAILED}
         bookingTrend:
           type: array
           description: Last 14 days, one row per appointment date that has data
@@ -820,11 +823,15 @@ SCHEMAS = """
             properties: {date: {type: string, format: date}, gross: {type: number}, refunded: {type: number}}
         qrFunnel:
           type: object
-          description: Last 30 days
-          properties: {scans: {type: integer}, linked: {type: integer}, bookings: {type: integer}, payments: {type: integer}}
+          description: "QR funnel over the last 30 days, counted in scans at every stage so each is a subset of the previous one"
+          properties:
+            scans: {type: integer, description: All QR scans}
+            linked: {type: integer, description: Scans that linked the patient to the hospital (LINKED or ALREADY_LINKED)}
+            bookings: {type: integer, description: Linking scans followed by an appointment at that hospital}
+            payments: {type: integer, description: Linking scans followed by an appointment at that hospital with a PAID payment}
         hospitalGrowth:
           type: array
-          description: Hospitals onboarded per month, last 6 months
+          description: Hospitals onboarded per month for the current month and the 5 before it, oldest first; always 6 entries (count 0 for months with none)
           items:
             type: object
             properties: {month: {type: string, example: 2026-09}, count: {type: integer}}

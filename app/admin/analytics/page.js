@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Icon from '../../../components/Icon';
 import DashboardCharts, { HospitalGrowthChart } from '../../../components/admin/DashboardCharts';
+import { paymentSuccessTone } from '../../../lib/admin/kpiTone';
 
 const toast = (msg, type = 'success') => { if (typeof window !== 'undefined' && window.G) window.G.toast(msg, type); };
 
@@ -37,18 +38,19 @@ export default function AnalyticsPage() {
       </div>
 
       <section className="summary-strip">
-        <div className="card mini-stat"><span className="stat__icon tone-blue"><Icon name="calendar" /></span><div><div className="mini-stat__label">Today&apos;s bookings</div><div className="mini-stat__value">{data.cards.todayAppointments}</div></div></div>
-        <div className="card mini-stat"><span className="stat__icon tone-green"><Icon name="rupee" /></span><div><div className="mini-stat__label">Today&apos;s revenue</div><div className="mini-stat__value">{money(data.cards.todayRevenue)}</div></div></div>
-        <div className="card mini-stat"><span className="stat__icon tone-teal"><Icon name="trending-up" /></span><div><div className="mini-stat__label">Payment success</div><div className="mini-stat__value">{data.cards.paymentSuccessRate}%</div></div></div>
-        <div className="card mini-stat"><span className="stat__icon tone-violet"><Icon name="scan" /></span><div><div className="mini-stat__label">QR scans today</div><div className="mini-stat__value">{data.cards.todayQrScans}</div></div></div>
+        <div className="card mini-stat"><span className="stat__icon tone-neutral"><Icon name="calendar" /></span><div><div className="mini-stat__label">Today&apos;s bookings</div><div className="mini-stat__value">{data.cards.todayAppointments}</div></div></div>
+        <div className="card mini-stat"><span className="stat__icon tone-neutral"><Icon name="rupee" /></span><div><div className="mini-stat__label">Today&apos;s revenue</div><div className="mini-stat__value">{money(data.cards.todayRevenue)}</div></div></div>
+        <div className="card mini-stat"><span className={`stat__icon ${paymentSuccessTone(data.cards.paymentSuccessRate)}`}><Icon name="trending-up" /></span><div><div className="mini-stat__label">Payment success rate</div><div className="mini-stat__value">{data.cards.paymentSuccessRate}%</div></div></div>
+        <div className="card mini-stat"><span className="stat__icon tone-neutral"><Icon name="scan" /></span><div><div className="mini-stat__label">Today&apos;s QR scans</div><div className="mini-stat__value">{data.cards.todayQrScans}</div></div></div>
       </section>
 
-      <DashboardCharts bookingTrend={data.bookingTrend} revenueTrend={data.revenueTrend} qrFunnel={data.qrFunnel} />
-
-      <article className="card">
-        <div className="card__head"><h2 className="card__title"><Icon name="trending-up" />Hospital Growth (6 months)</h2></div>
-        <HospitalGrowthChart hospitalGrowth={data.hospitalGrowth} />
-      </article>
+      {/* 2×2 grid: Booking | Revenue, QR Funnel | Hospital Growth */}
+      <DashboardCharts bookingTrend={data.bookingTrend} revenueTrend={data.revenueTrend} qrFunnel={data.qrFunnel}>
+        <article className="card">
+          <div className="card__head"><div><h2 className="card__title">Hospital Growth</h2><p className="card__subtitle">Last 6 months · new hospitals per month</p></div></div>
+          <HospitalGrowthChart hospitalGrowth={data.hospitalGrowth} />
+        </article>
+      </DashboardCharts>
     </>
   );
 }

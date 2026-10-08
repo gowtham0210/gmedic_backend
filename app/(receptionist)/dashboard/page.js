@@ -50,7 +50,7 @@ export default async function DashboardPage() {
       <section className="dash-grid">
         <article className="card" id="availability-card">
           <div className="card__head">
-            <h2 className="card__title"><Icon name="stethoscope" />Doctor Availability</h2>
+            <div><h2 className="card__title"><Icon name="stethoscope" />Doctor Availability</h2><p className="card__subtitle">Today · present vs on leave, by specialty</p></div>
             <a className="link-more" href="/doctors">View All <Icon name="arrow-right" /></a>
           </div>
           <div data-availability><div className="skeleton" style={{ height: 150 }}></div></div>
@@ -58,7 +58,7 @@ export default async function DashboardPage() {
 
         <article className="card card--flush" id="today-card">
           <div className="card__head">
-            <div><h2 className="card__title"><Icon name="calendar" />Today&apos;s Appointments</h2></div>
+            <div><h2 className="card__title"><Icon name="calendar" />Today&apos;s Appointments</h2><p className="card__subtitle">Today · bookings at your hospital</p></div>
             <a className="link-more" href="/appointments?date=today">View All <Icon name="arrow-right" /></a>
           </div>
           <div className="table-wrap" style={{ padding: '0 8px 8px' }}>
@@ -107,7 +107,7 @@ export default async function DashboardPage() {
           <div className="card__head">
             <div>
               <h2 className="card__title"><Icon name="calendar-check" />Recent Appointments</h2>
-              <p className="card__subtitle">Latest bookings from the Gmedic app</p>
+              <p className="card__subtitle">Latest 6 · bookings from the Gmedic app</p>
             </div>
             <a className="link-more" href="/appointments">View All <Icon name="arrow-right" /></a>
           </div>
@@ -125,6 +125,7 @@ export default async function DashboardPage() {
           <article className="card" id="tokens-card">
             <div className="card__head">
               <h2 className="card__title"><Icon name="ticket" />Today&apos;s Tokens</h2>
+              <p className="card__subtitle">Today · queue status</p>
             </div>
             <div data-token-summary>
               <div className="skeleton" style={{ height: 64 }}></div>

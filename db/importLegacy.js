@@ -50,7 +50,7 @@ async function importLegacy() {
       await conn.query(
         `INSERT INTO qr_codes (id, qr_key, hospital_id, desk_label, status, created_at, updated_at)
          VALUES (?, ?, ?, 'Main Reception', 'ACTIVE', ?, ?)`,
-        [`QR${h.id}`, h.qrToken, h.id, db.toSql(h.createdAt), db.toSql(h.updatedAt)]
+        [`QR-${h.id}-01`, h.qrToken, h.id, db.toSql(h.createdAt), db.toSql(h.updatedAt)] // id format: services/qrIds.js
       );
     }
 
@@ -89,7 +89,7 @@ async function importLegacy() {
       for (const name of linkedNames) {
         await conn.query(
           `INSERT OR IGNORE INTO patient_hospital_links (patient_id, hospital_id, qr_code_id, linked_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)`,
-          [patientIdByName.get(name), h.id, `QR${h.id}`]
+          [patientIdByName.get(name), h.id, `QR-${h.id}-01`]
         );
       }
     }

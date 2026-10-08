@@ -38,8 +38,22 @@ exports.update = async (req, res) => {
     'UPDATE doctors SET specialization = COALESCE(?,specialization), fee = COALESCE(?,fee), department_id = COALESCE(?,department_id), qualifications = COALESCE(?,qualifications), registration_number = COALESCE(?,registration_number) WHERE id = ?',
     [value.specialization ?? null, value.fee ?? null, departmentId, value.qualifications ?? null, value.registrationNumber ?? null, req.params.id]
   );
-  const updated = await doctorModel.adminFindById(req.params.id);
-  await auditLog.record({ req, action: 'DOCTOR_UPDATED', entityType: 'DOCTOR', entityId: req.params.id, summary: `Updated ${updated.name}` });
+  let updated = await doctorModel.adminFindById(req.params.id);
+  await auditLog.record({ req, action: 'DOCTOR_UPDATED', entityType: 'DOCTOR', entityId: req.params.id, summary: `Updated ${updated.name}`,
+    previousValue: { registrationNumber: doctor.registrationNumber || null }, newValue: { registrationNumber: updated.registrationNumber || null } });
+
+  // The registration number is a verified, compliance-sensitive credential:
+  // changing it on a VERIFIED doctor sends them back to PENDING for re-verification
+  // (never silently keeps the old approval on new details).
+  const regBefore = String(doctor.registrationNumber || '').trim();
+  const regAfter = String(updated.registrationNumber || '').trim();
+  if (doctor.verificationStatus === 'VERIFIED' && regAfter !== regBefore) {
+    const note = `Registration number changed from ${regBefore || '(none)'} to ${regAfter || '(none)'} — re-verification required.`;
+    updated = await doctorModel.setVerification(req.params.id, 'PENDING', note, req.user.id);
+    await auditLog.record({ req, action: 'DOCTOR_REVERIFICATION_REQUIRED', entityType: 'DOCTOR', entityId: req.params.id, summary: `${updated.name}: ${note}`,
+      previousValue: { verificationStatus: 'VERIFIED', registrationNumber: regBefore || null }, newValue: { verificationStatus: 'PENDING', registrationNumber: regAfter || null } });
+    return res.json({ ok: true, message: `${updated.name}'s details were saved. The registration number changed, so verification is back to Pending.`, doctor: updated, reverificationRequired: true });
+  }
   res.json({ ok: true, message: `${updated.name}'s details were saved.`, doctor: updated });
 };
 

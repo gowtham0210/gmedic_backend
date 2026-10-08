@@ -131,7 +131,7 @@ export default function PatientsPage() {
               <div className="card__head"><h2 className="card__title"><Icon name="calendar" />Appointments</h2></div>
               <div className="table-wrap">
                 <table className="table table--compact table--stack">
-                  <thead><tr><th>Hospital</th><th>Doctor</th><th>Date</th><th>Fee</th><th>Status</th></tr></thead>
+                  <thead><tr><th>Hospital</th><th>Doctor</th><th>Date</th><th className="num">Fee</th><th>Status</th></tr></thead>
                   <tbody>
                     {detail.appointments.length === 0 && <tr><td colSpan={5} style={{ whiteSpace: 'normal' }}><p className="text-muted">No appointments yet.</p></td></tr>}
                     {detail.appointments.map((a) => (

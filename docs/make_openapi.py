@@ -553,6 +553,7 @@ SCHEMAS = """
         ok: {type: boolean}
         message: {type: string}
         doctor: {type: object, additionalProperties: true, description: Same shape as the doctor in DoctorDetail}
+        reverificationRequired: {type: boolean, description: "Update only: true when a VERIFIED doctor's registration number changed, which moves verification back to PENDING"}
     ReceptionistCreate:
       type: object
       required: [name, email, phone, hospitalId]
@@ -697,7 +698,7 @@ SCHEMAS = """
         city: {type: string, maxLength: 60}
         state: {type: string, maxLength: 60}
         pincode: {type: string, pattern: '^[0-9]{6}$'}
-        gstin: {type: string, maxLength: 15}
+        gstin: {type: string, pattern: '^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$', description: "Optional at creation; a KYC detail usually added later via PUT /api/admin/hospitals/{id}"}
         registrationNumber: {type: string, maxLength: 40}
     HospitalUpdate:
       type: object
@@ -711,8 +712,8 @@ SCHEMAS = """
         city: {type: string}
         state: {type: string}
         pincode: {type: string, pattern: '^[0-9]{6}$'}
-        gstin: {type: string}
-        registrationNumber: {type: string}
+        gstin: {type: string, pattern: '^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$'}
+        registrationNumber: {type: string, maxLength: 40}
     HospitalStatus:
       type: object
       required: [status]

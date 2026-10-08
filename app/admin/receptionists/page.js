@@ -101,6 +101,35 @@ function AddModal({ open, hospitals, onClose, onCreated }) {
   );
 }
 
+// Deactivation locks the account out (login is refused and any open session ends
+// on its next request), so it is confirmed first. Activation stays one click.
+function DeactivateModal({ target, onClose, onConfirm }) {
+  const [saving, setSaving] = useState(false);
+  if (!target) return null;
+  async function submit(e) {
+    e.preventDefault();
+    setSaving(true);
+    try { await onConfirm(target); onClose(); } finally { setSaving(false); }
+  }
+  return (
+    <div className="modal" role="dialog" aria-modal="true" aria-labelledby="deactivate-title">
+      <div className="modal__backdrop" onClick={onClose}></div>
+      <div className="modal__panel modal__panel--sm">
+        <form onSubmit={submit}>
+          <div className="modal__head">
+            <div className="modal__icon tone-red"><Icon name="user-x" /></div>
+            <div><h2 id="deactivate-title">Deactivate {target.name}?</h2><p>This account will no longer be able to sign in to the Gmedic platform, and any open session will end. You can activate it again later.</p></div>
+          </div>
+          <div className="modal__foot">
+            <button type="button" className="btn btn--ghost" onClick={onClose}>Cancel</button>
+            <button type="submit" className={`btn btn--danger${saving ? ' is-loading' : ''}`} disabled={saving}>Deactivate Account</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function ReceptionistsPage() {
   const [items, setItems] = useState([]);
   const [hospitals, setHospitals] = useState([]);
@@ -109,6 +138,7 @@ export default function ReceptionistsPage() {
   const [status, setStatus] = useState('');
   const [showAdd, setShowAdd] = useState(false);
   const [creds, setCreds] = useState(null);
+  const [deactivateTarget, setDeactivateTarget] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -129,8 +159,7 @@ export default function ReceptionistsPage() {
   useEffect(() => { load(); }, [load]);
   useEffect(() => { api('/api/admin/hospitals?pageSize=100').then((d) => setHospitals(d.items)).catch(() => {}); }, []);
 
-  async function toggleStatus(r) {
-    const next = r.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+  async function setAccountStatus(r, next) {
     try {
       const res = await api(`/api/admin/receptionists/${r.id}/status`, { method: 'PATCH', body: { status: next } });
       toast(res.message, 'success');
@@ -196,7 +225,7 @@ export default function ReceptionistsPage() {
                   <td className="col-actions">
                     <div className="action-group">
                       <button type="button" className="action-btn" onClick={() => resetPassword(r)}><Icon name="lock" />Reset Password</button>
-                      <button type="button" className="action-btn" onClick={() => toggleStatus(r)}><Icon name={r.status === 'ACTIVE' ? 'user-x' : 'user-check'} />{r.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}</button>
+                      <button type="button" className="action-btn" onClick={() => (r.status === 'ACTIVE' ? setDeactivateTarget(r) : setAccountStatus(r, 'ACTIVE'))}><Icon name={r.status === 'ACTIVE' ? 'user-x' : 'user-check'} />{r.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}</button>
                     </div>
                   </td>
                 </tr>
@@ -209,6 +238,7 @@ export default function ReceptionistsPage() {
 
       <AddModal open={showAdd} hospitals={hospitals} onClose={() => setShowAdd(false)} onCreated={(creds) => { setCreds(creds); load(); }} />
       <CredentialsModal creds={creds} onClose={() => setCreds(null)} />
+      <DeactivateModal target={deactivateTarget} onClose={() => setDeactivateTarget(null)} onConfirm={(r) => setAccountStatus(r, 'INACTIVE')} />
     </>
   );
 }

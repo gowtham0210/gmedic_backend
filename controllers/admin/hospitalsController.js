@@ -2,6 +2,7 @@ const db = require('../../db');
 const { validate } = require('../../utils/validate');
 const { badRequest, notFound } = require('../../utils/http');
 const auditLog = require('../../services/auditLog');
+const { nextQrId } = require('../../services/qrIds');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
@@ -90,7 +91,7 @@ const createSchema = {
   city: { label: 'City', required: true, maxLength: 60 },
   state: { label: 'State', required: true, maxLength: 60 },
   pincode: { label: 'PIN code', required: true, pattern: /^\d{6}$/, message: 'PIN code must be 6 digits.' },
-  gstin: { label: 'GSTIN', maxLength: 15 },
+  gstin: { label: 'GSTIN', pattern: /^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/, message: 'GSTIN must be 15 characters, e.g. 29ABCDE1234F1Z5.' },
   registrationNumber: { label: 'Registration number', maxLength: 40 },
 };
 
@@ -104,7 +105,7 @@ exports.create = async (req, res) => {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ONBOARDING', 'PENDING', 1)`,
     [id, value.name, value.line1, value.city, value.state, value.pincode, value.contactPerson || null, value.phone, value.email, value.gstin || null, value.registrationNumber || null]
   );
-  const qrId = `QR${id}`;
+  const qrId = await nextQrId(db, id);
   await db.query(
     "INSERT INTO qr_codes (id, qr_key, hospital_id, desk_label, status, created_by) VALUES (?, ?, ?, 'Main Reception', 'ACTIVE', ?)",
     [qrId, crypto.randomBytes(12).toString('hex'), id, req.user.id]

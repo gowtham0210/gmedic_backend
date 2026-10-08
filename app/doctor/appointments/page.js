@@ -235,7 +235,7 @@ function AppointmentsPageInner() {
 
         <div className="table-wrap">
           <table className="table table--stack">
-            <thead><tr><th>Patient</th><th>Appointment ID</th><th>Date &amp; Time</th><th>Fee</th><th>Payment</th><th>Status</th><th className="col-actions">Actions</th></tr></thead>
+            <thead><tr><th>Patient</th><th>Appointment ID</th><th>Date &amp; Time</th><th className="num">Fee</th><th>Payment</th><th>Status</th><th className="col-actions">Actions</th></tr></thead>
             <tbody>
               {loading && <tr><td colSpan={7}><div className="skeleton skeleton--row"></div><div className="skeleton skeleton--row"></div></td></tr>}
               {!loading && items.length === 0 && (

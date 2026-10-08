@@ -149,7 +149,7 @@ export default function DisputesPage() {
         </div>
         <div className="table-wrap">
           <table className="table table--stack">
-            <thead><tr><th>Dispute</th><th>Patient</th><th>Hospital</th><th>Amount</th><th>Reason</th><th>Status</th><th className="col-actions">Actions</th></tr></thead>
+            <thead><tr><th>Dispute</th><th>Patient</th><th>Hospital</th><th className="num">Amount</th><th>Reason</th><th>Status</th><th className="col-actions">Actions</th></tr></thead>
             <tbody>
               {loading && <tr><td colSpan={7}><div className="skeleton skeleton--row"></div></td></tr>}
               {!loading && items.length === 0 && (

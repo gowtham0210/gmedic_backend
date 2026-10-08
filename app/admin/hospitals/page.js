@@ -22,7 +22,9 @@ async function api(url, opts = {}) {
 }
 
 function AddHospitalModal({ open, onClose, onCreated }) {
-  const [form, setForm] = useState({ name: '', phone: '', email: '', contactPerson: '', line1: '', city: '', state: '', pincode: '', gstin: '', registrationNumber: '' });
+  // Creation captures the basics only; GSTIN, registration no. and documents are
+  // KYC, added later on the hospital's page (KYC & Documents).
+  const [form, setForm] = useState({ name: '', phone: '', email: '', contactPerson: '', line1: '', city: '', state: '', pincode: '' });
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
   if (!open) return null;
@@ -52,7 +54,7 @@ function AddHospitalModal({ open, onClose, onCreated }) {
         <form onSubmit={submit}>
           <div className="modal__head">
             <div className="modal__icon tone-teal"><Icon name="hospital" /></div>
-            <div><h2>Add Hospital</h2><p>Start onboarding a new hospital on the platform.</p></div>
+            <div><h2>Add Hospital</h2><p>Create the hospital and start onboarding. KYC details and documents are added later on the hospital&apos;s page.</p></div>
             <button type="button" className="icon-btn" onClick={onClose} aria-label="Close"><Icon name="x" /></button>
           </div>
           <div className="modal__body">
@@ -94,14 +96,6 @@ function AddHospitalModal({ open, onClose, onCreated }) {
                 <input className="input" value={form.pincode} onChange={set('pincode')} required maxLength={6} />
                 {errors.pincode && <p className="field__error">{errors.pincode}</p>}
               </div>
-              <div className="field">
-                <label>GSTIN</label>
-                <input className="input" value={form.gstin} onChange={set('gstin')} />
-              </div>
-              <div className="field field--full">
-                <label>Registration number</label>
-                <input className="input" value={form.registrationNumber} onChange={set('registrationNumber')} />
-              </div>
             </div>
           </div>
           <div className="modal__foot">
@@ -142,7 +136,7 @@ function StatusModal({ target, onClose, onDone }) {
       <div className="modal__panel modal__panel--sm">
         <form onSubmit={submit}>
           <div className="modal__head">
-            <div className={`modal__icon ${status === 'ACTIVE' ? 'tone-green' : 'tone-red'}`}><Icon name={status === 'ACTIVE' ? 'check-circle' : 'alert'} /></div>
+            <div className={`modal__icon ${status === 'ACTIVE' ? 'tone-green' : 'tone-red'}`}><Icon name={status === 'ACTIVE' ? 'check-circle' : status === 'SUSPENDED' ? 'ban' : 'alert'} /></div>
             <div><h2>{status === 'ACTIVE' ? 'Activate' : status === 'SUSPENDED' ? 'Suspend' : 'Offboard'} {hospital.name}?</h2>
               {status === 'SUSPENDED' && <p>New bookings will be hidden. Historical appointments and payments are kept.</p>}
             </div>
@@ -151,13 +145,14 @@ function StatusModal({ target, onClose, onDone }) {
             {needsReason && (
               <div className="field">
                 <label>Reason *</label>
-                <textarea className="textarea" value={reason} onChange={(e) => setReason(e.target.value)} required rows={3} />
+                <textarea className="textarea" value={reason} onChange={(e) => setReason(e.target.value)} required rows={3}
+                  placeholder={status === 'SUSPENDED' ? 'Enter the reason for suspending this hospital…' : 'Enter the reason for offboarding this hospital…'} />
               </div>
             )}
           </div>
           <div className="modal__foot">
             <button type="button" className="btn btn--ghost" onClick={onClose}>Cancel</button>
-            <button type="submit" className={`btn ${status === 'ACTIVE' ? 'btn--primary' : 'btn--danger'}${saving ? ' is-loading' : ''}`} disabled={saving}>Confirm</button>
+            <button type="submit" className={`btn ${status === 'ACTIVE' ? 'btn--primary' : 'btn--danger'}${saving ? ' is-loading' : ''}`} disabled={saving}>{status === 'ACTIVE' ? 'Activate Hospital' : status === 'SUSPENDED' ? 'Suspend Hospital' : 'Offboard Hospital'}</button>
           </div>
         </form>
       </div>
@@ -194,6 +189,18 @@ export default function HospitalsPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Empty-state context: the status summary is platform-wide (unfiltered), so it
+  // tells "no hospitals at all" apart from "nothing matches the filters".
+  const platformTotal = Object.values(summary).reduce((t, n) => t + Number(n || 0), 0);
+  const STATUS_LABEL = { ONBOARDING: 'Onboarding', ACTIVE: 'Active', SUSPENDED: 'Suspended', OFFBOARDED: 'Offboarded' };
+  const KYC_LABEL = { PENDING: 'Pending', UNDER_REVIEW: 'Under review', VERIFIED: 'Verified', REJECTED: 'Rejected' };
+  const activeFilters = [
+    q && `“${q}”`,
+    status && `status ${STATUS_LABEL[status]}`,
+    kycStatus && `KYC ${KYC_LABEL[kycStatus]}`,
+  ].filter(Boolean);
+  const resetFilters = () => { setQ(''); setStatus(''); setKycStatus(''); };
+
   return (
     <>
       <div className="page-head">
@@ -206,11 +213,20 @@ export default function HospitalsPage() {
         </div>
       </div>
 
-      <section className="summary-strip">
-        <div className="card mini-stat"><span className="stat__icon tone-blue"><Icon name="hospital" /></span><div><div className="mini-stat__label">Active</div><div className="mini-stat__value">{summary.ACTIVE ?? '–'}</div></div></div>
-        <div className="card mini-stat"><span className="stat__icon tone-amber"><Icon name="clock" /></span><div><div className="mini-stat__label">Onboarding</div><div className="mini-stat__value">{summary.ONBOARDING ?? '–'}</div></div></div>
-        <div className="card mini-stat"><span className="stat__icon tone-red"><Icon name="alert" /></span><div><div className="mini-stat__label">Suspended</div><div className="mini-stat__value">{summary.SUSPENDED ?? '–'}</div></div></div>
-        <div className="card mini-stat"><span className="stat__icon tone-violet"><Icon name="x" /></span><div><div className="mini-stat__label">Offboarded</div><div className="mini-stat__value">{summary.OFFBOARDED ?? '–'}</div></div></div>
+      {/* Status summary: compact, so the hospital table stays the primary working area.
+          Colour only when a status actually has hospitals in it (design-system §6). */}
+      <section className="summary-strip summary-strip--compact" aria-label="Hospitals by status">
+        {[
+          { key: 'ACTIVE', label: 'Active', icon: 'hospital', tone: 'tone-green' },
+          { key: 'ONBOARDING', label: 'Onboarding', icon: 'clock', tone: 'tone-amber' },
+          { key: 'SUSPENDED', label: 'Suspended', icon: 'ban', tone: 'tone-red' },
+          { key: 'OFFBOARDED', label: 'Offboarded', icon: 'x', tone: 'tone-neutral' },
+        ].map((s) => (
+          <div key={s.key} className="card mini-stat">
+            <span className={`stat__icon ${summary[s.key] > 0 ? s.tone : 'tone-neutral'}`}><Icon name={s.icon} /></span>
+            <div><div className="mini-stat__label">{s.label}</div><div className="mini-stat__value">{summary[s.key] ?? '–'}</div></div>
+          </div>
+        ))}
       </section>
 
       <article className="card card--flush">
@@ -239,7 +255,7 @@ export default function HospitalsPage() {
               <option value="REJECTED">Rejected</option>
             </select>
           </div>
-          <button type="button" className="btn btn--ghost" onClick={() => { setQ(''); setStatus(''); setKycStatus(''); }}><Icon name="refresh" />Reset</button>
+          <button type="button" className="btn btn--ghost" onClick={resetFilters}><Icon name="refresh" />Reset</button>
         </div>
 
         <div className="table-wrap">
@@ -248,7 +264,23 @@ export default function HospitalsPage() {
             <tbody>
               {loading && <tr><td colSpan={6}><div className="skeleton skeleton--row"></div><div className="skeleton skeleton--row"></div></td></tr>}
               {!loading && items.length === 0 && (
-                <tr><td colSpan={6} style={{ whiteSpace: 'normal' }}><div className="empty"><div className="empty__icon"><Icon name="hospital" /></div><h3>No hospitals found</h3><p>Try a different search or filter, or add the first hospital.</p></div></td></tr>
+                <tr><td colSpan={6} style={{ whiteSpace: 'normal' }}>
+                  {platformTotal === 0 ? (
+                    <div className="empty">
+                      <div className="empty__icon"><Icon name="hospital" /></div>
+                      <h3>No hospitals yet</h3>
+                      <p>Hospitals you onboard will appear here with their status and KYC.</p>
+                      <button type="button" className="btn btn--primary" style={{ marginTop: 14 }} onClick={() => setShowAdd(true)}><Icon name="plus" />Add Hospital</button>
+                    </div>
+                  ) : (
+                    <div className="empty">
+                      <div className="empty__icon"><Icon name="search" /></div>
+                      <h3>No hospitals match your search</h3>
+                      <p>Nothing matches {activeFilters.join(' · ')}. {q ? 'Check the spelling or clear the filters.' : 'Try a different status or KYC filter.'}</p>
+                      <button type="button" className="btn btn--ghost" style={{ marginTop: 14 }} onClick={resetFilters}><Icon name="refresh" />Clear filters</button>
+                    </div>
+                  )}
+                </td></tr>
               )}
               {items.map((h) => (
                 <tr key={h.id}>
@@ -261,7 +293,7 @@ export default function HospitalsPage() {
                     <div className="action-group">
                       <Link className="action-btn" href={`/admin/hospitals/${h.id}`}><Icon name="eye" />View</Link>
                       {h.status !== 'ACTIVE' && <button type="button" className="action-btn" onClick={() => setStatusTarget({ hospital: h, status: 'ACTIVE' })}><Icon name="check" />Activate</button>}
-                      {h.status === 'ACTIVE' && <button type="button" className="action-btn" onClick={() => setStatusTarget({ hospital: h, status: 'SUSPENDED' })}><Icon name="alert" />Suspend</button>}
+                      {h.status === 'ACTIVE' && <button type="button" className="action-btn" onClick={() => setStatusTarget({ hospital: h, status: 'SUSPENDED' })}><Icon name="ban" />Suspend</button>}
                     </div>
                   </td>
                 </tr>

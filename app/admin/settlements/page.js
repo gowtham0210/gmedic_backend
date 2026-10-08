@@ -164,7 +164,7 @@ export default function SettlementsPage() {
         <p className="text-muted" style={{ fontSize: 13, margin: '0 0 10px' }}>The Super Admin sets each hospital&apos;s commission on its page under Fee &amp; Commission. It is applied to every new settlement and recorded on it.</p>
         <div className="table-wrap">
           <table className="table">
-            <thead><tr><th>Hospital</th><th>Commission</th><th></th></tr></thead>
+            <thead><tr><th>Hospital</th><th className="num">Commission</th><th></th></tr></thead>
             <tbody>
               {hospitals.map((h) => (
                 <tr key={h.id}>
@@ -194,7 +194,7 @@ export default function SettlementsPage() {
         </div>
         <div className="table-wrap">
           <table className="table table--stack">
-            <thead><tr><th>Settlement</th><th>Hospital</th><th>Period</th><th>Appts</th><th>Gross</th><th>Refunds</th><th>Commission (rate)</th><th>Net Payout</th><th>Status</th><th className="col-actions">Actions</th></tr></thead>
+            <thead><tr><th>Settlement</th><th>Hospital</th><th>Period</th><th className="num">Appts</th><th className="num">Gross</th><th className="num">Refunds</th><th>Commission (rate)</th><th className="num">Net Payout</th><th>Status</th><th className="col-actions">Actions</th></tr></thead>
             <tbody>
               {loading && <tr><td colSpan={10}><div className="skeleton skeleton--row"></div></td></tr>}
               {!loading && items.length === 0 && (

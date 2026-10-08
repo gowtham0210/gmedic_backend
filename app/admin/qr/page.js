@@ -62,8 +62,8 @@ function GenerateModal({ open, hospitals, onClose, onCreated }) {
               {errors.hospitalId && <p className="field__error">{errors.hospitalId}</p>}
             </div>
             <div className={`field${errors.deskLabel ? ' has-error' : ''}`}>
-              <label>Desk / label *</label>
-              <input className="input" value={form.deskLabel} onChange={(e) => setForm((f) => ({ ...f, deskLabel: e.target.value }))} placeholder="e.g. Front Desk" required />
+              <label>Desk / location *</label>
+              <input className="input" value={form.deskLabel} onChange={(e) => setForm((f) => ({ ...f, deskLabel: e.target.value }))} placeholder="e.g. Front Desk, Main Entrance" required />
               {errors.deskLabel && <p className="field__error">{errors.deskLabel}</p>}
             </div>
           </div>
@@ -103,15 +103,15 @@ function RevokeModal({ target, onClose, onDone }) {
       <div className="modal__panel modal__panel--sm">
         <form onSubmit={submit}>
           <div className="modal__head">
-            <div className="modal__icon tone-red"><Icon name="alert" /></div>
-            <div><h2>Revoke QR for {target.hospitalName}?</h2><p>{target.deskLabel}</p></div>
+            <div className="modal__icon tone-red"><Icon name="ban" /></div>
+            <div><h2>Revoke {target.deskLabel} QR?</h2><p>{target.hospitalName} · <span className="mono">{target.id}</span>. This QR code stops working immediately and no replacement is created.</p></div>
           </div>
           <div className="modal__body">
-            <div className="field"><label>Reason *</label><textarea className="textarea" value={reason} onChange={(e) => setReason(e.target.value)} required rows={3} /></div>
+            <div className="field"><label>Reason *</label><textarea className="textarea" value={reason} onChange={(e) => setReason(e.target.value)} required rows={3} placeholder="Enter the reason for revoking this QR code…" /></div>
           </div>
           <div className="modal__foot">
             <button type="button" className="btn btn--ghost" onClick={onClose}>Cancel</button>
-            <button type="submit" className={`btn btn--danger${saving ? ' is-loading' : ''}`} disabled={saving}>Revoke</button>
+            <button type="submit" className={`btn btn--danger${saving ? ' is-loading' : ''}`} disabled={saving}>Revoke QR</button>
           </div>
         </form>
       </div>
@@ -210,7 +210,12 @@ function DownloadModal({ target, onClose }) {
           <div className="qr-download__preview">
             <img src={`${base}/poster.svg`} alt={`Skip the Queue poster for ${target.hospitalName}, ${target.deskLabel}`} />
           </div>
-          <p className="qr-download__link">Opens <span className="mono">{target.link}</span></p>
+          {/* The tokenized URL is part of the QR mechanism but noisy to read: show where a
+              scan lands, and let admins copy (or hover to see) the exact link. */}
+          <div className="qr-download__dest">
+            <div><span className="qr-download__dest-label">Scan destination</span><strong>{target.hospitalName}</strong></div>
+            <button type="button" className="btn btn--ghost btn--sm" data-copy={target.link} title={target.link}><Icon name="copy" />Copy link</button>
+          </div>
         </div>
         <div className="modal__foot">
           <button type="button" className={`btn btn--ghost${busy === 'qr' ? ' is-loading' : ''}`} disabled={!!busy} onClick={downloadQr}><Icon name="qr-code" /><span>QR only (PNG)</span></button>
@@ -221,8 +226,52 @@ function DownloadModal({ target, onClose }) {
   );
 }
 
+// Reissue = create a new code with a new key AND revoke the current one
+// (controllers/admin/qrController.js reissue), so printed posters of the old code
+// stop working. Confirm first; afterwards the caller opens the new code's download.
+function ReissueModal({ target, onClose, onDone }) {
+  const [saving, setSaving] = useState(false);
+  if (!target) return null;
+  async function submit(e) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const res = await api(`/api/admin/qr/${target.id}/reissue`, { method: 'POST' });
+      toast(res.message, 'success');
+      onClose();
+      onDone(res.id);
+    } catch (err) {
+      toast(err.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+  return (
+    <div className="modal" role="dialog" aria-modal="true" aria-labelledby="reissue-title">
+      <div className="modal__backdrop" onClick={onClose}></div>
+      <div className="modal__panel modal__panel--sm">
+        <form onSubmit={submit}>
+          <div className="modal__head">
+            <div className="modal__icon tone-red"><Icon name="refresh" /></div>
+            <div><h2 id="reissue-title">Reissue {target.deskLabel} QR?</h2><p>{target.hospitalName} · <span className="mono">{target.id}</span></p></div>
+          </div>
+          <div className="modal__body">
+            <p>The current QR code will stop working immediately — posters already printed with it will no longer link patients. A new QR code will be generated for the same location.</p>
+            <p className="text-muted" style={{ marginTop: 8 }}>You&apos;ll be able to download and print the new poster right after.</p>
+          </div>
+          <div className="modal__foot">
+            <button type="button" className="btn btn--ghost" onClick={onClose}>Cancel</button>
+            <button type="submit" className={`btn btn--danger${saving ? ' is-loading' : ''}`} disabled={saving}>Reissue QR</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function QrPage() {
   const [items, setItems] = useState([]);
+  const [activeCodes, setActiveCodes] = useState(null);
   const [hospitals, setHospitals] = useState([]);
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -232,6 +281,7 @@ export default function QrPage() {
   const [showGenerate, setShowGenerate] = useState(false);
   const [revokeTarget, setRevokeTarget] = useState(null);
   const [downloadTarget, setDownloadTarget] = useState(null);
+  const [reissueTarget, setReissueTarget] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -240,8 +290,11 @@ export default function QrPage() {
       if (hospitalId) qs.set('hospitalId', hospitalId);
       if (status) qs.set('status', status);
       if (q) qs.set('q', q);
-      const data = await api(`/api/admin/qr?${qs}`);
+      // The table is filtered; the "Active codes" KPI is platform-wide, so it
+      // comes from an unfiltered request (otherwise filtering to Revoked shows 0).
+      const [data, all] = await Promise.all([api(`/api/admin/qr?${qs}`), api('/api/admin/qr?status=ACTIVE')]);
       setItems(data.items);
+      setActiveCodes(all.items.length);
     } catch (err) {
       toast(err.message, 'error');
     } finally {
@@ -253,14 +306,14 @@ export default function QrPage() {
   useEffect(() => { api('/api/admin/hospitals?pageSize=100').then((d) => setHospitals(d.items)).catch(() => {}); }, []);
   useEffect(() => { api('/api/admin/qr/analytics').then(setAnalytics).catch(() => {}); }, []);
 
-  async function reissue(qr) {
+  // After a reissue, open the download dialog for the replacement code.
+  async function afterReissue(newId) {
+    await load();
     try {
-      const res = await api(`/api/admin/qr/${qr.id}/reissue`, { method: 'POST' });
-      toast(res.message, 'success');
-      load();
-    } catch (err) {
-      toast(err.message, 'error');
-    }
+      const data = await api(`/api/admin/qr?q=${encodeURIComponent(newId)}`);
+      const fresh = data.items.find((i) => i.id === newId);
+      if (fresh) setDownloadTarget(fresh);
+    } catch { /* list already refreshed; download is still available from the table */ }
   }
 
   const totalScans = analytics ? analytics.series.reduce((s, d) => s + d.linked + d.alreadyLinked + d.failed, 0) : 0;
@@ -279,11 +332,16 @@ export default function QrPage() {
       </div>
 
       {analytics && (
-        <section className="summary-strip">
-          <div className="card mini-stat"><span className="stat__icon tone-blue"><Icon name="scan" /></span><div><div className="mini-stat__label">Scans (14d)</div><div className="mini-stat__value">{totalScans}</div></div></div>
-          <div className="card mini-stat"><span className="stat__icon tone-green"><Icon name="check-circle" /></span><div><div className="mini-stat__label">Linked</div><div className="mini-stat__value">{totalLinked}</div></div></div>
-          <div className="card mini-stat"><span className="stat__icon tone-amber"><Icon name="alert-triangle" /></span><div><div className="mini-stat__label">Spikes flagged</div><div className="mini-stat__value">{analytics.spikes.length}</div></div></div>
-          <div className="card mini-stat"><span className="stat__icon tone-violet"><Icon name="qr-code" /></span><div><div className="mini-stat__label">Active codes</div><div className="mini-stat__value">{items.filter((i) => i.status === 'ACTIVE').length}</div></div></div>
+        <section className="summary-strip summary-strip--compact" aria-label="QR summary">
+          <div className="card mini-stat"><span className="stat__icon tone-neutral"><Icon name="scan" /></span><div><div className="mini-stat__label">Scans (14d)</div><div className="mini-stat__value">{totalScans}</div></div></div>
+          {/* result = LINKED only: the scan added the hospital to a patient's account for the first time (repeat and failed scans excluded). */}
+          <div className="card mini-stat"><span className="stat__icon tone-neutral"><Icon name="user-plus" /></span><div><div className="mini-stat__label">New patient links (14d)</div><div className="mini-stat__value">{totalLinked}</div></div></div>
+          {/* Same rule as the "Unusual scan activity" alert (controllers/admin/qrController.js analytics). */}
+          <div className="card mini-stat" title="A hospital is flagged when its scans in the last 24 hours exceed 5 and are more than 3× its 7-day daily average.">
+            <span className={`stat__icon ${analytics.spikes.length > 0 ? 'tone-amber' : 'tone-neutral'}`}><Icon name="alert-triangle" /></span>
+            <div><div className="mini-stat__label">Scan anomalies (24h)</div><div className="mini-stat__value">{analytics.spikes.length}</div><div className="mini-stat__hint">&gt; 3× a hospital&apos;s 7-day average</div></div>
+          </div>
+          <div className="card mini-stat"><span className="stat__icon tone-neutral"><Icon name="qr-code" /></span><div><div className="mini-stat__label">Active codes</div><div className="mini-stat__value">{activeCodes ?? '–'}</div></div></div>
         </section>
       )}
 
@@ -320,7 +378,7 @@ export default function QrPage() {
 
         <div className="table-wrap">
           <table className="table table--stack">
-            <thead><tr><th>QR</th><th>Hospital</th><th>Desk</th><th>Scans</th><th>Status</th><th className="col-actions">Actions</th></tr></thead>
+            <thead><tr><th>QR</th><th>Hospital</th><th>Desk / location</th><th>Scans</th><th>Status</th><th className="col-actions">Actions</th></tr></thead>
             <tbody>
               {loading && <tr><td colSpan={6}><div className="skeleton skeleton--row"></div><div className="skeleton skeleton--row"></div></td></tr>}
               {!loading && items.length === 0 && (
@@ -330,14 +388,14 @@ export default function QrPage() {
                 <tr key={qr.id}>
                   <td data-label="QR" className="cell-primary mono">{qr.id}</td>
                   <td data-label="Hospital" className="text-muted">{qr.hospitalName}</td>
-                  <td data-label="Desk">{qr.deskLabel}</td>
+                  <td data-label="Desk / location">{qr.deskLabel}</td>
                   <td data-label="Scans">{qr.scanCount}</td>
                   <td data-label="Status"><span className={`badge badge--${qr.status === 'ACTIVE' ? 'confirmed' : 'cancelled'}`}>{qr.status}</span></td>
                   <td className="col-actions">
                     <div className="action-group">
                       {qr.status === 'ACTIVE' && <button type="button" className="action-btn" onClick={() => setDownloadTarget(qr)}><Icon name="download" />Download</button>}
-                      {qr.status === 'ACTIVE' && <button type="button" className="action-btn" onClick={() => setRevokeTarget(qr)}><Icon name="alert" />Revoke</button>}
-                      {qr.status === 'ACTIVE' && <button type="button" className="action-btn" onClick={() => reissue(qr)}><Icon name="refresh" />Reissue</button>}
+                      {qr.status === 'ACTIVE' && <button type="button" className="action-btn" onClick={() => setRevokeTarget(qr)}><Icon name="ban" />Revoke</button>}
+                      {qr.status === 'ACTIVE' && <button type="button" className="action-btn" onClick={() => setReissueTarget(qr)}><Icon name="refresh" />Reissue</button>}
                     </div>
                   </td>
                 </tr>
@@ -351,6 +409,7 @@ export default function QrPage() {
       <GenerateModal open={showGenerate} hospitals={hospitals} onClose={() => setShowGenerate(false)} onCreated={load} />
       <RevokeModal target={revokeTarget} onClose={() => setRevokeTarget(null)} onDone={load} />
       <DownloadModal target={downloadTarget} onClose={() => setDownloadTarget(null)} />
+      <ReissueModal target={reissueTarget} onClose={() => setReissueTarget(null)} onDone={afterReissue} />
     </>
   );
 }

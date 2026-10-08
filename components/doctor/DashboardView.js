@@ -90,7 +90,7 @@ export default function DashboardView() {
           </div>
           <div className="table-wrap" style={{ padding: '0 8px 8px' }}>
             <table className="table table--compact table--stack">
-              <thead><tr><th>Patient</th><th>Time</th><th>Fee</th><th>Payment</th><th>Status</th></tr></thead>
+              <thead><tr><th>Patient</th><th>Time</th><th className="num">Fee</th><th>Payment</th><th>Status</th></tr></thead>
               <tbody>
                 {todays.length === 0 && (
                   <tr><td colSpan={5} style={{ whiteSpace: 'normal' }}><div className="empty"><div className="empty__icon"><Icon name="calendar" /></div><h3>No appointments today</h3><p>Enjoy the quiet — new bookings from the Gmedic app will show up here.</p></div></td></tr>
@@ -153,7 +153,7 @@ export default function DashboardView() {
           </div>
           <div className="table-wrap" style={{ padding: '0 8px 8px' }}>
             <table className="table table--compact table--stack">
-              <thead><tr><th>Date</th><th>Booked</th><th>Completed</th><th>Cancelled</th><th>Earnings</th></tr></thead>
+              <thead><tr><th>Date</th><th className="num">Booked</th><th className="num">Completed</th><th className="num">Cancelled</th><th className="num">Earnings</th></tr></thead>
               <tbody>
                 {stats.byDay.length === 0 && <tr><td colSpan={5} className="text-muted">No appointments in this period.</td></tr>}
                 {stats.byDay.map((d) => (

@@ -7,6 +7,7 @@ const { badRequest, notFound } = require('../../utils/http');
 const auditLog = require('../../services/auditLog');
 const hospitalModel = require('../../models/hospitalModel');
 const { buildPosterSvg } = require('../../services/qrPoster');
+const { nextQrId } = require('../../services/qrIds');
 
 const QR_COLORS = { dark: '#0F263D', light: '#FFFFFF' };
 
@@ -45,13 +46,13 @@ exports.list = async (req, res) => {
 exports.create = async (req, res) => {
   const { value, errors, ok } = validate(req.body, {
     hospitalId: { label: 'Hospital', required: true },
-    deskLabel: { label: 'Desk / label', required: true, maxLength: 60 },
+    deskLabel: { label: 'Desk / location', required: true, maxLength: 60 },
   });
   if (!ok) throw badRequest('Please correct the highlighted fields.', errors);
   const hospital = await db.one('SELECT id, name FROM hospitals WHERE id = ?', [value.hospitalId]);
   if (!hospital) throw badRequest('Choose a valid hospital.', { hospitalId: 'Choose a hospital.' });
 
-  const id = await db.nextId('qr_codes', 'QR', 1);
+  const id = await nextQrId(db, value.hospitalId);
   const qrKey = crypto.randomBytes(12).toString('hex');
   await db.query('INSERT INTO qr_codes (id, qr_key, hospital_id, desk_label, status, created_by) VALUES (?, ?, ?, ?, \'ACTIVE\', ?)', [id, qrKey, value.hospitalId, value.deskLabel, req.user.id]);
   await auditLog.record({ req, action: 'QR_CREATED', entityType: 'QR_CODE', entityId: id, summary: `Generated QR "${value.deskLabel}" for ${hospital.name}` });
@@ -71,7 +72,7 @@ exports.revoke = async (req, res) => {
 exports.reissue = async (req, res) => {
   const qr = await db.one('SELECT * FROM qr_codes WHERE id = ?', [req.params.id]);
   if (!qr) throw notFound('QR code not found.');
-  const newId = await db.nextId('qr_codes', 'QR', 1);
+  const newId = await nextQrId(db, qr.hospital_id);
   const qrKey = crypto.randomBytes(12).toString('hex');
   await db.query('INSERT INTO qr_codes (id, qr_key, hospital_id, branch_id, desk_label, status, created_by) VALUES (?, ?, ?, ?, ?, \'ACTIVE\', ?)', [newId, qrKey, qr.hospital_id, qr.branch_id, qr.desk_label, req.user.id]);
   await db.query("UPDATE qr_codes SET status='REVOKED', revoked_reason='Reissued', revoked_at=CURRENT_TIMESTAMP, revoked_by=?, replaced_by=? WHERE id=?", [req.user.id, newId, req.params.id]);

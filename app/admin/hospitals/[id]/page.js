@@ -7,10 +7,11 @@ import Icon from '../../../../components/Icon';
 const toast = (msg, type = 'success') => { if (typeof window !== 'undefined' && window.G) window.G.toast(msg, type); };
 
 async function api(url, opts = {}) {
+  const isForm = typeof FormData !== 'undefined' && opts.body instanceof FormData;
   const res = await fetch(url, {
     method: opts.method || 'GET',
-    headers: opts.body ? { 'Content-Type': 'application/json' } : undefined,
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
+    headers: opts.body && !isForm ? { 'Content-Type': 'application/json' } : undefined,
+    body: opts.body ? (isForm ? opts.body : JSON.stringify(opts.body)) : undefined,
     credentials: 'same-origin',
   });
   const data = await res.json().catch(() => ({}));
@@ -33,6 +34,12 @@ export default function HospitalDetailPage({ params }) {
   const [savingFees, setSavingFees] = useState(false);
   const [kycReason, setKycReason] = useState('');
   const [savingKyc, setSavingKyc] = useState(false);
+  const [kycForm, setKycForm] = useState({ gstin: '', registrationNumber: '' });
+  const [kycErrors, setKycErrors] = useState({});
+  const [savingKycDetails, setSavingKycDetails] = useState(false);
+  const [upload, setUpload] = useState({ docType: 'LICENCE', file: null });
+  const [uploading, setUploading] = useState(false);
+  const [fileInputKey, setFileInputKey] = useState(0);
   const [branchForm, setBranchForm] = useState({ name: '', address: '', phone: '', contactPerson: '' });
   const [savingBranch, setSavingBranch] = useState(false);
 
@@ -48,6 +55,7 @@ export default function HospitalDetailPage({ params }) {
       setStats(detail.stats);
       setDocuments(docs.documents || []);
       setBranches(br.branches || []);
+      setKycForm({ gstin: detail.hospital.gstin || '', registrationNumber: detail.hospital.registrationNumber || '' });
       setFeeForm({ bookingModel: detail.hospital.bookingModel, bookingFee: detail.hospital.bookingFee, convenienceFee: detail.hospital.convenienceFee, commissionType: detail.hospital.commissionType, commissionValue: detail.hospital.commissionValue });
     } catch (err) {
       toast(err.message, 'error');
@@ -84,6 +92,42 @@ export default function HospitalDetailPage({ params }) {
       toast(err.message, 'error');
     } finally {
       setSavingKyc(false);
+    }
+  }
+
+  async function saveKycDetails(e) {
+    e.preventDefault();
+    setSavingKycDetails(true);
+    setKycErrors({});
+    try {
+      const res = await api(`/api/admin/hospitals/${id}`, { method: 'PUT', body: { gstin: kycForm.gstin.trim().toUpperCase(), registrationNumber: kycForm.registrationNumber.trim() } });
+      toast('KYC details saved.', 'success');
+      setHospital(res.hospital);
+    } catch (err) {
+      setKycErrors(err.fields || {});
+      if (!err.fields) toast(err.message, 'error');
+    } finally {
+      setSavingKycDetails(false);
+    }
+  }
+
+  async function uploadDocument(e) {
+    e.preventDefault();
+    if (!upload.file) return toast('Choose a PDF, PNG or JPEG file (max 8MB).', 'error');
+    setUploading(true);
+    try {
+      const body = new FormData();
+      body.append('docType', upload.docType);
+      body.append('file', upload.file);
+      const res = await api(`/api/admin/hospitals/${id}/documents`, { method: 'POST', body });
+      toast(res.message, 'success');
+      setUpload((u) => ({ ...u, file: null }));
+      setFileInputKey((k) => k + 1);
+      load();
+    } catch (err) {
+      toast(err.message, 'error');
+    } finally {
+      setUploading(false);
     }
   }
 
@@ -144,13 +188,42 @@ export default function HospitalDetailPage({ params }) {
               <div><dt>Email</dt><dd>{hospital.email}</dd></div>
               <div><dt>Contact person</dt><dd>{hospital.contactPerson || '—'}</dd></div>
               <div className="kv--full"><dt>Address</dt><dd>{[hospital.address.line1, hospital.address.city, hospital.address.state, hospital.address.pincode].filter(Boolean).join(', ')}</dd></div>
-              <div><dt>GSTIN</dt><dd>{hospital.gstin || '—'}</dd></div>
-              <div><dt>Registration No.</dt><dd>{hospital.registrationNumber || '—'}</dd></div>
             </dl>
           </article>
 
           <article className="card">
-            <div className="card__head"><h2 className="card__title"><Icon name="clipboard-list" />KYC &amp; Documents</h2><span className={`badge badge--${hospital.kycStatus === 'VERIFIED' ? 'confirmed' : hospital.kycStatus === 'REJECTED' ? 'cancelled' : 'pending'}`}>{hospital.kycStatus.replace('_', ' ')}</span></div>
+            <div className="card__head"><div><h2 className="card__title"><Icon name="clipboard-list" />KYC &amp; Documents</h2><p className="card__subtitle">Verification · legal details, documents and decision</p></div><span className={`badge badge--${hospital.kycStatus === 'VERIFIED' ? 'confirmed' : hospital.kycStatus === 'REJECTED' ? 'cancelled' : 'pending'}`}>{hospital.kycStatus.replace('_', ' ')}</span></div>
+            <form className="kyc-section" onSubmit={saveKycDetails}>
+              <h3 className="kyc-section__title">KYC details</h3>
+              <div className="form-grid">
+                <div className={`field${kycErrors.gstin ? ' has-error' : ''}`}>
+                  <label>GSTIN</label>
+                  <input className="input mono" value={kycForm.gstin} maxLength={15} placeholder="e.g. 29ABCDE1234F1Z5" onChange={(e) => setKycForm((f) => ({ ...f, gstin: e.target.value.toUpperCase() }))} />
+                  {kycErrors.gstin && <p className="field__error">{kycErrors.gstin}</p>}
+                </div>
+                <div className={`field${kycErrors.registrationNumber ? ' has-error' : ''}`}>
+                  <label>Registration number</label>
+                  <input className="input" value={kycForm.registrationNumber} maxLength={40} placeholder="Hospital registration no." onChange={(e) => setKycForm((f) => ({ ...f, registrationNumber: e.target.value }))} />
+                  {kycErrors.registrationNumber && <p className="field__error">{kycErrors.registrationNumber}</p>}
+                </div>
+              </div>
+              <div className="kyc-section__actions">
+                <button type="submit" className={`btn btn--ghost btn--sm${savingKycDetails ? ' is-loading' : ''}`} disabled={savingKycDetails}><Icon name="check" />Save details</button>
+              </div>
+            </form>
+
+            <form className="kyc-section" onSubmit={uploadDocument}>
+              <h3 className="kyc-section__title">Documents</h3>
+              <div className="kyc-upload">
+                <select className="select" aria-label="Document type" value={upload.docType} onChange={(e) => setUpload((u) => ({ ...u, docType: e.target.value }))}>
+                  {Object.entries(DOC_TYPES).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+                </select>
+                <input key={fileInputKey} className="input" type="file" aria-label="Document file" accept="application/pdf,image/png,image/jpeg" onChange={(e) => setUpload((u) => ({ ...u, file: e.target.files[0] || null }))} />
+                <button type="submit" className={`btn btn--primary btn--sm${uploading ? ' is-loading' : ''}`} disabled={uploading || !upload.file}><Icon name="upload" />Upload</button>
+              </div>
+              <p className="kyc-section__hint">PDF, PNG or JPEG, up to 8 MB. Uploading moves KYC from Pending to Under review.</p>
+            </form>
+
             <div className="table-wrap" style={{ marginBottom: 14 }}>
               <table className="table table--compact table--stack">
                 <thead><tr><th>Document</th><th>File</th><th>Status</th><th className="col-actions">Review</th></tr></thead>
@@ -174,6 +247,7 @@ export default function HospitalDetailPage({ params }) {
                 </tbody>
               </table>
             </div>
+            <h3 className="kyc-section__title">KYC decision</h3>
             <div className="field" style={{ marginBottom: 10 }}>
               <label>KYC decision reason (for reject)</label>
               <input className="input" value={kycReason} onChange={(e) => setKycReason(e.target.value)} placeholder="Reason if rejecting" />

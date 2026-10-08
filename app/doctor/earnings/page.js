@@ -64,7 +64,7 @@ export default function EarningsPage() {
           <article className="card card--flush" style={{ marginTop: 20 }}>
             <div className="table-wrap" style={{ padding: '0 8px 8px' }}>
               <table className="table table--compact table--stack">
-                <thead><tr><th>Date</th><th>Time</th><th>Patient</th><th>Fee</th><th>Transaction</th></tr></thead>
+                <thead><tr><th>Date</th><th>Time</th><th>Patient</th><th className="num">Fee</th><th>Transaction</th></tr></thead>
                 <tbody>
                   {data.items.length === 0 && <tr><td colSpan={5} className="text-muted">No paid appointments in this period.</td></tr>}
                   {data.items.map((i) => (

@@ -123,7 +123,7 @@ export default function PaymentsPage() {
           </div>
           <div className="table-wrap">
             <table className="table table--stack">
-              <thead><tr><th>Transaction</th><th>Patient</th><th>Hospital</th><th>Doctor</th><th>Amount</th><th>Method</th><th>Status</th></tr></thead>
+              <thead><tr><th>Transaction</th><th>Patient</th><th>Hospital</th><th>Doctor</th><th className="num">Amount</th><th>Method</th><th>Status</th></tr></thead>
               <tbody>
                 {loading && <tr><td colSpan={7}><div className="skeleton skeleton--row"></div><div className="skeleton skeleton--row"></div></td></tr>}
                 {!loading && items.length === 0 && (

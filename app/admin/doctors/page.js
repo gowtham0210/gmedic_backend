@@ -66,7 +66,7 @@ function EditModal({ doctor, specializations, onClose, onDone }) {
                 </select>
               </div>
               <div className={`field${errors.fee ? ' has-error' : ''}`}>
-                <label>Fee (₹)</label>
+                <label>Consultation fee (₹)</label>
                 <input className="input" type="number" value={form.fee} onChange={(e) => setForm((f) => ({ ...f, fee: e.target.value }))} />
                 {errors.fee && <p className="field__error">{errors.fee}</p>}
               </div>
@@ -77,6 +77,9 @@ function EditModal({ doctor, specializations, onClose, onDone }) {
               <div className="field">
                 <label>Registration number</label>
                 <input className="input" value={form.registrationNumber} onChange={(e) => setForm((f) => ({ ...f, registrationNumber: e.target.value }))} />
+                {doctor.verificationStatus === 'VERIFIED' && form.registrationNumber.trim() !== (doctor.registrationNumber || '').trim() && (
+                  <p className="field__hint is-warning"><Icon name="alert-triangle" className="icon--xs" />Saving will send this doctor back to Pending for re-verification.</p>
+                )}
               </div>
               <div className="field field--full">
                 <label>Qualifications</label>
@@ -129,13 +132,13 @@ function VerifyModal({ target, onClose, onDone }) {
             {needsNote && (
               <div className="field">
                 <label>Reason *</label>
-                <textarea className="textarea" value={note} onChange={(e) => setNote(e.target.value)} required rows={3} />
+                <textarea className="textarea" value={note} onChange={(e) => setNote(e.target.value)} required rows={3} placeholder="Enter the reason for rejecting this doctor…" />
               </div>
             )}
           </div>
           <div className="modal__foot">
             <button type="button" className="btn btn--ghost" onClick={onClose}>Cancel</button>
-            <button type="submit" className={`btn ${status === 'VERIFIED' ? 'btn--primary' : 'btn--danger'}${saving ? ' is-loading' : ''}`} disabled={saving}>Confirm</button>
+            <button type="submit" className={`btn ${status === 'VERIFIED' ? 'btn--primary' : 'btn--danger'}${saving ? ' is-loading' : ''}`} disabled={saving}>{status === 'VERIFIED' ? 'Verify Doctor' : 'Reject Doctor'}</button>
           </div>
         </form>
       </div>
@@ -222,7 +225,7 @@ export default function DoctorsPage() {
 
         <div className="table-wrap">
           <table className="table table--stack">
-            <thead><tr><th>Doctor</th><th>Hospital</th><th>Specialization</th><th>Fee</th><th>Availability</th><th>Verification</th><th className="col-actions">Actions</th></tr></thead>
+            <thead><tr><th>Doctor</th><th>Hospital</th><th>Specialization</th><th className="num">Consultation Fee</th><th>Availability</th><th>Verification</th><th className="col-actions">Actions</th></tr></thead>
             <tbody>
               {loading && <tr><td colSpan={7}><div className="skeleton skeleton--row"></div><div className="skeleton skeleton--row"></div></td></tr>}
               {!loading && items.length === 0 && (
@@ -233,7 +236,7 @@ export default function DoctorsPage() {
                   <td data-label="Doctor" className="cell-primary">{d.name}<span className="cell-sub mono">{d.id}</span></td>
                   <td data-label="Hospital" className="text-muted">{d.hospitalName}</td>
                   <td data-label="Specialization">{d.specialization}</td>
-                  <td data-label="Fee" className="num fee">₹{Number(d.fee).toLocaleString('en-IN')}</td>
+                  <td data-label="Consultation Fee" className="num fee">₹{Number(d.fee).toLocaleString('en-IN')}</td>
                   <td data-label="Availability"><span className={`badge badge--${d.availability === 'present' ? 'confirmed' : 'cancelled'}`}>{d.availability === 'present' ? 'Present' : 'Absent'}</span></td>
                   <td data-label="Verification"><span className={`badge badge--${VERIFY_TONE[d.verificationStatus] || 'neutral'}`}>{d.verificationStatus}</span></td>
                   <td className="col-actions">

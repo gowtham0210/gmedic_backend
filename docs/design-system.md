@@ -166,10 +166,28 @@ Markup:
 </div>
 ```
 
+### Summary above a table
+
+On registry/list pages (Hospitals, Payments, QR, …) the **table is the primary
+working area**; status counts above it are supporting information. Use
+`.summary-strip.summary-strip--compact`: 32px icon box, 18px/700 value, 12px
+gaps, no shadow. Colour an icon only when its status has a count above 0;
+otherwise `.tone-neutral`. (KPI pages such as Analytics keep the full-size cards.)
+
 ### Empty states
 
-Never render empty axes, an empty grid or an invisible series. Use `.empty`
-(or `.chart-empty` inside a chart card, same footprint as the chart):
+Never render empty axes, an empty grid, an invisible series or a bare empty
+table. Tables and lists distinguish two cases, each with a next step:
+
+| Case | Icon | Title | Action |
+|---|---|---|---|
+| Nothing exists yet | the entity's icon | `No hospitals yet` + what will appear here | Primary create button (`Add Hospital`) |
+| Search/filters match nothing | `search` | `No hospitals match your search` + echo the filters (`Nothing matches "Apollo" · status Suspended`) | `Clear filters` |
+
+Decide "nothing exists" from an unfiltered total (e.g. the status summary), not
+from the filtered result. Only suggest checking spelling when there is search text.
+
+Charts use `.chart-empty` (same footprint as the chart):
 
 ```
 No hospital growth data yet
@@ -241,17 +259,33 @@ Shared config in [`components/admin/DashboardCharts.js`](../components/admin/Das
 
 ---
 
-## 9. Buttons & controls
+## 9. Tables
+
+- **Numeric columns are right-aligned — header included.** Give the `<th>` the
+  same `num` class as its cells (`<th className="num">`), so the header lines up
+  with the figures. Amounts use `₹` with Indian grouping (`toLocaleString('en-IN')`).
+- Name the value precisely: `Consultation Fee`, not `Fee`; keep the column header,
+  the cell `data-label` (used as the label on phones) and any edit-form label the same.
+- Empty tables follow §5 (nothing exists yet vs no match).
+- **Identifiers are human-referenceable and consistent.** QR codes use
+  `QR-<hospital>-<NN>` (e.g. `QR-HSP001-02`), generated only via
+  `services/qrIds.js`.
+
+## 10. Buttons & controls
 
 - Primary button: solid `--teal-600`, hover `--teal-700`, `0 1px 2px` shadow. No
   gradient, no glow.
 - Badges, chips, tab counts: `4px` radius rectangles, not pills.
+- **Confirmation buttons name the action, never "Confirm":** `Cancel | Reject Doctor`,
+  `Cancel | Suspend Hospital`, `Cancel | Approve Refund`. Destructive actions use
+  `btn--danger` and require a reason (free text, with a placeholder such as
+  "Enter the reason for suspending this hospital…").
 - Selection controls (filter chips, pagination, role picker) are **not**
   navigation and may look different from §3.
 
 ---
 
-## 10. Accessibility
+## 11. Accessibility
 
 - Small text must meet **WCAG AA 4.5:1** (check muted colours on navy).
 - Collapsed/hidden labels stay available to screen readers.

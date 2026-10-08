@@ -54,11 +54,12 @@ function DecisionModal({ target, onClose, onDone }) {
             </div>
           </div>
           <div className="modal__body">
-            <div className="field"><label>Note</label><textarea className="textarea" value={note} onChange={(e) => setNote(e.target.value)} rows={3} /></div>
+            <div className="field"><label>Note</label><textarea className="textarea" value={note} onChange={(e) => setNote(e.target.value)} rows={3}
+              placeholder={decision === 'APPROVED' ? 'Add a note about this approval (optional)…' : 'Add a note about why this refund is rejected (optional)…'} /></div>
           </div>
           <div className="modal__foot">
             <button type="button" className="btn btn--ghost" onClick={onClose}>Cancel</button>
-            <button type="submit" className={`btn ${decision === 'APPROVED' ? 'btn--primary' : 'btn--danger'}${saving ? ' is-loading' : ''}`} disabled={saving}>Confirm</button>
+            <button type="submit" className={`btn ${decision === 'APPROVED' ? 'btn--primary' : 'btn--danger'}${saving ? ' is-loading' : ''}`} disabled={saving}>{decision === 'APPROVED' ? 'Approve Refund' : 'Reject Refund'}</button>
           </div>
         </form>
       </div>
@@ -116,7 +117,7 @@ export default function RefundsPage() {
         </div>
         <div className="table-wrap">
           <table className="table table--stack">
-            <thead><tr><th>Refund</th><th>Patient</th><th>Hospital</th><th>Amount</th><th>Reason</th><th>Status</th><th className="col-actions">Actions</th></tr></thead>
+            <thead><tr><th>Refund</th><th>Patient</th><th>Hospital</th><th className="num">Amount</th><th>Reason</th><th>Status</th><th className="col-actions">Actions</th></tr></thead>
             <tbody>
               {loading && <tr><td colSpan={7}><div className="skeleton skeleton--row"></div><div className="skeleton skeleton--row"></div></td></tr>}
               {!loading && items.length === 0 && (

@@ -74,7 +74,7 @@ export default function PatientDetailPage({ params }) {
           <div className="card__head"><h2 className="card__title"><Icon name="calendar" />Appointment History</h2></div>
           <div className="table-wrap">
             <table className="table table--compact table--stack">
-              <thead><tr><th>Appointment ID</th><th>Date</th><th>Time</th><th>Fee</th><th>Payment</th><th>Status</th></tr></thead>
+              <thead><tr><th>Appointment ID</th><th>Date</th><th>Time</th><th className="num">Fee</th><th>Payment</th><th>Status</th></tr></thead>
               <tbody>
                 {appointments.map((a) => (
                   <tr key={a.id}>
@@ -97,7 +97,7 @@ export default function PatientDetailPage({ params }) {
           <div className="card__head"><h2 className="card__title"><Icon name="credit-card" />Payments</h2></div>
           <div className="table-wrap">
             <table className="table table--compact table--stack">
-              <thead><tr><th>Appointment ID</th><th>Date</th><th>Amount</th><th>Status</th></tr></thead>
+              <thead><tr><th>Appointment ID</th><th>Date</th><th className="num">Amount</th><th>Status</th></tr></thead>
               <tbody>
                 {paid.length === 0 && <tr><td colSpan={4} style={{ whiteSpace: 'normal' }}><p className="text-muted" style={{ padding: 16 }}>No paid appointments yet.</p></td></tr>}
                 {paid.map((a) => (

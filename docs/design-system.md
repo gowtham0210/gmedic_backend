@@ -272,6 +272,13 @@ Shared config in [`components/admin/DashboardCharts.js`](../components/admin/Das
   plain-JS pages — they produce identical output. Never render raw ISO
   (`2026-10-14`) or call `toLocaleString()` without a locale (ambiguous 7/10 vs 10/7).
   Dates are not monospace; use `nowrap`.
+- **Patient phone numbers are masked in lists** (`95••••17`, `maskMobile` in
+  `lib/format.js`) and shown in full only in an authorised detail view
+  (`patients.view`). Never hide the column — mask it. Staff/hospital business
+  phones are not patient PII.
+- **Compact history lists** (payments, refunds) carry a second identifying
+  dimension — at least the date — not just an amount and status. Row-level
+  references (e.g. the appointment ID) go as secondary text, not a new column.
 - Empty tables follow §5 (nothing exists yet vs no match).
 - **Identifiers are human-referenceable and consistent.** QR codes use
   `QR-<hospital>-<NN>` (e.g. `QR-HSP001-02`), generated only via

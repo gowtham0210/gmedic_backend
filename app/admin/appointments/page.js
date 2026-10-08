@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Icon from '../../../components/Icon';
-import { formatDate, formatDateTime, formatTime } from '../../../lib/format';
+import { formatDate, formatDateTime, formatTime, maskMobile } from '../../../lib/format';
 
 const STATUS_TONE = { confirmed: 'confirmed', pending: 'pending', completed: 'completed', cancelled: 'cancelled' };
 const toast = (msg, type = 'success') => { if (typeof window !== 'undefined' && window.G) window.G.toast(msg, type); };
@@ -16,7 +16,6 @@ async function api(url) {
 }
 
 const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
-const maskMobile = (m) => (m ? `${m.slice(0, 2)}••••${m.slice(-2)}` : '—');
 
 function DetailDrawer({ appointment: a, onClose }) {
   if (!a) return null;

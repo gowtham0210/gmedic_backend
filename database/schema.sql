@@ -32,7 +32,7 @@ CREATE TABLE hospitals (
   activated_at         TEXT,
   created_at           TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at           TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-, timezone TEXT NOT NULL DEFAULT 'Asia/Kolkata', currency TEXT NOT NULL DEFAULT 'INR' CHECK (length(currency) = 3));
+, timezone TEXT NOT NULL DEFAULT 'Asia/Kolkata', currency TEXT NOT NULL DEFAULT 'INR' CHECK (length(currency) = 3), kind TEXT, area TEXT, lat REAL, lng REAL, brand_color INTEGER, initials TEXT, about TEXT);
 
 CREATE UNIQUE INDEX uq_hospitals_gstin ON hospitals (gstin);
 CREATE UNIQUE INDEX uq_hospitals_registration ON hospitals (registration_number);
@@ -153,7 +153,7 @@ CREATE TABLE "departments" (
   name        TEXT NOT NULL,
   created_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
+, icon TEXT);
 
 CREATE UNIQUE INDEX uq_departments_scope_name ON departments (COALESCE(hospital_id, ''), name);
 
@@ -163,7 +163,7 @@ END;
 
 CREATE TABLE "users" (
   id                   TEXT PRIMARY KEY,
-  role                 TEXT NOT NULL CHECK (role IN ('SUPER_ADMIN','FINANCE','SUPPORT','OPERATIONS','RECEPTIONIST','DOCTOR')),
+  role                 TEXT NOT NULL CHECK (role IN ('SUPER_ADMIN','FINANCE','SUPPORT','OPERATIONS','RECEPTIONIST','DOCTOR','PATIENT')),
   hospital_id          TEXT REFERENCES hospitals (id),
   doctor_id            TEXT,
   name                 TEXT NOT NULL,
@@ -216,7 +216,7 @@ CREATE TABLE "doctors" (
   verified_by             TEXT REFERENCES users (id),
   verified_at             TEXT,
   created_at              TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at              TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at              TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, gender TEXT CHECK (gender IS NULL OR gender IN ('MALE','FEMALE','OTHER')),
   FOREIGN KEY (branch_id, hospital_id) REFERENCES hospital_branches (id, hospital_id)
 );
 
@@ -417,7 +417,7 @@ CREATE TABLE "appointments" (
   rescheduled_from_id   TEXT REFERENCES "appointments" (id),
   reason_for_visit      TEXT,
   created_at            TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at            TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at            TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, token_no INTEGER, reschedule_count INTEGER NOT NULL DEFAULT 0 CHECK (reschedule_count >= 0), booked_by_user_id TEXT REFERENCES users (id),
   FOREIGN KEY (doctor_id, hospital_id) REFERENCES doctors (id, hospital_id),
   FOREIGN KEY (doctor_id, currency) REFERENCES doctors (id, currency),
   FOREIGN KEY (branch_id, hospital_id) REFERENCES hospital_branches (id, hospital_id)
@@ -431,6 +431,7 @@ CREATE INDEX ix_appts_doctor_date ON appointments (doctor_id, appt_date);
 CREATE INDEX ix_appts_patient ON appointments (patient_id);
 CREATE INDEX ix_appts_date ON appointments (appt_date);
 CREATE INDEX ix_appts_created ON appointments (created_at);
+CREATE INDEX ix_appts_booked_by ON appointments (booked_by_user_id, appt_date);
 
 CREATE TRIGGER trg_appts_updated AFTER UPDATE ON appointments BEGIN
   UPDATE appointments SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
@@ -566,7 +567,7 @@ CREATE TABLE "payments" (
   failure_reason      TEXT,
   paid_at             TEXT,
   created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, idempotency_key TEXT,
   CHECK (consultation_amount IS NULL OR ABS(consultation_amount + convenience_fee + tax_amount - amount) < 0.005),
   FOREIGN KEY (appointment_id, currency) REFERENCES appointments (id, currency)
 );
@@ -579,6 +580,7 @@ CREATE UNIQUE INDEX uq_payments_id_txn ON payments (id, transaction_id);
 CREATE UNIQUE INDEX uq_payments_id_currency ON payments (id, currency);
 CREATE INDEX ix_payments_appointment ON payments (appointment_id);
 CREATE INDEX ix_payments_status ON payments (status);
+CREATE UNIQUE INDEX uq_payments_idem ON payments (idempotency_key) WHERE idempotency_key IS NOT NULL;
 
 CREATE TRIGGER trg_payments_updated AFTER UPDATE ON payments BEGIN
   UPDATE payments SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
@@ -1037,5 +1039,19 @@ CREATE TABLE meta (
       meta_value TEXT NOT NULL
     );
 
+
+-- ============================================================ Other
+
+CREATE TABLE otp_codes (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  phone      TEXT NOT NULL,
+  code_hash  TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  attempts   INTEGER NOT NULL DEFAULT 0,
+  consumed_at TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX ix_otp_phone ON otp_codes (phone, id);
 
 PRAGMA foreign_keys = ON;

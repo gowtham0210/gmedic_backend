@@ -66,6 +66,14 @@ export default function AppointmentsPage() {
   const [f, setF] = useState({ id: '', hospitalId: '', doctorId: '', status: '', paymentStatus: '', from: '', to: '' });
   const [selected, setSelected] = useState(null);
 
+  // Show the row straight away, then refresh it from the detail endpoint.
+  function openDetail(a) {
+    setSelected(a);
+    api(`/api/admin/appointments/${a.id}`)
+      .then((r) => setSelected((cur) => (cur && cur.id === a.id ? { ...cur, ...r.appointment } : cur)))
+      .catch(() => {});
+  }
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -154,7 +162,7 @@ export default function AppointmentsPage() {
                   <td data-label="Status"><span className={`badge badge--${STATUS_TONE[a.status]}`}>{a.status}</span></td>
                   <td data-label="Payment"><span className={`badge badge--${a.paymentStatus === 'paid' ? 'confirmed' : 'pending'}`}>{a.paymentStatus}</span></td>
                   <td data-label="Created" className="text-muted nowrap">{formatDate(a.createdAt)}</td>
-                  <td className="col-actions"><button type="button" className="action-btn" onClick={() => setSelected(a)}><Icon name="eye" />View</button></td>
+                  <td className="col-actions"><button type="button" className="action-btn" onClick={() => openDetail(a)}><Icon name="eye" />View</button></td>
                 </tr>
               ))}
             </tbody>

@@ -9,6 +9,8 @@ info:
     and users only ever see their own support tickets (404 for anyone else's).
     The access requirement of each operation is given in `x-access`.
     Super Admin appointments are read-only: there is no cancel / reschedule / edit endpoint.
+    The Patient tag is the API of the Gmedic patient app: it signs in with a one-time code and a bearer token, money is in paise,
+    and every booking, payment and cancellation is written to the same database the portals read.
 servers:
   - url: http://localhost:3000
     description: Local development
@@ -32,6 +34,7 @@ tags:
   - name: "Receptionist"
   - name: "Doctor"
   - name: "Doctor: Dashboard"
+  - name: "Patient"
 paths:
   /api/auth/login:
     post:
@@ -2231,11 +2234,755 @@ paths:
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
         '404': {description: Not found}
+  /api/patient/auth/otp:
+    post:
+      tags: ["Patient"]
+      summary: "Send a one-time code to the patient's mobile number (dev mode: the code is PATIENT_DEV_OTP)"
+      operationId: postApiPatientAuthOtp
+      x-access: "public"
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PatientOtpRequest'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/PatientOtpSent'}}}}
+        '4XX': {description: "Error. The body is { error, code }; code is a stable value such as INVALID_OTP, NOT_SIGNED_IN, NOT_LINKED, QR_INVALID, QR_REVOKED, QR_SUSPENDED, SLOT_UNAVAILABLE, DUPLICATE_BOOKING, HOLD_EXPIRED, PAYMENT_DECLINED, PAYMENT_TIMEOUT, PAYMENT_LATE_REFUNDED, LIMIT_REACHED, POLICY or VALIDATION", content: {application/json: {schema: {$ref: '#/components/schemas/PatientError'}}}}
+  /api/patient/auth/verify:
+    post:
+      tags: ["Patient"]
+      summary: "Verify the code; creates the account on first sign-in and returns a bearer token"
+      operationId: postApiPatientAuthVerify
+      x-access: "public"
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PatientVerifyRequest'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/PatientSession'}}}}
+        '4XX': {description: "Error. The body is { error, code }; code is a stable value such as INVALID_OTP, NOT_SIGNED_IN, NOT_LINKED, QR_INVALID, QR_REVOKED, QR_SUSPENDED, SLOT_UNAVAILABLE, DUPLICATE_BOOKING, HOLD_EXPIRED, PAYMENT_DECLINED, PAYMENT_TIMEOUT, PAYMENT_LATE_REFUNDED, LIMIT_REACHED, POLICY or VALIDATION", content: {application/json: {schema: {$ref: '#/components/schemas/PatientError'}}}}
+  /api/patient/auth/logout:
+    post:
+      tags: ["Patient"]
+      summary: "Sign out (the token stops working, held slots are released)"
+      operationId: postApiPatientAuthLogout
+      x-access: "patient"
+      security:
+        - patientBearer: []
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '4XX': {description: "Error. The body is { error, code }; code is a stable value such as INVALID_OTP, NOT_SIGNED_IN, NOT_LINKED, QR_INVALID, QR_REVOKED, QR_SUSPENDED, SLOT_UNAVAILABLE, DUPLICATE_BOOKING, HOLD_EXPIRED, PAYMENT_DECLINED, PAYMENT_TIMEOUT, PAYMENT_LATE_REFUNDED, LIMIT_REACHED, POLICY or VALIDATION", content: {application/json: {schema: {$ref: '#/components/schemas/PatientError'}}}}
+  /api/patient/me:
+    get:
+      tags: ["Patient"]
+      summary: "My profile"
+      operationId: getApiPatientMe
+      x-access: "patient"
+      security:
+        - patientBearer: []
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/PatientUser'}}}}
+        '4XX': {description: "Error. The body is { error, code }; code is a stable value such as INVALID_OTP, NOT_SIGNED_IN, NOT_LINKED, QR_INVALID, QR_REVOKED, QR_SUSPENDED, SLOT_UNAVAILABLE, DUPLICATE_BOOKING, HOLD_EXPIRED, PAYMENT_DECLINED, PAYMENT_TIMEOUT, PAYMENT_LATE_REFUNDED, LIMIT_REACHED, POLICY or VALIDATION", content: {application/json: {schema: {$ref: '#/components/schemas/PatientError'}}}}
+    put:
+      tags: ["Patient"]
+      summary: "Complete or edit my profile (name, date of birth, gender)"
+      operationId: putApiPatientMe
+      x-access: "patient"
+      security:
+        - patientBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PatientProfileUpdate'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/PatientUser'}}}}
+        '4XX': {description: "Error. The body is { error, code }; code is a stable value such as INVALID_OTP, NOT_SIGNED_IN, NOT_LINKED, QR_INVALID, QR_REVOKED, QR_SUSPENDED, SLOT_UNAVAILABLE, DUPLICATE_BOOKING, HOLD_EXPIRED, PAYMENT_DECLINED, PAYMENT_TIMEOUT, PAYMENT_LATE_REFUNDED, LIMIT_REACHED, POLICY or VALIDATION", content: {application/json: {schema: {$ref: '#/components/schemas/PatientError'}}}}
+    delete:
+      tags: ["Patient"]
+      summary: "Delete my account: future appointments are cancelled per the refund policy and personal details are erased"
+      operationId: deleteApiPatientMe
+      x-access: "patient"
+      security:
+        - patientBearer: []
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '4XX': {description: "Error. The body is { error, code }; code is a stable value such as INVALID_OTP, NOT_SIGNED_IN, NOT_LINKED, QR_INVALID, QR_REVOKED, QR_SUSPENDED, SLOT_UNAVAILABLE, DUPLICATE_BOOKING, HOLD_EXPIRED, PAYMENT_DECLINED, PAYMENT_TIMEOUT, PAYMENT_LATE_REFUNDED, LIMIT_REACHED, POLICY or VALIDATION", content: {application/json: {schema: {$ref: '#/components/schemas/PatientError'}}}}
+  /api/patient/dependents:
+    get:
+      tags: ["Patient"]
+      summary: "My family members"
+      operationId: getApiPatientDependents
+      x-access: "patient"
+      security:
+        - patientBearer: []
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/FamilyList'}}}}
+        '4XX': {description: "Error. The body is { error, code }; code is a stable value such as INVALID_OTP, NOT_SIGNED_IN, NOT_LINKED, QR_INVALID, QR_REVOKED, QR_SUSPENDED, SLOT_UNAVAILABLE, DUPLICATE_BOOKING, HOLD_EXPIRED, PAYMENT_DECLINED, PAYMENT_TIMEOUT, PAYMENT_LATE_REFUNDED, LIMIT_REACHED, POLICY or VALIDATION", content: {application/json: {schema: {$ref: '#/components/schemas/PatientError'}}}}
+    post:
+      tags: ["Patient"]
+      summary: "Add a family member (up to 6)"
+      operationId: postApiPatientDependents
+      x-access: "patient"
+      security:
+        - patientBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/FamilyMemberCreate'}
+      responses:
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/FamilyMember'}}}}
+        '4XX': {description: "Error. The body is { error, code }; code is a stable value such as INVALID_OTP, NOT_SIGNED_IN, NOT_LINKED, QR_INVALID, QR_REVOKED, QR_SUSPENDED, SLOT_UNAVAILABLE, DUPLICATE_BOOKING, HOLD_EXPIRED, PAYMENT_DECLINED, PAYMENT_TIMEOUT, PAYMENT_LATE_REFUNDED, LIMIT_REACHED, POLICY or VALIDATION", content: {application/json: {schema: {$ref: '#/components/schemas/PatientError'}}}}
+  /api/patient/dependents/{id}:
+    put:
+      tags: ["Patient"]
+      summary: "Edit a family member"
+      operationId: putApiPatientDependentsId
+      x-access: "patient"
+      security:
+        - patientBearer: []
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/FamilyMemberUpdate'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/FamilyMember'}}}}
+        '4XX': {description: "Error. The body is { error, code }; code is a stable value such as INVALID_OTP, NOT_SIGNED_IN, NOT_LINKED, QR_INVALID, QR_REVOKED, QR_SUSPENDED, SLOT_UNAVAILABLE, DUPLICATE_BOOKING, HOLD_EXPIRED, PAYMENT_DECLINED, PAYMENT_TIMEOUT, PAYMENT_LATE_REFUNDED, LIMIT_REACHED, POLICY or VALIDATION", content: {application/json: {schema: {$ref: '#/components/schemas/PatientError'}}}}
+    delete:
+      tags: ["Patient"]
+      summary: "Remove a family member (their visit history stays with the hospital)"
+      operationId: deleteApiPatientDependentsId
+      x-access: "patient"
+      security:
+        - patientBearer: []
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '4XX': {description: "Error. The body is { error, code }; code is a stable value such as INVALID_OTP, NOT_SIGNED_IN, NOT_LINKED, QR_INVALID, QR_REVOKED, QR_SUSPENDED, SLOT_UNAVAILABLE, DUPLICATE_BOOKING, HOLD_EXPIRED, PAYMENT_DECLINED, PAYMENT_TIMEOUT, PAYMENT_LATE_REFUNDED, LIMIT_REACHED, POLICY or VALIDATION", content: {application/json: {schema: {$ref: '#/components/schemas/PatientError'}}}}
+  /api/patient/qr/resolve:
+    post:
+      tags: ["Patient"]
+      summary: "Read a scanned QR code, deep link or hospital code and show the hospital before linking"
+      operationId: postApiPatientQrResolve
+      x-access: "patient"
+      security:
+        - patientBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/QrResolveRequest'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/QrResolution'}}}}
+        '4XX': {description: "Error. The body is { error, code }; code is a stable value such as INVALID_OTP, NOT_SIGNED_IN, NOT_LINKED, QR_INVALID, QR_REVOKED, QR_SUSPENDED, SLOT_UNAVAILABLE, DUPLICATE_BOOKING, HOLD_EXPIRED, PAYMENT_DECLINED, PAYMENT_TIMEOUT, PAYMENT_LATE_REFUNDED, LIMIT_REACHED, POLICY or VALIDATION", content: {application/json: {schema: {$ref: '#/components/schemas/PatientError'}}}}
+  /api/patient/hospitals:
+    get:
+      tags: ["Patient"]
+      summary: "Hospitals I have linked"
+      operationId: getApiPatientHospitals
+      x-access: "patient"
+      security:
+        - patientBearer: []
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/PatientHospitalList'}}}}
+        '4XX': {description: "Error. The body is { error, code }; code is a stable value such as INVALID_OTP, NOT_SIGNED_IN, NOT_LINKED, QR_INVALID, QR_REVOKED, QR_SUSPENDED, SLOT_UNAVAILABLE, DUPLICATE_BOOKING, HOLD_EXPIRED, PAYMENT_DECLINED, PAYMENT_TIMEOUT, PAYMENT_LATE_REFUNDED, LIMIT_REACHED, POLICY or VALIDATION", content: {application/json: {schema: {$ref: '#/components/schemas/PatientError'}}}}
+  /api/patient/hospitals/{id}:
+    get:
+      tags: ["Patient"]
+      summary: "A linked hospital"
+      operationId: getApiPatientHospitalsId
+      x-access: "patient"
+      security:
+        - patientBearer: []
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/PatientHospital'}}}}
+        '4XX': {description: "Error. The body is { error, code }; code is a stable value such as INVALID_OTP, NOT_SIGNED_IN, NOT_LINKED, QR_INVALID, QR_REVOKED, QR_SUSPENDED, SLOT_UNAVAILABLE, DUPLICATE_BOOKING, HOLD_EXPIRED, PAYMENT_DECLINED, PAYMENT_TIMEOUT, PAYMENT_LATE_REFUNDED, LIMIT_REACHED, POLICY or VALIDATION", content: {application/json: {schema: {$ref: '#/components/schemas/PatientError'}}}}
+  /api/patient/hospitals/{id}/link:
+    post:
+      tags: ["Patient"]
+      summary: "Link a hospital using the key from the QR code"
+      operationId: postApiPatientHospitalsIdLink
+      x-access: "patient"
+      security:
+        - patientBearer: []
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/LinkRequest'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '4XX': {description: "Error. The body is { error, code }; code is a stable value such as INVALID_OTP, NOT_SIGNED_IN, NOT_LINKED, QR_INVALID, QR_REVOKED, QR_SUSPENDED, SLOT_UNAVAILABLE, DUPLICATE_BOOKING, HOLD_EXPIRED, PAYMENT_DECLINED, PAYMENT_TIMEOUT, PAYMENT_LATE_REFUNDED, LIMIT_REACHED, POLICY or VALIDATION", content: {application/json: {schema: {$ref: '#/components/schemas/PatientError'}}}}
+    delete:
+      tags: ["Patient"]
+      summary: "Unlink a hospital"
+      operationId: deleteApiPatientHospitalsIdLink
+      x-access: "patient"
+      security:
+        - patientBearer: []
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '4XX': {description: "Error. The body is { error, code }; code is a stable value such as INVALID_OTP, NOT_SIGNED_IN, NOT_LINKED, QR_INVALID, QR_REVOKED, QR_SUSPENDED, SLOT_UNAVAILABLE, DUPLICATE_BOOKING, HOLD_EXPIRED, PAYMENT_DECLINED, PAYMENT_TIMEOUT, PAYMENT_LATE_REFUNDED, LIMIT_REACHED, POLICY or VALIDATION", content: {application/json: {schema: {$ref: '#/components/schemas/PatientError'}}}}
+  /api/patient/hospitals/{id}/relink:
+    post:
+      tags: ["Patient"]
+      summary: "Undo an unlink made in the last 10 minutes"
+      operationId: postApiPatientHospitalsIdRelink
+      x-access: "patient"
+      security:
+        - patientBearer: []
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '4XX': {description: "Error. The body is { error, code }; code is a stable value such as INVALID_OTP, NOT_SIGNED_IN, NOT_LINKED, QR_INVALID, QR_REVOKED, QR_SUSPENDED, SLOT_UNAVAILABLE, DUPLICATE_BOOKING, HOLD_EXPIRED, PAYMENT_DECLINED, PAYMENT_TIMEOUT, PAYMENT_LATE_REFUNDED, LIMIT_REACHED, POLICY or VALIDATION", content: {application/json: {schema: {$ref: '#/components/schemas/PatientError'}}}}
+  /api/patient/hospitals/{id}/departments:
+    get:
+      tags: ["Patient"]
+      summary: "Departments of a linked hospital"
+      operationId: getApiPatientHospitalsIdDepartments
+      x-access: "patient"
+      security:
+        - patientBearer: []
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/DepartmentList'}}}}
+        '4XX': {description: "Error. The body is { error, code }; code is a stable value such as INVALID_OTP, NOT_SIGNED_IN, NOT_LINKED, QR_INVALID, QR_REVOKED, QR_SUSPENDED, SLOT_UNAVAILABLE, DUPLICATE_BOOKING, HOLD_EXPIRED, PAYMENT_DECLINED, PAYMENT_TIMEOUT, PAYMENT_LATE_REFUNDED, LIMIT_REACHED, POLICY or VALIDATION", content: {application/json: {schema: {$ref: '#/components/schemas/PatientError'}}}}
+  /api/patient/hospitals/{id}/doctors:
+    get:
+      tags: ["Patient"]
+      summary: "Verified doctors of a linked hospital with their next free slot"
+      operationId: getApiPatientHospitalsIdDoctors
+      x-access: "patient"
+      security:
+        - patientBearer: []
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/DoctorSummaryList'}}}}
+        '4XX': {description: "Error. The body is { error, code }; code is a stable value such as INVALID_OTP, NOT_SIGNED_IN, NOT_LINKED, QR_INVALID, QR_REVOKED, QR_SUSPENDED, SLOT_UNAVAILABLE, DUPLICATE_BOOKING, HOLD_EXPIRED, PAYMENT_DECLINED, PAYMENT_TIMEOUT, PAYMENT_LATE_REFUNDED, LIMIT_REACHED, POLICY or VALIDATION", content: {application/json: {schema: {$ref: '#/components/schemas/PatientError'}}}}
+  /api/patient/doctors/{id}:
+    get:
+      tags: ["Patient"]
+      summary: "A doctor's profile and weekly schedule"
+      operationId: getApiPatientDoctorsId
+      x-access: "patient"
+      security:
+        - patientBearer: []
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/PatientDoctor'}}}}
+        '4XX': {description: "Error. The body is { error, code }; code is a stable value such as INVALID_OTP, NOT_SIGNED_IN, NOT_LINKED, QR_INVALID, QR_REVOKED, QR_SUSPENDED, SLOT_UNAVAILABLE, DUPLICATE_BOOKING, HOLD_EXPIRED, PAYMENT_DECLINED, PAYMENT_TIMEOUT, PAYMENT_LATE_REFUNDED, LIMIT_REACHED, POLICY or VALIDATION", content: {application/json: {schema: {$ref: '#/components/schemas/PatientError'}}}}
+  /api/patient/doctors/{id}/slots:
+    get:
+      tags: ["Patient"]
+      summary: "The doctor's slots on one day, as available, full or unavailable"
+      operationId: getApiPatientDoctorsIdSlots
+      x-access: "patient"
+      security:
+        - patientBearer: []
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+        - {name: date, in: query, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/SlotList'}}}}
+        '4XX': {description: "Error. The body is { error, code }; code is a stable value such as INVALID_OTP, NOT_SIGNED_IN, NOT_LINKED, QR_INVALID, QR_REVOKED, QR_SUSPENDED, SLOT_UNAVAILABLE, DUPLICATE_BOOKING, HOLD_EXPIRED, PAYMENT_DECLINED, PAYMENT_TIMEOUT, PAYMENT_LATE_REFUNDED, LIMIT_REACHED, POLICY or VALIDATION", content: {application/json: {schema: {$ref: '#/components/schemas/PatientError'}}}}
+  /api/patient/doctors/{id}/next-available:
+    get:
+      tags: ["Patient"]
+      summary: "The earliest day with a free slot inside the booking window"
+      operationId: getApiPatientDoctorsIdNextAvailable
+      x-access: "patient"
+      security:
+        - patientBearer: []
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+        - {name: after, in: query, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/NextAvailableDay'}}}}
+        '4XX': {description: "Error. The body is { error, code }; code is a stable value such as INVALID_OTP, NOT_SIGNED_IN, NOT_LINKED, QR_INVALID, QR_REVOKED, QR_SUSPENDED, SLOT_UNAVAILABLE, DUPLICATE_BOOKING, HOLD_EXPIRED, PAYMENT_DECLINED, PAYMENT_TIMEOUT, PAYMENT_LATE_REFUNDED, LIMIT_REACHED, POLICY or VALIDATION", content: {application/json: {schema: {$ref: '#/components/schemas/PatientError'}}}}
+  /api/patient/doctors/{id}/quote:
+    get:
+      tags: ["Patient"]
+      summary: "What the patient pays now and later, in paise"
+      operationId: getApiPatientDoctorsIdQuote
+      x-access: "patient"
+      security:
+        - patientBearer: []
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/FeeBreakdown'}}}}
+        '4XX': {description: "Error. The body is { error, code }; code is a stable value such as INVALID_OTP, NOT_SIGNED_IN, NOT_LINKED, QR_INVALID, QR_REVOKED, QR_SUSPENDED, SLOT_UNAVAILABLE, DUPLICATE_BOOKING, HOLD_EXPIRED, PAYMENT_DECLINED, PAYMENT_TIMEOUT, PAYMENT_LATE_REFUNDED, LIMIT_REACHED, POLICY or VALIDATION", content: {application/json: {schema: {$ref: '#/components/schemas/PatientError'}}}}
+  /api/patient/holds:
+    post:
+      tags: ["Patient"]
+      summary: "Hold one seat for the booking hold time (10 minutes) while the patient pays"
+      operationId: postApiPatientHolds
+      x-access: "patient"
+      security:
+        - patientBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/HoldRequest'}
+      responses:
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/Hold'}}}}
+        '4XX': {description: "Error. The body is { error, code }; code is a stable value such as INVALID_OTP, NOT_SIGNED_IN, NOT_LINKED, QR_INVALID, QR_REVOKED, QR_SUSPENDED, SLOT_UNAVAILABLE, DUPLICATE_BOOKING, HOLD_EXPIRED, PAYMENT_DECLINED, PAYMENT_TIMEOUT, PAYMENT_LATE_REFUNDED, LIMIT_REACHED, POLICY or VALIDATION", content: {application/json: {schema: {$ref: '#/components/schemas/PatientError'}}}}
+  /api/patient/holds/{id}:
+    delete:
+      tags: ["Patient"]
+      summary: "Release a hold"
+      operationId: deleteApiPatientHoldsId
+      x-access: "patient"
+      security:
+        - patientBearer: []
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Ok'}}}}
+        '4XX': {description: "Error. The body is { error, code }; code is a stable value such as INVALID_OTP, NOT_SIGNED_IN, NOT_LINKED, QR_INVALID, QR_REVOKED, QR_SUSPENDED, SLOT_UNAVAILABLE, DUPLICATE_BOOKING, HOLD_EXPIRED, PAYMENT_DECLINED, PAYMENT_TIMEOUT, PAYMENT_LATE_REFUNDED, LIMIT_REACHED, POLICY or VALIDATION", content: {application/json: {schema: {$ref: '#/components/schemas/PatientError'}}}}
+  /api/patient/holds/{id}/pay:
+    post:
+      tags: ["Patient"]
+      summary: "Pay through the simulated gateway and confirm the appointment. The same idempotencyKey never charges twice"
+      operationId: postApiPatientHoldsIdPay
+      x-access: "patient"
+      security:
+        - patientBearer: []
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PayRequest'}
+      responses:
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/AppointmentView'}}}}
+        '4XX': {description: "Error. The body is { error, code }; code is a stable value such as INVALID_OTP, NOT_SIGNED_IN, NOT_LINKED, QR_INVALID, QR_REVOKED, QR_SUSPENDED, SLOT_UNAVAILABLE, DUPLICATE_BOOKING, HOLD_EXPIRED, PAYMENT_DECLINED, PAYMENT_TIMEOUT, PAYMENT_LATE_REFUNDED, LIMIT_REACHED, POLICY or VALIDATION", content: {application/json: {schema: {$ref: '#/components/schemas/PatientError'}}}}
+  /api/patient/appointments:
+    get:
+      tags: ["Patient"]
+      summary: "My appointments and my family's"
+      operationId: getApiPatientAppointments
+      x-access: "patient"
+      security:
+        - patientBearer: []
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/AppointmentViewList'}}}}
+        '4XX': {description: "Error. The body is { error, code }; code is a stable value such as INVALID_OTP, NOT_SIGNED_IN, NOT_LINKED, QR_INVALID, QR_REVOKED, QR_SUSPENDED, SLOT_UNAVAILABLE, DUPLICATE_BOOKING, HOLD_EXPIRED, PAYMENT_DECLINED, PAYMENT_TIMEOUT, PAYMENT_LATE_REFUNDED, LIMIT_REACHED, POLICY or VALIDATION", content: {application/json: {schema: {$ref: '#/components/schemas/PatientError'}}}}
+  /api/patient/appointments/{id}:
+    get:
+      tags: ["Patient"]
+      summary: "One appointment with its hospital and doctor"
+      operationId: getApiPatientAppointmentsId
+      x-access: "patient"
+      security:
+        - patientBearer: []
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/AppointmentView'}}}}
+        '4XX': {description: "Error. The body is { error, code }; code is a stable value such as INVALID_OTP, NOT_SIGNED_IN, NOT_LINKED, QR_INVALID, QR_REVOKED, QR_SUSPENDED, SLOT_UNAVAILABLE, DUPLICATE_BOOKING, HOLD_EXPIRED, PAYMENT_DECLINED, PAYMENT_TIMEOUT, PAYMENT_LATE_REFUNDED, LIMIT_REACHED, POLICY or VALIDATION", content: {application/json: {schema: {$ref: '#/components/schemas/PatientError'}}}}
+  /api/patient/appointments/{id}/cancel-quote:
+    get:
+      tags: ["Patient"]
+      summary: "How much would be refunded if cancelled now"
+      operationId: getApiPatientAppointmentsIdCancelQuote
+      x-access: "patient"
+      security:
+        - patientBearer: []
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/RefundQuote'}}}}
+        '4XX': {description: "Error. The body is { error, code }; code is a stable value such as INVALID_OTP, NOT_SIGNED_IN, NOT_LINKED, QR_INVALID, QR_REVOKED, QR_SUSPENDED, SLOT_UNAVAILABLE, DUPLICATE_BOOKING, HOLD_EXPIRED, PAYMENT_DECLINED, PAYMENT_TIMEOUT, PAYMENT_LATE_REFUNDED, LIMIT_REACHED, POLICY or VALIDATION", content: {application/json: {schema: {$ref: '#/components/schemas/PatientError'}}}}
+  /api/patient/appointments/{id}/cancel:
+    post:
+      tags: ["Patient"]
+      summary: "Cancel a confirmed appointment (refund per the hospital's policy)"
+      operationId: postApiPatientAppointmentsIdCancel
+      x-access: "patient"
+      security:
+        - patientBearer: []
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CancelRequest'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/AppointmentView'}}}}
+        '4XX': {description: "Error. The body is { error, code }; code is a stable value such as INVALID_OTP, NOT_SIGNED_IN, NOT_LINKED, QR_INVALID, QR_REVOKED, QR_SUSPENDED, SLOT_UNAVAILABLE, DUPLICATE_BOOKING, HOLD_EXPIRED, PAYMENT_DECLINED, PAYMENT_TIMEOUT, PAYMENT_LATE_REFUNDED, LIMIT_REACHED, POLICY or VALIDATION", content: {application/json: {schema: {$ref: '#/components/schemas/PatientError'}}}}
+  /api/patient/appointments/{id}/reschedule-check:
+    get:
+      tags: ["Patient"]
+      summary: "Why rescheduling is not allowed, or null when it is"
+      operationId: getApiPatientAppointmentsIdRescheduleCheck
+      x-access: "patient"
+      security:
+        - patientBearer: []
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/RescheduleBlocker'}}}}
+        '4XX': {description: "Error. The body is { error, code }; code is a stable value such as INVALID_OTP, NOT_SIGNED_IN, NOT_LINKED, QR_INVALID, QR_REVOKED, QR_SUSPENDED, SLOT_UNAVAILABLE, DUPLICATE_BOOKING, HOLD_EXPIRED, PAYMENT_DECLINED, PAYMENT_TIMEOUT, PAYMENT_LATE_REFUNDED, LIMIT_REACHED, POLICY or VALIDATION", content: {application/json: {schema: {$ref: '#/components/schemas/PatientError'}}}}
+  /api/patient/appointments/{id}/reschedule:
+    post:
+      tags: ["Patient"]
+      summary: "Move to another slot of the same doctor (once, up to 2 hours before)"
+      operationId: postApiPatientAppointmentsIdReschedule
+      x-access: "patient"
+      security:
+        - patientBearer: []
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RescheduleRequest'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/AppointmentView'}}}}
+        '4XX': {description: "Error. The body is { error, code }; code is a stable value such as INVALID_OTP, NOT_SIGNED_IN, NOT_LINKED, QR_INVALID, QR_REVOKED, QR_SUSPENDED, SLOT_UNAVAILABLE, DUPLICATE_BOOKING, HOLD_EXPIRED, PAYMENT_DECLINED, PAYMENT_TIMEOUT, PAYMENT_LATE_REFUNDED, LIMIT_REACHED, POLICY or VALIDATION", content: {application/json: {schema: {$ref: '#/components/schemas/PatientError'}}}}
+  /api/patient/notifications:
+    get:
+      tags: ["Patient"]
+      summary: "Booking, payment and cancellation notifications"
+      operationId: getApiPatientNotifications
+      x-access: "patient"
+      security:
+        - patientBearer: []
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/PatientNotifications'}}}}
+        '4XX': {description: "Error. The body is { error, code }; code is a stable value such as INVALID_OTP, NOT_SIGNED_IN, NOT_LINKED, QR_INVALID, QR_REVOKED, QR_SUSPENDED, SLOT_UNAVAILABLE, DUPLICATE_BOOKING, HOLD_EXPIRED, PAYMENT_DECLINED, PAYMENT_TIMEOUT, PAYMENT_LATE_REFUNDED, LIMIT_REACHED, POLICY or VALIDATION", content: {application/json: {schema: {$ref: '#/components/schemas/PatientError'}}}}
+  /api/patient/notifications/read:
+    post:
+      tags: ["Patient"]
+      summary: "Mark all notifications read"
+      operationId: postApiPatientNotificationsRead
+      x-access: "patient"
+      security:
+        - patientBearer: []
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/NotificationsReadResult'}}}}
+        '4XX': {description: "Error. The body is { error, code }; code is a stable value such as INVALID_OTP, NOT_SIGNED_IN, NOT_LINKED, QR_INVALID, QR_REVOKED, QR_SUSPENDED, SLOT_UNAVAILABLE, DUPLICATE_BOOKING, HOLD_EXPIRED, PAYMENT_DECLINED, PAYMENT_TIMEOUT, PAYMENT_LATE_REFUNDED, LIMIT_REACHED, POLICY or VALIDATION", content: {application/json: {schema: {$ref: '#/components/schemas/PatientError'}}}}
 components:
   securitySchemes:
     sessionCookie: {type: apiKey, in: cookie, name: gmedic.sid}
     internalKey: {type: apiKey, in: header, name: x-internal-key, description: Value of the INTERNAL_EVENT_KEY env var}
+    patientBearer: {type: http, scheme: bearer, description: Token returned by POST /api/patient/auth/verify}
   schemas:
+    PatientError:
+      type: object
+      required: [error, code]
+      properties:
+        error: {type: string, description: A message that can be shown to the patient}
+        code: {type: string}
+        fields: {type: object, additionalProperties: {type: string}}
+    PatientOtpRequest:
+      type: object
+      required: [phone]
+      properties:
+        phone: {type: string, example: "9876543210", description: 10-digit Indian mobile number (+91 / 0 prefixes are accepted)}
+    PatientOtpSent:
+      type: object
+      properties:
+        ok: {type: boolean}
+        expiresInSeconds: {type: integer, example: 300}
+        mode: {type: string, enum: [dev], description: In dev mode the code is PATIENT_DEV_OTP. Without an SMS provider the real mode answers 501}
+    PatientVerifyRequest:
+      type: object
+      required: [phone, code]
+      properties:
+        phone: {type: string}
+        code: {type: string, example: "123456"}
+    PatientUser:
+      type: object
+      properties:
+        id: {type: string, example: USR2001}
+        phone: {type: string}
+        name: {type: string, nullable: true}
+        dob: {type: string, format: date, nullable: true}
+        gender: {type: string, enum: [male, female, other, null], nullable: true}
+        profileComplete: {type: boolean}
+    PatientSession:
+      type: object
+      properties:
+        token: {type: string, description: Send as Authorization Bearer <token>}
+        user: {$ref: '#/components/schemas/PatientUser'}
+    PatientProfileUpdate:
+      type: object
+      required: [name, dob, gender]
+      properties:
+        name: {type: string, minLength: 2, maxLength: 60}
+        dob: {type: string, format: date}
+        gender: {type: string, enum: [male, female, other]}
+    FamilyMember:
+      type: object
+      properties:
+        id: {type: string, description: "The account holder's own entry uses the user id"}
+        name: {type: string}
+        relation: {type: string, enum: [self, spouse, child, parent, sibling, other]}
+        dob: {type: string, format: date, nullable: true}
+        gender: {type: string, enum: [male, female, other]}
+    FamilyMemberCreate:
+      type: object
+      required: [name, relation, dob, gender]
+      properties:
+        name: {type: string}
+        relation: {type: string, enum: [spouse, child, parent, sibling, other]}
+        dob: {type: string, format: date}
+        gender: {type: string, enum: [male, female, other]}
+    FamilyMemberUpdate:
+      type: object
+      description: Send only the fields to change
+      properties:
+        name: {type: string}
+        relation: {type: string, enum: [spouse, child, parent, sibling, other]}
+        dob: {type: string, format: date}
+        gender: {type: string, enum: [male, female, other]}
+    FamilyList:
+      type: object
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/FamilyMember'}}
+    QrResolveRequest:
+      type: object
+      required: [raw]
+      properties:
+        raw: {type: string, example: "https://gmedic.app/h/HSP001?k=a55cbe027beac2cfbcf40d82", description: "A scanned QR payload, a gmedic:// deep link or a bare hospital code"}
+    PatientHospital:
+      type: object
+      properties:
+        id: {type: string, example: HSP001}
+        code: {type: string, example: HSP001}
+        name: {type: string}
+        kind: {type: string, example: Multispecialty hospital}
+        address: {type: string}
+        area: {type: string}
+        phone: {type: string}
+        lat: {type: number}
+        lng: {type: number}
+        feeModel: {type: string, enum: [fullPrepay, bookingFee, tokenFee]}
+        bookingFeePaise: {type: integer}
+        tokenFeePaise: {type: integer}
+        convenienceFeePaise: {type: integer}
+        status: {type: string, enum: [active, suspended]}
+        brandColor: {type: integer, description: ARGB colour}
+        initials: {type: string}
+        gstin: {type: string}
+        about: {type: string}
+    PatientHospitalList:
+      type: object
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/PatientHospital'}}
+    QrResolution:
+      type: object
+      properties:
+        hospital: {$ref: '#/components/schemas/PatientHospital'}
+        alreadyLinked: {type: boolean}
+        qrKeyId: {type: string, description: Pass back to the link endpoint}
+    LinkRequest:
+      type: object
+      required: [qrKeyId]
+      properties:
+        qrKeyId: {type: string}
+    DepartmentList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties: {id: {type: string}, hospitalId: {type: string}, name: {type: string}, icon: {type: string, example: heart}}
+    ScheduleSession:
+      type: object
+      properties:
+        weekday: {type: integer, minimum: 1, maximum: 7, description: 1 = Monday ... 7 = Sunday}
+        startMinute: {type: integer, description: Minutes after midnight}
+        endMinute: {type: integer}
+        slotMinutes: {type: integer}
+        perSlot: {type: integer, description: Patients per slot}
+    PatientDoctor:
+      type: object
+      properties:
+        id: {type: string}
+        hospitalId: {type: string}
+        departmentId: {type: string}
+        name: {type: string}
+        qualifications: {type: string}
+        specialty: {type: string}
+        experienceYears: {type: integer}
+        languages: {type: array, items: {type: string}}
+        feePaise: {type: integer}
+        gender: {type: string, enum: [male, female, other]}
+        about: {type: string}
+        schedule: {type: array, items: {$ref: '#/components/schemas/ScheduleSession'}}
+        onLeave: {type: boolean}
+        leaveNote: {type: string, nullable: true}
+    DoctorSummaryList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              doctor: {$ref: '#/components/schemas/PatientDoctor'}
+              nextAvailable: {type: string, format: date-time, nullable: true}
+    PatientSlot:
+      type: object
+      properties:
+        id: {type: string, example: DOC101_202610081030}
+        doctorId: {type: string}
+        start: {type: string, format: date-time, description: Hospital local time with its UTC offset}
+        end: {type: string, format: date-time}
+        status: {type: string, enum: [available, full, unavailable]}
+        seatsLeft: {type: integer}
+        capacity: {type: integer}
+    SlotList:
+      type: object
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/PatientSlot'}}
+    NextAvailableDay:
+      type: object
+      properties:
+        date: {type: string, format: date, nullable: true}
+    FeeBreakdown:
+      type: object
+      properties:
+        model: {type: string, enum: [fullPrepay, bookingFee, tokenFee]}
+        consultationPaise: {type: integer}
+        payNowBasePaise: {type: integer}
+        convenienceFeePaise: {type: integer}
+        gstPaise: {type: integer}
+        totalNowPaise: {type: integer}
+        payAtHospitalPaise: {type: integer}
+        payNowLabel: {type: string}
+    HoldRequest:
+      type: object
+      required: [slotId, patientId]
+      properties:
+        slotId: {type: string}
+        patientId: {type: string, description: "The user id for the account holder, or a family member's id"}
+    Hold:
+      type: object
+      properties:
+        id: {type: string}
+        slot: {$ref: '#/components/schemas/PatientSlot'}
+        patientId: {type: string}
+        expiresAt: {type: string, format: date-time}
+        ttlSeconds: {type: integer, example: 600}
+    PayRequest:
+      type: object
+      required: [method, idempotencyKey]
+      properties:
+        method: {type: string, enum: [upi, card, netbanking, wallet]}
+        idempotencyKey: {type: string, minLength: 8, maxLength: 80, description: A new random value per payment attempt; reuse it only to retry the same attempt}
+        reason: {type: string, maxLength: 300, description: Reason for the visit}
+    PatientAppointment:
+      type: object
+      properties:
+        id: {type: string, example: APT10557}
+        code: {type: string, example: GM-0007MQ}
+        hospitalId: {type: string}
+        doctorId: {type: string}
+        patient: {$ref: '#/components/schemas/FamilyMember'}
+        start: {type: string, format: date-time}
+        end: {type: string, format: date-time}
+        token: {type: integer, description: "Number in the doctor's queue for the day, never reused"}
+        status: {type: string, enum: [confirmed, checkedIn, inConsultation, completed, cancelled, noShow]}
+        fees: {$ref: '#/components/schemas/FeeBreakdown'}
+        payment:
+          type: object
+          nullable: true
+          properties:
+            id: {type: string}
+            gatewayRef: {type: string}
+            amountPaise: {type: integer}
+            method: {type: string, enum: [upi, card, netbanking, wallet]}
+            paidAt: {type: string, format: date-time}
+            status: {type: string, enum: [paid, refunded, partiallyRefunded]}
+        createdAt: {type: string, format: date-time}
+        reason: {type: string, nullable: true}
+        refund:
+          type: object
+          nullable: true
+          properties:
+            amountPaise: {type: integer}
+            status: {type: string, enum: [initiated, completed]}
+            createdAt: {type: string, format: date-time}
+            reason: {type: string}
+        rescheduleCount: {type: integer}
+        queueAhead: {type: integer, nullable: true, description: Patients ahead once the patient is checked in}
+        cancelledAt: {type: string, format: date-time, nullable: true}
+        cancelReason: {type: string, nullable: true}
+        checkedInAt: {type: string, format: date-time, nullable: true}
+    AppointmentView:
+      type: object
+      properties:
+        appointment: {$ref: '#/components/schemas/PatientAppointment'}
+        hospital: {$ref: '#/components/schemas/PatientHospital'}
+        doctor: {$ref: '#/components/schemas/PatientDoctor'}
+    AppointmentViewList:
+      type: object
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/AppointmentView'}}
+    RefundQuote:
+      type: object
+      properties:
+        refundPaise: {type: integer}
+        paidPaise: {type: integer}
+        withinFreeWindow: {type: boolean}
+        note: {type: string}
+    CancelRequest:
+      type: object
+      properties:
+        reason: {type: string, maxLength: 300}
+    RescheduleBlocker:
+      type: object
+      properties:
+        blocker: {type: string, nullable: true}
+    RescheduleRequest:
+      type: object
+      required: [slotId]
+      properties:
+        slotId: {type: string}
+    PatientNotifications:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              id: {type: string}
+              type: {type: string, example: system}
+              eventKey: {type: string, example: APPOINTMENT_CONFIRMED}
+              title: {type: string}
+              body: {type: string}
+              link: {type: string, nullable: true}
+              at: {type: string, format: date-time}
+              unread: {type: boolean}
+        unread: {type: integer}
     DoctorAppointmentStatus:
       type: object
       required: [status]

@@ -8,9 +8,16 @@
   const editBtn = $('[data-edit-hospital]');
   let snapshot = null;
 
-  function startEdit() {
-    snapshot = G.formValues(form);
+  // Opens the editor pre-filled with the hospital's current details from GET /api/hospital,
+  // so the form never starts from stale page-load values.
+  async function startEdit() {
     G.clearErrors(form);
+    try {
+      const { hospital: h } = await api('/api/hospital');
+      const fresh = { phone: h.phone, email: h.email, line1: h.address.line1, city: h.address.city, state: h.address.state, pincode: h.address.pincode };
+      for (const [k, v] of Object.entries(fresh)) if (form.elements[k] && v != null) form.elements[k].value = v;
+    } catch (err) { /* fall back to the values already on the page */ }
+    snapshot = G.formValues(form);
     view.hidden = true;
     edit.hidden = false;
     editBtn.hidden = true;

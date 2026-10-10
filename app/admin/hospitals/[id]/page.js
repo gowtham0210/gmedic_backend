@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, use } from 'react';
 import Link from 'next/link';
 import Icon from '../../../../components/Icon';
+import { formatDate } from '../../../../lib/format';
 
 const toast = (msg, type = 'success') => { if (typeof window !== 'undefined' && window.G) window.G.toast(msg, type); };
 
@@ -42,20 +43,26 @@ export default function HospitalDetailPage({ params }) {
   const [fileInputKey, setFileInputKey] = useState(0);
   const [branchForm, setBranchForm] = useState({ name: '', address: '', phone: '', contactPerson: '' });
   const [savingBranch, setSavingBranch] = useState(false);
+  const [rates, setRates] = useState([]);
+  const [editing, setEditing] = useState(false);
+  const [infoForm, setInfoForm] = useState(null);
+  const [savingInfo, setSavingInfo] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [detail, docs, br] = await Promise.all([
+      const [detail, docs, br, rt] = await Promise.all([
         api(`/api/admin/hospitals/${id}`),
         api(`/api/admin/hospitals/${id}/documents`).catch(() => ({ documents: [] })),
         api(`/api/admin/hospitals/${id}/branches`).catch(() => ({ branches: [] })),
+        api(`/api/admin/hospitals/${id}/rates`).catch(() => ({ rates: [] })),
       ]);
       setHospital(detail.hospital);
       setStats(detail.stats);
       setDocuments(docs.documents || []);
       setBranches(br.branches || []);
       setKycForm({ gstin: detail.hospital.gstin || '', registrationNumber: detail.hospital.registrationNumber || '' });
+      setRates(rt.rates || []);
       setFeeForm({ bookingModel: detail.hospital.bookingModel, bookingFee: detail.hospital.bookingFee, convenienceFee: detail.hospital.convenienceFee, commissionType: detail.hospital.commissionType, commissionValue: detail.hospital.commissionValue });
     } catch (err) {
       toast(err.message, 'error');
@@ -73,6 +80,7 @@ export default function HospitalDetailPage({ params }) {
       const res = await api(`/api/admin/hospitals/${id}/fees`, { method: 'PUT', body: feeForm });
       toast(res.message, 'success');
       setHospital(res.hospital);
+      load();
     } catch (err) {
       toast(err.message, 'error');
     } finally {
@@ -143,6 +151,42 @@ export default function HospitalDetailPage({ params }) {
     }
   }
 
+  function startEdit() {
+    setInfoForm({
+      contactPerson: hospital.contactPerson || '', phone: hospital.phone, email: hospital.email,
+      line1: hospital.address.line1 || '', city: hospital.address.city || '', state: hospital.address.state || '', pincode: hospital.address.pincode || '',
+    });
+    setEditing(true);
+  }
+
+  async function saveInfo(e) {
+    e.preventDefault();
+    setSavingInfo(true);
+    try {
+      // Blank optional fields are left out, so they stay unchanged instead of being saved as empty text.
+      const body = Object.fromEntries(Object.entries(infoForm).filter(([, v]) => String(v).trim() !== ''));
+      const res = await api(`/api/admin/hospitals/${id}`, { method: 'PUT', body });
+      toast(res.message, 'success');
+      setHospital(res.hospital);
+      setEditing(false);
+    } catch (err) {
+      toast(err.fields ? Object.values(err.fields)[0] : err.message, 'error');
+    } finally {
+      setSavingInfo(false);
+    }
+  }
+
+  async function toggleBranch(branch) {
+    const status = branch.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+    try {
+      const res = await api(`/api/admin/branches/${branch.id}`, { method: 'PATCH', body: { status } });
+      toast(res.message, 'success');
+      load();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  }
+
   async function addBranch(e) {
     e.preventDefault();
     setSavingBranch(true);
@@ -181,14 +225,29 @@ export default function HospitalDetailPage({ params }) {
       <div className="two-col">
         <div className="dash-stack">
           <article className="card">
-            <div className="card__head"><h2 className="card__title"><Icon name="hospital" />Hospital Information</h2></div>
-            <dl className="kv">
+            <div className="card__head">
+              <h2 className="card__title"><Icon name="hospital" />Hospital Information</h2>
+              {!editing && <button type="button" className="btn btn--ghost btn--sm" onClick={startEdit}><Icon name="pencil" />Edit</button>}
+            </div>
+            {editing && infoForm && (
+              <form onSubmit={saveInfo} className="form-grid">
+                {[['phone', 'Phone'], ['email', 'Email'], ['contactPerson', 'Contact person'], ['pincode', 'PIN code'], ['city', 'City'], ['state', 'State']].map(([k, label]) => (
+                  <div className="field" key={k}><label>{label}</label><input className="input" value={infoForm[k]} onChange={(e) => setInfoForm((f) => ({ ...f, [k]: e.target.value }))} /></div>
+                ))}
+                <div className="field field--full"><label>Street address</label><input className="input" value={infoForm.line1} onChange={(e) => setInfoForm((f) => ({ ...f, line1: e.target.value }))} /></div>
+                <div className="form-actions" style={{ gridColumn: '1 / -1' }}>
+                  <button type="button" className="btn btn--ghost" onClick={() => setEditing(false)}>Cancel</button>
+                  <button type="submit" className={`btn btn--primary${savingInfo ? ' is-loading' : ''}`} disabled={savingInfo}><Icon name="check" />Save</button>
+                </div>
+              </form>
+            )}
+            {!editing && <dl className="kv">
               <div><dt>Status</dt><dd>{hospital.status}{hospital.statusReason ? ` — ${hospital.statusReason}` : ''}</dd></div>
               <div><dt>Phone</dt><dd>{hospital.phone}</dd></div>
               <div><dt>Email</dt><dd>{hospital.email}</dd></div>
               <div><dt>Contact person</dt><dd>{hospital.contactPerson || '—'}</dd></div>
               <div className="kv--full"><dt>Address</dt><dd>{[hospital.address.line1, hospital.address.city, hospital.address.state, hospital.address.pincode].filter(Boolean).join(', ')}</dd></div>
-            </dl>
+            </dl>}
           </article>
 
           <article className="card">
@@ -232,7 +291,7 @@ export default function HospitalDetailPage({ params }) {
                   {documents.map((d) => (
                     <tr key={d.id}>
                       <td data-label="Document">{DOC_TYPES[d.docType] || d.docType}</td>
-                      <td data-label="File" className="text-muted">{d.fileName}</td>
+                      <td data-label="File" className="text-muted"><a href={`/api/admin/hospitals/${id}/documents/${d.id}`} target="_blank" rel="noreferrer">{d.fileName}</a></td>
                       <td data-label="Status"><span className={`badge badge--${d.status === 'VERIFIED' ? 'confirmed' : d.status === 'REJECTED' ? 'cancelled' : 'pending'}`}>{d.status}</span></td>
                       <td className="col-actions">
                         {d.status === 'PENDING' && (
@@ -263,11 +322,11 @@ export default function HospitalDetailPage({ params }) {
             <div className="card__head"><h2 className="card__title"><Icon name="building" />Branches</h2></div>
             <div className="table-wrap" style={{ marginBottom: 14 }}>
               <table className="table table--compact table--stack">
-                <thead><tr><th>Branch</th><th>Address</th><th>Phone</th><th>Status</th></tr></thead>
+                <thead><tr><th>Branch</th><th>Address</th><th>Phone</th><th>Status</th><th className="col-actions">Action</th></tr></thead>
                 <tbody>
-                  {branches.length === 0 && <tr><td colSpan={4} style={{ whiteSpace: 'normal' }}><p className="text-muted">No branches yet — this hospital operates from its main address.</p></td></tr>}
+                  {branches.length === 0 && <tr><td colSpan={5} style={{ whiteSpace: 'normal' }}><p className="text-muted">No branches yet — this hospital operates from its main address.</p></td></tr>}
                   {branches.map((b) => (
-                    <tr key={b.id}><td data-label="Branch">{b.name}</td><td data-label="Address" className="text-muted">{b.address}</td><td data-label="Phone">{b.phone}</td><td data-label="Status"><span className={`badge badge--${b.status === 'ACTIVE' ? 'confirmed' : 'neutral'}`}>{b.status}</span></td></tr>
+                    <tr key={b.id}><td data-label="Branch">{b.name}</td><td data-label="Address" className="text-muted">{b.address}</td><td data-label="Phone">{b.phone}</td><td data-label="Status"><span className={`badge badge--${b.status === 'ACTIVE' ? 'confirmed' : 'neutral'}`}>{b.status}</span></td><td className="col-actions"><button type="button" className="action-btn" onClick={() => toggleBranch(b)}>{b.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}</button></td></tr>
                   ))}
                 </tbody>
               </table>
@@ -317,6 +376,22 @@ export default function HospitalDetailPage({ params }) {
               <button type="submit" className={`btn btn--primary btn--block${savingFees ? ' is-loading' : ''}`} disabled={savingFees}><Icon name="check" /><span>Save</span></button>
             </form>
           )}
+          <h3 style={{ margin: '22px 0 8px', fontSize: 14 }}>Rate history</h3>
+          <div className="table-wrap">
+            <table className="table table--compact">
+              <thead><tr><th>Effective</th><th>Model</th><th>Commission</th></tr></thead>
+              <tbody>
+                {rates.length === 0 && <tr><td colSpan={3}><p className="text-muted">No changes recorded yet.</p></td></tr>}
+                {rates.map((r) => (
+                  <tr key={r.id}>
+                    <td className="nowrap">{formatDate(r.effectiveFrom)}</td>
+                    <td>{(r.bookingModel || '').replace('_', ' ')}</td>
+                    <td>{r.commissionType === 'PERCENT' ? `${r.commissionValue}%` : `₹${r.commissionValue} / appt`}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </article>
       </div>
     </>

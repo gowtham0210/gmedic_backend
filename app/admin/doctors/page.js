@@ -156,6 +156,14 @@ export default function DoctorsPage() {
   const [specialization, setSpecialization] = useState('');
   const [verificationStatus, setVerificationStatus] = useState('');
   const [editing, setEditing] = useState(null);
+
+  // Open with the row's data, then load the doctor's latest details into the form.
+  function openEdit(d) {
+    setEditing(d);
+    api(`/api/admin/doctors/${d.id}`)
+      .then((r) => setEditing((cur) => (cur && cur.id === d.id ? { ...cur, ...r.doctor } : cur)))
+      .catch(() => {});
+  }
   const [verifyTarget, setVerifyTarget] = useState(null);
   const [total, setTotal] = useState(0);
 
@@ -241,7 +249,7 @@ export default function DoctorsPage() {
                   <td data-label="Verification"><span className={`badge badge--${VERIFY_TONE[d.verificationStatus] || 'neutral'}`}>{d.verificationStatus}</span></td>
                   <td className="col-actions">
                     <div className="action-group">
-                      <button type="button" className="action-btn" onClick={() => setEditing(d)}><Icon name="pencil" />Edit</button>
+                      <button type="button" className="action-btn" onClick={() => openEdit(d)}><Icon name="pencil" />Edit</button>
                       {d.verificationStatus !== 'VERIFIED' && <button type="button" className="action-btn" onClick={() => setVerifyTarget({ doctor: d, status: 'VERIFIED' })}><Icon name="check" />Verify</button>}
                       {d.verificationStatus !== 'REJECTED' && <button type="button" className="action-btn" onClick={() => setVerifyTarget({ doctor: d, status: 'REJECTED' })}><Icon name="x" />Reject</button>}
                     </div>

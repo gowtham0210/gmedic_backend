@@ -45,6 +45,11 @@ module.exports = {
   // The Gmedic patient app scans it to add the hospital.
   qrBaseUrl: env.QR_BASE_URL || 'https://gmedic.app/h',
 
+  // Name of the live payment gateway posting into `payment_webhooks`
+  // (e.g. "Razorpay"). Empty means none is connected yet, and the admin
+  // Webhook Inbox labels its contents as development sample data.
+  paymentGateway: (env.PAYMENT_GATEWAY || '').trim(),
+
   specializations: [
     'Cardiologist',
     'Dermatologist',

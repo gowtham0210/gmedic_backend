@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Icon from '../../../components/Icon';
-import { formatDateTime } from '../../../lib/format';
+import { formatDate, formatDateTime } from '../../../lib/format';
 
 const toast = (msg, type = 'success') => { if (typeof window !== 'undefined' && window.G) window.G.toast(msg, type); };
 
@@ -21,6 +21,30 @@ async function api(url, opts = {}) {
 
 const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
 
+// The summary is computed over the same filters as the table, so each card
+// states the range it covers ("All time" when no dates are set).
+function scopeLabel({ from, to, q, status }) {
+  let range = 'All time';
+  if (from && to) range = `${formatDate(from)} – ${formatDate(to)}`;
+  else if (from) range = `Since ${formatDate(from)}`;
+  else if (to) range = `Up to ${formatDate(to)}`;
+  return q || status ? `${range} · filtered` : range;
+}
+
+// What the inbox contains: development sample data (no gateway yet), a live
+// gateway with leftover setup rows, or a live gateway only (neutral status).
+function WebhookSourceNotice({ meta }) {
+  if (!meta) return null;
+  const { gateway, sampleCount } = meta;
+  if (!gateway?.connected) {
+    return <div className="alert alert--info" style={{ margin: 16 }}><Icon name="info" /><span>No live payment gateway is connected yet — this inbox shows the schema-ready sample events seeded for development.</span></div>;
+  }
+  if (sampleCount > 0) {
+    return <div className="alert alert--info" style={{ margin: 16 }}><Icon name="info" /><span>Receiving events from {gateway.name}. {sampleCount} test event{sampleCount === 1 ? '' : 's'} created during setup {sampleCount === 1 ? 'is' : 'are'} still listed and should be removed.</span></div>;
+  }
+  return <p className="text-muted" style={{ margin: 16, fontSize: 13 }}>Receiving events from {gateway.name}.</p>;
+}
+
 export default function PaymentsPage() {
   const [tab, setTab] = useState('payments');
   const [items, setItems] = useState([]);
@@ -34,6 +58,7 @@ export default function PaymentsPage() {
 
   const [webhooks, setWebhooks] = useState([]);
   const [whLoading, setWhLoading] = useState(false);
+  const [whMeta, setWhMeta] = useState(null);
 
   const loadPayments = useCallback(async () => {
     setLoading(true);
@@ -60,6 +85,7 @@ export default function PaymentsPage() {
     try {
       const data = await api('/api/admin/webhooks?pageSize=25');
       setWebhooks(data.items);
+      setWhMeta({ gateway: data.gateway, sampleCount: data.sampleCount });
     } catch (err) {
       toast(err.message, 'error');
     } finally {
@@ -68,6 +94,7 @@ export default function PaymentsPage() {
   }, []);
 
   useEffect(() => { if (tab === 'payments') loadPayments(); }, [tab, loadPayments]);
+  const scope = scopeLabel({ from, to, q, status });
   useEffect(() => { if (tab === 'webhooks') loadWebhooks(); }, [tab, loadWebhooks]);
 
   async function resync(id) {
@@ -91,10 +118,10 @@ export default function PaymentsPage() {
 
       {tab === 'payments' && (
         <section className="summary-strip">
-          <div className="card mini-stat"><span className="stat__icon tone-green"><Icon name="rupee" /></span><div><div className="mini-stat__label">Collected</div><div className="mini-stat__value">{money(summary.collected)}</div></div></div>
-          <div className="card mini-stat"><span className="stat__icon tone-red"><Icon name="alert" /></span><div><div className="mini-stat__label">Failed amount</div><div className="mini-stat__value">{money(summary.failedAmount)}</div></div></div>
-          <div className="card mini-stat"><span className="stat__icon tone-blue"><Icon name="check-circle" /></span><div><div className="mini-stat__label">Paid count</div><div className="mini-stat__value">{summary.paidCount ?? '–'}</div></div></div>
-          <div className="card mini-stat"><span className="stat__icon tone-amber"><Icon name="x" /></span><div><div className="mini-stat__label">Failed count</div><div className="mini-stat__value">{summary.failedCount ?? '–'}</div></div></div>
+          <div className="card mini-stat"><span className="stat__icon tone-green"><Icon name="rupee" /></span><div><div className="mini-stat__label">Collected amount</div><div className="mini-stat__value">{money(summary.collected)}</div><div className="mini-stat__hint">{scope} · gross, before refunds</div></div></div>
+          <div className="card mini-stat"><span className="stat__icon tone-red"><Icon name="alert" /></span><div><div className="mini-stat__label">Failed amount</div><div className="mini-stat__value">{money(summary.failedAmount)}</div><div className="mini-stat__hint">{scope}</div></div></div>
+          <div className="card mini-stat"><span className="stat__icon tone-blue"><Icon name="check-circle" /></span><div><div className="mini-stat__label">Successful payments</div><div className="mini-stat__value">{summary.paidCount ?? '–'}</div><div className="mini-stat__hint">{scope}</div></div></div>
+          <div className="card mini-stat"><span className="stat__icon tone-amber"><Icon name="x" /></span><div><div className="mini-stat__label">Failed payments</div><div className="mini-stat__value">{summary.failedCount ?? '–'}</div><div className="mini-stat__hint">{scope}</div></div></div>
         </section>
       )}
 
@@ -150,7 +177,7 @@ export default function PaymentsPage() {
 
       {tab === 'webhooks' && (
         <article className="card card--flush">
-          <div className="alert alert--info" style={{ margin: 16 }}><Icon name="info" /><span>No live payment gateway is connected yet — this inbox shows the schema-ready sample events seeded for development.</span></div>
+          <WebhookSourceNotice meta={whMeta} />
           <div className="table-wrap">
             <table className="table table--stack">
               <thead><tr><th>Event</th><th>Transaction</th><th>Status</th><th>Sync</th><th>Received</th><th className="col-actions">Actions</th></tr></thead>
@@ -164,7 +191,7 @@ export default function PaymentsPage() {
                     <td data-label="Status"><span className={`badge badge--${w.status === 'FAILED' ? 'cancelled' : 'confirmed'}`}>{w.status}</span></td>
                     <td data-label="Sync"><span className={`badge badge--${w.syncStatus === 'SYNCED' ? 'confirmed' : w.syncStatus === 'NOT_REQUIRED' ? 'neutral' : 'pending'}`}>{w.syncStatus}</span></td>
                     <td data-label="Received" className="text-muted">{w.receivedAt ? formatDateTime(w.receivedAt) : '—'}</td>
-                    <td className="col-actions">{w.syncStatus === 'PENDING' && <button type="button" className="action-btn" onClick={() => resync(w.id)}><Icon name="refresh" />Resync</button>}</td>
+                    <td className="col-actions">{(w.syncStatus === 'PENDING' || w.syncStatus === 'FAILED') && <button type="button" className="action-btn" onClick={() => resync(w.id)}><Icon name="refresh" />Retry sync</button>}</td>
                   </tr>
                 ))}
               </tbody>

@@ -67,7 +67,7 @@ function BlockModal({ open, block, defaults, onClose, onCreated, onRemove }) {
   return (
     <div className="modal" role="dialog" aria-modal="true">
       <div className="modal__backdrop" onClick={onClose}></div>
-      <div className="modal__panel modal__panel--sm">
+      <div className="modal__panel modal__panel--sm" style={block ? { width: 'min(500px, 100%)' } : undefined}>
         <form onSubmit={submit}>
           <div className="modal__head">
             <div className="modal__icon tone-teal"><Icon name="clock" /></div>

@@ -1425,6 +1425,7 @@ img.avatar { object-fit: cover; background: var(--border-2); }
 .modal__body { padding: 22px 24px; overflow-y: auto; }
 .modal__foot { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 24px; border-top: 1px solid var(--border-2); background: #fbfcfd; }
 .modal__foot--split { justify-content: space-between; }
+.modal__foot--split .btn { white-space: nowrap; }
 
 .avail-list { display: flex; flex-direction: column; margin: 0 -8px; }
 .avail-row { display: flex; align-items: center; gap: 12px; padding: 10px 8px; border-radius: 6px; }

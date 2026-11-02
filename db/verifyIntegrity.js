@@ -6,8 +6,8 @@ const db = require('./index');
 const CHECKS = [
   ['appointments.hospital_id = doctor.hospital_id',
     'SELECT a.id FROM appointments a JOIN doctors d ON d.id = a.doctor_id WHERE a.hospital_id <> d.hospital_id'],
-  ['appointments.payment_status = payments (paid iff a PAID payment exists)',
-    `SELECT a.id FROM appointments a WHERE (a.payment_status = 'paid') <> EXISTS (SELECT 1 FROM payments p WHERE p.appointment_id = a.id AND p.status = 'PAID')`],
+  ['appointments.payment_status = payments (paid iff a PAID consultation fee exists; the booking token does not count)',
+    `SELECT a.id FROM appointments a WHERE (a.payment_status = 'paid') <> EXISTS (SELECT 1 FROM payments p WHERE p.appointment_id = a.id AND p.status = 'PAID' AND p.purpose = 'CONSULTATION')`],
   ['tokens.doctor_id / hospital_id / token_date = appointment',
     'SELECT t.id FROM tokens t JOIN appointments a ON a.id = t.appointment_id WHERE t.doctor_id <> a.doctor_id OR t.hospital_id <> a.hospital_id OR t.token_date <> a.appt_date'],
   ['refunds.appointment_id = payment.appointment_id',

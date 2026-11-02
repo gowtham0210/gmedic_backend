@@ -47,7 +47,7 @@
       if (el) el.textContent = n;
     }
     if (!data.items.length) {
-      tbody.innerHTML = G.emptyRow(9, 'No appointments found', 'Try another date, doctor or status filter.', 'calendar');
+      tbody.innerHTML = G.emptyRow(10, 'No appointments found', 'Try another date, doctor or status filter.', 'calendar');
     } else {
       tbody.innerHTML = data.items.map((a) => `
         <tr class="is-clickable" data-appt="${esc(a.id)}" tabindex="0">
@@ -56,9 +56,10 @@
           <td data-label="Specialist" class="text-muted">${esc(a.specialization)}</td>
           <td data-label="Date" class="nowrap">${esc(G.date(a.date))}${a.date === G.todayISO() ? ' <span class="badge badge--teal badge--plain" style="padding:1px 7px;font-size:11px">Today</span>' : ''}</td>
           <td data-label="Time" class="mono">${G.time(a.time)}</td>
+          <td data-label="Token" class="mono">${a.tokenCode ? esc(a.tokenCode) : '<span class="text-muted">—</span>'}${a.emergency ? ` ${G.badge('emergency', 'Emergency')}` : ''}</td>
           <td data-label="Fee" class="num fee">${G.money(a.fee)}</td>
           <td data-label="Payment">${G.badge(a.paymentStatus)}</td>
-          <td data-label="Status">${G.badge(a.status)}</td>
+          <td data-label="Status">${a.noShow ? G.badge('absent', 'No-show') : G.badge(a.status)}</td>
           <td class="col-actions"><button type="button" class="action-btn" tabindex="-1">${icon('eye')}View</button></td>
         </tr>`).join('');
     }
@@ -76,7 +77,7 @@
       render(data);
     } catch (err) {
       if (err.name === 'AbortError') return;
-      tbody.innerHTML = `<tr><td colspan="9"><div class="alert alert--error">${icon('alert')}<span>${esc(err.message)}</span></div></td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="10"><div class="alert alert--error">${icon('alert')}<span>${esc(err.message)}</span></div></td></tr>`;
     } finally {
       tbody.style.opacity = '';
     }

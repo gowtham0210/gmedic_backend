@@ -5,8 +5,9 @@
 // "own" support permissions; the rest of their access is scoped by their
 // session (hospital / doctor) in the portal-specific API routes.
 //
-// Appointments are deliberately view-only for every admin role: cancelling or
-// rescheduling is done by the patient, and day-to-day handling by the hospital.
+// Appointments are view-only for every admin role, except one narrow escalation: 'appointments.cancel'
+// (Super Admin only) cancels and refunds an appointment nobody else can, e.g. after a hospital is
+// offboarded. Rescheduling is done by the patient, and day-to-day handling by the hospital.
 
 const PERMISSIONS = [
   'dashboard.view',
@@ -16,12 +17,11 @@ const PERMISSIONS = [
   'doctors.view', 'doctors.manage', 'doctors.verify',
   'receptionists.view', 'receptionists.manage',
   'qr.view', 'qr.manage',
-  'appointments.view',
-  'patients.view',
+  'appointments.view', 'appointments.cancel',
+  'patients.view', 'patients.manage', // manage: block / unblock an app account and erase its personal data (Super Admin only)
   'payments.view',
   'webhooks.view', 'webhooks.manage',
   'refunds.view', 'refunds.manage', 'refunds.approve',
-  'settlements.view', 'settlements.manage',
   'support.view_all', 'support.reply', 'support.assign', 'support.update_status', 'support.close',
   'disputes.view', 'disputes.manage',
   'communications.templates.view', 'communications.templates.create', 'communications.templates.update',
@@ -35,6 +35,7 @@ const PERMISSIONS = [
   'feature_flags.view', 'feature_flags.manage',
   'app_versions.view', 'app_versions.manage',
   'audit_logs.view',
+  'team.view', 'team.manage', // admin console accounts: Super Admin only
 ];
 
 const OWN_SUPPORT = ['support.create', 'support.view_own', 'support.reply_own'];
@@ -44,9 +45,9 @@ const ROLE_PERMISSIONS = {
 
   FINANCE: [
     'dashboard.view',
+    'hospitals.view',
     'payments.view', 'webhooks.view', 'webhooks.manage',
     'refunds.view', 'refunds.manage', 'refunds.approve',
-    'settlements.view', 'settlements.manage',
     'disputes.view', 'disputes.manage',
     'analytics.view',
   ],

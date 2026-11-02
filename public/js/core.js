@@ -129,7 +129,9 @@
       .map((p) => p[0].toUpperCase())
       .join('');
 
-  G.avatar = (name, size = '') => {
+  // A person's avatar: their photo when there is one (doctors), otherwise coloured initials.
+  G.avatar = (name, size = '', photoUrl = null) => {
+    if (photoUrl) return `<img class="avatar${size ? ` avatar--${size}` : ''}" src="${G.esc(photoUrl)}" alt="">`;
     let h = 0;
     for (const ch of String(name)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
     return `<span class="avatar${size ? ` avatar--${size}` : ''} av-${h % 8}" aria-hidden="true">${G.esc(G.initials(name))}</span>`;
@@ -201,6 +203,35 @@
       modal.dispatchEvent(new CustomEvent('modal:close'));
     },
   };
+
+  // A small confirmation dialog: G.confirm({ title, body, action, danger }) resolves true when confirmed, false when
+  // cancelled or dismissed. Use it before changes people should not make by accident.
+  G.confirm = ({ title, body = '', action = 'Confirm', danger = false } = {}) => new Promise((resolve) => {
+    let host = document.getElementById('g-confirm-modal');
+    if (!host) {
+      host = document.createElement('div');
+      host.className = 'modal';
+      host.id = 'g-confirm-modal';
+      host.setAttribute('role', 'dialog');
+      host.setAttribute('aria-modal', 'true');
+      host.hidden = true;
+      host.innerHTML = '<div class="modal__backdrop" data-modal-close></div><div class="modal__panel modal__panel--sm"><div class="modal__head"><div class="modal__icon tone-amber"></div><div><h2></h2><p></p></div></div><div class="modal__foot"><button type="button" class="btn btn--ghost" data-modal-close>Cancel</button><button type="button" class="btn btn--primary" data-confirm-ok></button></div></div>';
+      document.body.appendChild(host);
+    }
+    host.querySelector('h2').textContent = title || 'Are you sure?';
+    host.querySelector('p').textContent = body;
+    host.querySelector('.modal__icon').className = `modal__icon ${danger ? 'tone-red' : 'tone-amber'}`;
+    host.querySelector('.modal__icon').innerHTML = G.icon('alert');
+    const ok = host.querySelector('[data-confirm-ok]');
+    ok.className = `btn ${danger ? 'btn--danger' : 'btn--primary'}`;
+    ok.textContent = action;
+    let done = false;
+    const finish = (value) => { if (done) return; done = true; host.removeEventListener('modal:close', onClose); ok.onclick = null; G.modal.close(host); resolve(value); };
+    const onClose = () => finish(false);
+    host.addEventListener('modal:close', onClose);
+    ok.onclick = () => finish(true);
+    G.modal.open('g-confirm-modal');
+  });
 
   document.addEventListener('click', (e) => {
     const closer = e.target.closest('[data-modal-close]');

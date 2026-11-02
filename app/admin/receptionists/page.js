@@ -2,6 +2,10 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Icon from '../../../components/Icon';
+import useHospitalOptions from '../../../components/admin/useHospitalOptions';
+import usePermissions from '../../../components/admin/usePermissions';
+import Pager, { usePager } from '../../../components/admin/Pager';
+import CredentialsModal from '../../../components/admin/CredentialsModal';
 
 const toast = (msg, type = 'success') => { if (typeof window !== 'undefined' && window.G) window.G.toast(msg, type); };
 
@@ -18,30 +22,6 @@ async function api(url, opts = {}) {
   return data;
 }
 
-function CredentialsModal({ creds, onClose }) {
-  if (!creds) return null;
-  return (
-    <div className="modal" role="dialog" aria-modal="true">
-      <div className="modal__backdrop" onClick={onClose}></div>
-      <div className="modal__panel modal__panel--sm">
-        <div className="modal__head">
-          <div className="modal__icon tone-green"><Icon name="check-circle" /></div>
-          <div><h2>Credentials issued</h2><p>Share these securely — the temporary password must be changed on first login.</p></div>
-        </div>
-        <div className="modal__body">
-          <dl className="kv">
-            <div><dt>Username</dt><dd className="mono">{creds.username}</dd></div>
-            <div><dt>Temp password</dt><dd className="mono">{creds.tempPassword}</dd></div>
-          </dl>
-        </div>
-        <div className="modal__foot">
-          <button type="button" className="btn btn--primary" onClick={onClose}>Done</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function AddModal({ open, hospitals, onClose, onCreated }) {
   const [form, setForm] = useState({ name: '', email: '', phone: '', hospitalId: '' });
   const [errors, setErrors] = useState({});
@@ -56,7 +36,7 @@ function AddModal({ open, hospitals, onClose, onCreated }) {
     try {
       const res = await api('/api/admin/receptionists', { method: 'POST', body: form });
       onClose();
-      onCreated(res.receptionist);
+      onCreated(res.credentials);
       setForm({ name: '', email: '', phone: '', hospitalId: '' });
     } catch (err) {
       setErrors(err.fields || {});
@@ -85,7 +65,7 @@ function AddModal({ open, hospitals, onClose, onCreated }) {
                 <label>Hospital *</label>
                 <select className="select" value={form.hospitalId} onChange={set('hospitalId')} required>
                   <option value="">Select hospital</option>
-                  {hospitals.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
+                  {hospitals.filter((h) => h.status !== 'OFFBOARDED').map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
                 </select>
                 {errors.hospitalId && <p className="field__error">{errors.hospitalId}</p>}
               </div>
@@ -94,6 +74,72 @@ function AddModal({ open, hospitals, onClose, onCreated }) {
           <div className="modal__foot">
             <button type="button" className="btn btn--ghost" onClick={onClose}>Cancel</button>
             <button type="submit" className={`btn btn--primary${saving ? ' is-loading' : ''}`} disabled={saving}><Icon name="check" /><span>Add</span></button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// Fix a typo, change contact details, or move the person to another hospital. A move signs them out.
+function EditModal({ target, hospitals, onClose, onSaved }) {
+  const [form, setForm] = useState({ name: '', email: '', phone: '', hospitalId: '' });
+  const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    if (target) { setForm({ name: target.name, email: target.email, phone: target.phone || '', hospitalId: target.hospitalId }); setErrors({}); }
+  }, [target]);
+  if (!target) return null;
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const moving = form.hospitalId !== target.hospitalId;
+  // Offboarded hospitals can't take staff (the current one stays listed so the form still shows it).
+  const options = hospitals.filter((h) => h.status !== 'OFFBOARDED' || h.id === target.hospitalId);
+
+  async function submit(e) {
+    e.preventDefault();
+    setSaving(true);
+    setErrors({});
+    try {
+      const res = await api(`/api/admin/receptionists/${target.id}`, { method: 'PUT', body: form });
+      toast(res.message, 'success');
+      onSaved();
+      onClose();
+    } catch (err) {
+      setErrors(err.fields || {});
+      if (!err.fields) toast(err.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="modal" role="dialog" aria-modal="true" aria-labelledby="edit-rec-title">
+      <div className="modal__backdrop" onClick={onClose}></div>
+      <div className="modal__panel">
+        <form onSubmit={submit}>
+          <div className="modal__head">
+            <div className="modal__icon tone-teal"><Icon name="pencil" /></div>
+            <div><h2 id="edit-rec-title">Edit {target.name}</h2><p>{target.id} · they sign in with their email address.</p></div>
+            <button type="button" className="icon-btn" onClick={onClose} aria-label="Close"><Icon name="x" /></button>
+          </div>
+          <div className="modal__body">
+            <div className="form-grid">
+              <div className={`field field--full${errors.name ? ' has-error' : ''}`}><label>Full name *</label><input className="input" value={form.name} onChange={set('name')} maxLength={60} required />{errors.name && <p className="field__error">{errors.name}</p>}</div>
+              <div className={`field${errors.email ? ' has-error' : ''}`}><label>Email *</label><input className="input" type="email" value={form.email} onChange={set('email')} required />{errors.email && <p className="field__error">{errors.email}</p>}</div>
+              <div className={`field${errors.phone ? ' has-error' : ''}`}><label>Phone *</label><input className="input" value={form.phone} onChange={set('phone')} required />{errors.phone && <p className="field__error">{errors.phone}</p>}</div>
+              <div className={`field field--full${errors.hospitalId ? ' has-error' : ''}`}>
+                <label>Hospital *</label>
+                <select className="select" value={form.hospitalId} onChange={set('hospitalId')} required>
+                  {options.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
+                </select>
+                {errors.hospitalId && <p className="field__error">{errors.hospitalId}</p>}
+                {moving && <p className="field__hint is-warning"><Icon name="alert-triangle" className="icon--xs" />Moving {target.name} to another hospital signs them out right away.</p>}
+              </div>
+            </div>
+          </div>
+          <div className="modal__foot">
+            <button type="button" className="btn btn--ghost" onClick={onClose}>Cancel</button>
+            <button type="submit" className={`btn btn--primary${saving ? ' is-loading' : ''}`} disabled={saving}><Icon name="check" /><span>Save</span></button>
           </div>
         </form>
       </div>
@@ -130,34 +176,69 @@ function DeactivateModal({ target, onClose, onConfirm }) {
   );
 }
 
+// Resetting a password ends every open session of that person and invalidates the current one, so confirm first.
+function ResetModal({ target, onClose, onConfirm }) {
+  const [saving, setSaving] = useState(false);
+  if (!target) return null;
+  async function submit(e) {
+    e.preventDefault();
+    setSaving(true);
+    try { await onConfirm(target); onClose(); } finally { setSaving(false); }
+  }
+  return (
+    <div className="modal" role="dialog" aria-modal="true" aria-labelledby="reset-title">
+      <div className="modal__backdrop" onClick={onClose}></div>
+      <div className="modal__panel modal__panel--sm">
+        <form onSubmit={submit}>
+          <div className="modal__head">
+            <div className="modal__icon tone-amber"><Icon name="lock" /></div>
+            <div><h2 id="reset-title">Reset password for {target.name}?</h2><p>Their current password stops working and they are signed out everywhere. You&apos;ll get a new temporary password to share with them; they must change it when they next sign in.</p></div>
+          </div>
+          <div className="modal__foot">
+            <button type="button" className="btn btn--ghost" onClick={onClose}>Cancel</button>
+            <button type="submit" className={`btn btn--primary${saving ? ' is-loading' : ''}`} disabled={saving}>Reset Password</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function ReceptionistsPage() {
+  const can = usePermissions();
   const [items, setItems] = useState([]);
-  const [hospitals, setHospitals] = useState([]);
+  const hospitals = useHospitalOptions();
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('');
   const [showAdd, setShowAdd] = useState(false);
   const [creds, setCreds] = useState(null);
   const [deactivateTarget, setDeactivateTarget] = useState(null);
+  const [editTarget, setEditTarget] = useState(null);
+  const [resetTarget, setResetTarget] = useState(null);
 
+  const [page, setPage] = usePager(JSON.stringify([q, status]));
+  const [pages, setPages] = useState(1);
+  const [total, setTotal] = useState(0);
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const qs = new URLSearchParams();
       if (q) qs.set('q', q);
       if (status) qs.set('status', status);
-      qs.set('pageSize', '100');
+      qs.set('pageSize', '25');
+      qs.set('page', String(page));
       const data = await api(`/api/admin/receptionists?${qs}`);
       setItems(data.items);
+      setTotal(data.total); setPages(data.pages || 1);
     } catch (err) {
       toast(err.message, 'error');
     } finally {
       setLoading(false);
     }
-  }, [q, status]);
+  }, [q, status, page]);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { api('/api/admin/hospitals?pageSize=100').then((d) => setHospitals(d.items)).catch(() => {}); }, []);
 
   async function setAccountStatus(r, next) {
     try {
@@ -173,7 +254,7 @@ export default function ReceptionistsPage() {
     try {
       const res = await api(`/api/admin/receptionists/${r.id}/reset-password`, { method: 'POST' });
       toast(res.message, 'success');
-      setCreds({ username: r.email, tempPassword: res.tempPassword });
+      setCreds(res.credentials);
     } catch (err) {
       toast(err.message, 'error');
     }
@@ -187,7 +268,7 @@ export default function ReceptionistsPage() {
           <p>Front-desk accounts across every hospital.</p>
         </div>
         <div className="page-head__actions">
-          <button type="button" className="btn btn--primary" onClick={() => setShowAdd(true)}><Icon name="user-plus" />Add Receptionist</button>
+          {can('receptionists.manage') && <button type="button" className="btn btn--primary" onClick={() => setShowAdd(true)}><Icon name="user-plus" />Add Receptionist</button>}
         </div>
       </div>
 
@@ -223,21 +304,24 @@ export default function ReceptionistsPage() {
                   <td data-label="Contact"><span>{r.email}</span><span className="cell-sub">{r.phone}</span></td>
                   <td data-label="Status"><span className={`badge badge--${r.status === 'ACTIVE' ? 'confirmed' : 'cancelled'}`}>{r.status}</span></td>
                   <td className="col-actions">
-                    <div className="action-group">
-                      <button type="button" className="action-btn" onClick={() => resetPassword(r)}><Icon name="lock" />Reset Password</button>
+                    {can('receptionists.manage') && <div className="action-group">
+                      <button type="button" className="action-btn" onClick={() => setEditTarget(r)}><Icon name="pencil" />Edit</button>
+                      <button type="button" className="action-btn" onClick={() => setResetTarget(r)}><Icon name="lock" />Reset Password</button>
                       <button type="button" className="action-btn" onClick={() => (r.status === 'ACTIVE' ? setDeactivateTarget(r) : setAccountStatus(r, 'ACTIVE'))}><Icon name={r.status === 'ACTIVE' ? 'user-x' : 'user-check'} />{r.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}</button>
-                    </div>
+                    </div>}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        <div className="pager"><span>{items.length} receptionist{items.length === 1 ? '' : 's'}</span></div>
+        <Pager total={total} page={page} pages={pages} noun="receptionist" onPage={setPage} />
       </article>
 
       <AddModal open={showAdd} hospitals={hospitals} onClose={() => setShowAdd(false)} onCreated={(creds) => { setCreds(creds); load(); }} />
+      <EditModal target={editTarget} hospitals={hospitals} onClose={() => setEditTarget(null)} onSaved={load} />
       <CredentialsModal creds={creds} onClose={() => setCreds(null)} />
+      <ResetModal target={resetTarget} onClose={() => setResetTarget(null)} onConfirm={resetPassword} />
       <DeactivateModal target={deactivateTarget} onClose={() => setDeactivateTarget(null)} onConfirm={(r) => setAccountStatus(r, 'INACTIVE')} />
     </>
   );

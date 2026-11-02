@@ -1,7 +1,11 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Icon from '../../../components/Icon';
+import useHospitalOptions from '../../../components/admin/useHospitalOptions';
+import usePermissions from '../../../components/admin/usePermissions';
+import Pager, { usePager } from '../../../components/admin/Pager';
 import TicketThread from '../../../components/shared/TicketThread';
 import { formatDateTime } from '../../../lib/format';
 
@@ -31,14 +35,25 @@ async function api(url, opts = {}) {
 }
 
 function TicketDrawer({ ticketId, assignees, onClose, onChanged }) {
+  const can = usePermissions();
   const [data, setData] = useState(null);
   const [reply, setReply] = useState('');
   const [busy, setBusy] = useState(false);
+  const [notes, setNotes] = useState([]);
+  const [note, setNote] = useState('');
+  const [confirmClose, setConfirmClose] = useState(false);
 
   const load = useCallback(async () => {
     try { setData(await api(`/api/admin/support/${ticketId}`)); } catch (err) { toast(err.message, 'error'); onClose(); }
   }, [ticketId, onClose]);
-  useEffect(() => { load(); }, [load]);
+  const loadNotes = useCallback(() => { api(`/api/admin/support/${ticketId}/notes`).then((d) => setNotes(d.notes)).catch(() => {}); }, [ticketId]);
+  useEffect(() => { load(); loadNotes(); }, [load, loadNotes]);
+
+  async function addNote(e) {
+    e.preventDefault();
+    if (!note.trim()) return;
+    try { const res = await api(`/api/admin/support/${ticketId}/notes`, { method: 'POST', body: { note } }); toast(res.message, 'success'); setNote(''); loadNotes(); } catch (err) { toast(err.message, 'error'); }
+  }
 
   async function run(fn, successRefresh = true) {
     setBusy(true);
@@ -69,6 +84,7 @@ function TicketDrawer({ ticketId, assignees, onClose, onChanged }) {
               <dl className="kv" style={{ marginBottom: 14 }}>
                 <div><dt>Raised by</dt><dd>{t.createdByName || '—'} · {SOURCE_LABEL[t.createdByRole]}</dd></div>
                 <div><dt>Hospital</dt><dd>{t.hospitalName || '—'}</dd></div>
+                <div><dt>Appointment</dt><dd className="mono">{t.appointmentId || '—'}</dd></div>
                 <div><dt>Category</dt><dd>{CATEGORY_LABEL[t.category] || t.category}</dd></div>
                 <div><dt>Status</dt><dd><span className={`badge badge--${STATUS_TONE[t.status]}`}>{t.status.replace('_', ' ')}</span></dd></div>
                 <div><dt>Created</dt><dd><time suppressHydrationWarning>{formatDateTime(t.createdAt)}</time></dd></div>
@@ -77,12 +93,12 @@ function TicketDrawer({ ticketId, assignees, onClose, onChanged }) {
               {t.status !== 'CLOSED' && (
                 <div className="form-grid" style={{ marginBottom: 16 }}>
                   <div className="field"><label>Assigned to</label>
-                    <select className="select" value={t.assignedTo || ''} disabled={busy} onChange={(e) => assign(e.target.value)}>
+                    <select className="select" value={t.assignedTo || ''} disabled={busy || !can('support.assign')} onChange={(e) => assign(e.target.value)}>
                       <option value="">Unassigned</option>{assignees.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
                     </select>
                   </div>
                   <div className="field"><label>Priority</label>
-                    <select className="select" value={t.priority} disabled={busy} onChange={(e) => setPriority(e.target.value)}>
+                    <select className="select" value={t.priority} disabled={busy || !can('support.update_status')} onChange={(e) => setPriority(e.target.value)}>
                       {['LOW', 'MEDIUM', 'HIGH', 'URGENT'].map((p) => <option key={p} value={p}>{p}</option>)}
                     </select>
                   </div>
@@ -90,59 +106,89 @@ function TicketDrawer({ ticketId, assignees, onClose, onChanged }) {
               )}
               <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 12 }}>Conversation</h3>
               <TicketThread messages={data.messages} viewerSide="SUPPORT" />
+
+              <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', margin: '20px 0 4px' }}>Internal notes</h3>
+              <p className="field__hint" style={{ marginBottom: 8 }}><Icon name="lock" className="icon--xs" />Staff only. The person who raised the ticket never sees these.</p>
+              {notes.length === 0 && <p className="text-muted" style={{ fontSize: 13 }}>No internal notes yet.</p>}
+              {notes.map((n) => <p key={n.id} style={{ fontSize: 13, margin: '6px 0', padding: '8px 10px', background: 'var(--amber-50)', borderRadius: 'var(--radius)' }}><strong>{n.userName}</strong> · <span className="text-muted"><time suppressHydrationWarning>{formatDateTime(n.createdAt)}</time></span><br />{n.note}</p>)}
+              {can('support.reply') && (
+                <form onSubmit={addNote} style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                  <input className="input" placeholder="Add an internal note…" maxLength={1000} value={note} onChange={(e) => setNote(e.target.value)} />
+                  <button type="submit" className="btn btn--ghost btn--sm" disabled={!note.trim()}>Add note</button>
+                </form>
+              )}
             </>
           )}
         </div>
-        {t && t.status !== 'CLOSED' && (
+        {t && t.status !== 'CLOSED' && can('support.reply', 'support.update_status') && (
           <form className="modal__foot" onSubmit={send} style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-            <textarea className="textarea" rows={3} placeholder="Type your response…" value={reply} onChange={(e) => setReply(e.target.value)} required />
+            {can('support.reply') && <textarea className="textarea" rows={3} placeholder="Type your response…" value={reply} onChange={(e) => setReply(e.target.value)} required />}
             <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between', flexWrap: 'wrap' }}>
               <div className="action-group">
-                {NEXT_ACTIONS[t.status].map(([s, label]) => (
-                  <button key={s} type="button" className="btn btn--ghost btn--sm" disabled={busy} onClick={() => setStatus(s)}>{label}</button>
+                {can('support.update_status') && NEXT_ACTIONS[t.status].filter(([s]) => s !== 'CLOSED' || can('support.close')).map(([s, label]) => (
+                  <button key={s} type="button" className="btn btn--ghost btn--sm" disabled={busy} onClick={() => (s === 'CLOSED' ? setConfirmClose(true) : setStatus(s))}>{label}</button>
                 ))}
               </div>
-              <button type="submit" className={`btn btn--primary${busy ? ' is-loading' : ''}`} disabled={busy}><Icon name="arrow-right" /><span>Send Reply</span></button>
+              {can('support.reply') && <button type="submit" className={`btn btn--primary${busy ? ' is-loading' : ''}`} disabled={busy}><Icon name="arrow-right" /><span>Send Reply</span></button>}
             </div>
           </form>
         )}
         {t && t.status === 'CLOSED' && <div className="modal__foot"><span className="text-muted">This ticket is closed.</span></div>}
       </div>
+      {confirmClose && t && (
+        <div className="modal" role="dialog" aria-modal="true" aria-labelledby="close-ticket-title" style={{ zIndex: 60 }}>
+          <div className="modal__backdrop" onClick={() => setConfirmClose(false)}></div>
+          <div className="modal__panel modal__panel--sm">
+            <div className="modal__head">
+              <div className="modal__icon tone-amber"><Icon name="lock" /></div>
+              <div><h2 id="close-ticket-title">Close {t.ticketNumber}?</h2><p>A closed ticket is final: it can&apos;t be reopened, replied to or reassigned. If the issue may come back, leave it resolved instead.</p></div>
+            </div>
+            <div className="modal__foot">
+              <button type="button" className="btn btn--ghost" onClick={() => setConfirmClose(false)}>Cancel</button>
+              <button type="button" className={`btn btn--primary${busy ? ' is-loading' : ''}`} disabled={busy} onClick={async () => { await setStatus('CLOSED'); setConfirmClose(false); }}>Close Ticket</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-export default function SupportPage() {
+function SupportPage() {
+  // Filters can be preset from the URL, e.g. the dashboard's "needs attention" links.
+  const params = useSearchParams();
   const [items, setItems] = useState([]);
   const [counts, setCounts] = useState({});
   const [categories, setCategories] = useState([]);
-  const [hospitals, setHospitals] = useState([]);
+  const hospitals = useHospitalOptions();
   const [assignees, setAssignees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
-  const [tab, setTab] = useState('');
+  const [tab, setTab] = useState(() => params.get('status') || '');
   const [f, setF] = useState({ q: '', source: '', category: '', priority: '', hospitalId: '', from: '', to: '' });
   const [openId, setOpenId] = useState(null);
 
+  const [page, setPage] = usePager(JSON.stringify([f, tab]));
+  const [pages, setPages] = useState(1);
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const qs = new URLSearchParams();
       Object.entries(f).forEach(([k, v]) => { if (v) qs.set(k, v); });
       if (tab) qs.set('status', tab);
-      qs.set('pageSize', '50');
+      qs.set('pageSize', '25');
+      qs.set('page', String(page));
       const data = await api(`/api/admin/support?${qs}`);
-      setItems(data.items); setCounts(data.counts); setCategories(data.categories); setTotal(data.total);
+      setItems(data.items); setCounts(data.counts); setCategories(data.categories); setTotal(data.total); setPages(data.pages || 1);
     } catch (err) {
       toast(err.message, 'error');
     } finally {
       setLoading(false);
     }
-  }, [f, tab]);
+  }, [f, tab, page]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
-    api('/api/admin/hospitals?pageSize=100').then((d) => setHospitals(d.items)).catch(() => {});
     api('/api/admin/support/assignees').then((d) => setAssignees(d.items)).catch(() => {});
   }, []);
 
@@ -208,10 +254,15 @@ export default function SupportPage() {
             </tbody>
           </table>
         </div>
-        <div className="pager"><span>{total} ticket{total === 1 ? '' : 's'}</span></div>
+        <Pager total={total} page={page} pages={pages} noun="ticket" onPage={setPage} />
       </article>
 
       {openId && <TicketDrawer ticketId={openId} assignees={assignees} onClose={() => setOpenId(null)} onChanged={load} />}
     </>
   );
+}
+
+// useSearchParams needs a Suspense boundary for the production build.
+export default function SupportPageRoute() {
+  return <Suspense fallback={null}><SupportPage /></Suspense>;
 }

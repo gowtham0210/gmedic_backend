@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Icon from '../../../components/Icon';
+import DoctorAvatar from '../../../components/DoctorAvatar';
 
 const toast = (msg, type = 'success') => { if (typeof window !== 'undefined' && window.G) window.G.toast(msg, type); };
 
@@ -26,6 +28,45 @@ export default function ProfilePage() {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({ bio: '', yearsExperience: '', languages: '' });
   const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState({});
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const router = useRouter();
+
+  // Photo: saved as soon as it is picked (or removed), like the admin doctor editor.
+  async function uploadPhoto(e) {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    if (file.size > 3 * 1024 * 1024) return toast('The photo must be 3 MB or smaller.', 'error');
+    setPhotoBusy(true);
+    try {
+      const fd = new FormData();
+      fd.append('photo', file);
+      const r = await fetch('/api/doctor/profile/photo', { method: 'POST', body: fd, credentials: 'same-origin' });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error((d.fields && d.fields.photo) || d.error || 'Could not upload the photo.');
+      toast(d.message, 'success');
+      setData((cur) => ({ ...cur, doctor: d.doctor }));
+      router.refresh(); // the top bar avatar is server-rendered
+    } catch (err) {
+      toast(err.message, 'error');
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
+  async function removePhoto() {
+    setPhotoBusy(true);
+    try {
+      const d = await api('/api/doctor/profile/photo', { method: 'DELETE' });
+      toast(d.message, 'success');
+      setData((cur) => ({ ...cur, doctor: d.doctor }));
+      router.refresh(); // the top bar avatar is server-rendered
+    } catch (err) {
+      toast(err.message, 'error');
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
 
   function load() {
     setLoading(true);
@@ -40,13 +81,15 @@ export default function ProfilePage() {
   async function save(e) {
     e.preventDefault();
     setSaving(true);
+    setErrors({});
     try {
       const res = await api('/api/doctor/profile', { method: 'PUT', body: form });
       toast(res.message, 'success');
       setEditing(false);
       load();
     } catch (err) {
-      toast(err.message, 'error');
+      setErrors(err.fields || {});
+      if (!err.fields) toast(err.message, 'error');
     } finally {
       setSaving(false);
     }
@@ -56,7 +99,6 @@ export default function ProfilePage() {
   if (!data) return <div className="alert alert--error"><Icon name="alert" /><span>Could not load your profile.</span></div>;
 
   const { doctor, user, hospital } = data;
-  const initials = doctor.name.replace(/^Dr\.?\s+/i, '').split(/\s+/).slice(0, 2).map((p) => p[0].toUpperCase()).join('');
 
   return (
     <>
@@ -69,7 +111,16 @@ export default function ProfilePage() {
 
       <article className="card" style={{ marginBottom: 24 }}>
         <div className="profile-hero">
-          <span className="avatar avatar--teal avatar--xl">{initials}</span>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+            <DoctorAvatar name={doctor.name} photoUrl={doctor.photoUrl} size="xl" />
+            <div className="action-group">
+              <label className={`btn btn--ghost btn--sm${photoBusy ? ' is-loading' : ''}`} style={{ cursor: 'pointer' }}>
+                <Icon name="upload" />{doctor.photoUrl ? 'Change photo' : 'Upload photo'}
+                <input type="file" accept="image/png,image/jpeg" hidden disabled={photoBusy} onChange={uploadPhoto} />
+              </label>
+              {doctor.photoUrl && <button type="button" className="btn btn--ghost btn--sm" style={{ color: 'var(--red-600)' }} disabled={photoBusy} onClick={removePhoto}>Remove</button>}
+            </div>
+          </div>
           <div className="profile-hero__main">
             <h2>{doctor.name}</h2>
             <div className="profile-hero__meta">
@@ -125,17 +176,20 @@ export default function ProfilePage() {
           <div className="card__head"><h2 className="card__title"><Icon name="pencil" />{editing ? 'Edit Profile' : 'Editable Fields'}</h2></div>
           {editing ? (
             <form onSubmit={save}>
-              <div className="field" style={{ marginBottom: 14 }}>
+              <div className={`field${errors.yearsExperience ? ' has-error' : ''}`} style={{ marginBottom: 14 }}>
                 <label>Years of experience</label>
-                <input className="input" type="number" min="0" max="70" value={form.yearsExperience} onChange={(e) => setForm((f) => ({ ...f, yearsExperience: e.target.value }))} />
+                <input className="input" type="number" min="0" max="70" step="1" value={form.yearsExperience} onChange={(e) => setForm((f) => ({ ...f, yearsExperience: e.target.value }))} placeholder="Leave empty to hide" />
+                {errors.yearsExperience && <p className="field__error">{errors.yearsExperience}</p>}
               </div>
-              <div className="field" style={{ marginBottom: 14 }}>
+              <div className={`field${errors.languages ? ' has-error' : ''}`} style={{ marginBottom: 14 }}>
                 <label>Languages spoken</label>
-                <input className="input" placeholder="English, Hindi, Tamil" value={form.languages} onChange={(e) => setForm((f) => ({ ...f, languages: e.target.value }))} />
+                <input className="input" placeholder="English, Hindi, Tamil" maxLength={120} value={form.languages} onChange={(e) => setForm((f) => ({ ...f, languages: e.target.value }))} />
+                {errors.languages && <p className="field__error">{errors.languages}</p>}
               </div>
-              <div className="field" style={{ marginBottom: 18 }}>
+              <div className={`field${errors.bio ? ' has-error' : ''}`} style={{ marginBottom: 18 }}>
                 <label>Bio</label>
                 <textarea className="textarea" rows={5} maxLength={500} value={form.bio} onChange={(e) => setForm((f) => ({ ...f, bio: e.target.value }))} />
+                {errors.bio && <p className="field__error">{errors.bio}</p>}
               </div>
               <button type="submit" className={`btn btn--primary btn--block${saving ? ' is-loading' : ''}`} disabled={saving}><Icon name="check" /><span>Save Changes</span></button>
             </form>

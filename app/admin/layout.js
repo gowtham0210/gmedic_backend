@@ -1,4 +1,5 @@
 import Script from 'next/script';
+import { scriptJson } from '../../lib/scriptJson';
 import { requireAdmin } from '../../lib/rbac';
 import { permissionsFor } from '../../config/permissions';
 import userModel from '../../models/userModel';
@@ -24,7 +25,7 @@ export default async function AdminLayout({ children }) {
 
       <script
         // eslint-disable-next-line react/no-danger
-        dangerouslySetInnerHTML={{ __html: `window.GMEDIC = ${JSON.stringify({ user: publicUser, permissions })};` }}
+        dangerouslySetInnerHTML={{ __html: `window.GMEDIC = ${scriptJson({ user: publicUser, permissions })};` }}
       />
       <Script src="/js/layout.js" strategy="afterInteractive" />
     </div>

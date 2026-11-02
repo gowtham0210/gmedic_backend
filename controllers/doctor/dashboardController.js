@@ -1,31 +1,32 @@
 const doctorModel = require('../../models/doctorModel');
 const appointmentModel = require('../../models/appointmentModel');
 const tokenModel = require('../../models/tokenModel');
+const bookingCore = require('../../services/bookingCore');
 const { notFound, badRequest } = require('../../utils/http');
-const { todayISO, isISODate } = require('../../utils/dates');
+const { isISODate } = require('../../utils/dates');
 
 // GET /api/doctor/dashboard — same numbers the /doctor/dashboard page shows.
 exports.get = async (req, res) => {
   const doctor = await doctorModel.findById(req.hospitalId, req.doctorId);
   if (!doctor) throw notFound('Doctor record not found.');
-  const today = todayISO();
+  const today = await appointmentModel.hospitalToday(req.hospitalId);
   const [all, tokens] = await Promise.all([
     appointmentModel.query(req.hospitalId, { doctorId: req.doctorId }),
     tokenModel.query(req.hospitalId, { date: today, doctorId: req.doctorId }),
   ]);
   const todays = appointmentModel.sortRows(all.filter((a) => a.date === today), 'date_asc');
-  const waiting = tokens.filter((t) => t.status === 'waiting').sort((a, b) => a.number - b.number);
+  const waiting = tokens.filter((t) => t.status === 'waiting').sort(bookingCore.queueOrder);
   const current = tokens.find((t) => t.status === 'in_consultation' || t.status === 'called') || null;
 
   res.json({
     date: today,
-    doctor: { id: doctor.id, name: doctor.name, specialization: doctor.specialization, fee: doctor.fee, availability: doctor.availability },
+    doctor: { id: doctor.id, name: doctor.name, specialization: doctor.specialization, fee: doctor.fee, availability: doctor.availability, photoUrl: doctor.photoUrl || null },
     stats: {
       todaysAppointments: todays.length,
       waitingPatients: waiting.length,
       completedToday: todays.filter((a) => a.status === 'completed').length,
       cancelledToday: todays.filter((a) => a.status === 'cancelled').length,
-      earningsToday: todays.filter((a) => a.paymentStatus === 'paid').reduce((sum, a) => sum + a.fee, 0),
+      earningsToday: todays.filter((a) => a.paymentStatus === 'paid' && a.status !== 'cancelled').reduce((sum, a) => sum + a.fee, 0),
       upcoming: all.filter((a) => a.date > today && a.status !== 'cancelled').length,
     },
     currentToken: current,
@@ -42,7 +43,7 @@ function addDays(iso, n) {
 
 // GET /api/doctor/analytics?from=&to=  (defaults to the last 14 days)
 exports.analytics = async (req, res) => {
-  const to = req.query.to || todayISO();
+  const to = req.query.to || await appointmentModel.hospitalToday(req.hospitalId);
   const from = req.query.from || addDays(to, -13);
   if (!isISODate(from) || !isISODate(to)) throw badRequest('"from" and "to" must be valid dates (YYYY-MM-DD).');
   if (from > to) throw badRequest('"from" must not be after "to".', { from: 'Must be on or before the end date.' });
@@ -60,7 +61,7 @@ exports.analytics = async (req, res) => {
     if (a.status !== 'cancelled') day.booked += 1;
     if (a.status === 'completed') day.completed += 1;
     if (a.status === 'cancelled') day.cancelled += 1;
-    if (a.paymentStatus === 'paid') { day.earnings += a.fee; earnings += a.fee; }
+    if (a.paymentStatus === 'paid' && a.status !== 'cancelled') { day.earnings += a.fee; earnings += a.fee; }
     patients.add(a.patientId);
   }
   res.json({
@@ -84,14 +85,14 @@ exports.appointments = slice((d) => ({ date: d.date, items: d.todaysAppointments
 
 // GET /api/doctor/earnings?from=&to=  — paid appointments in the range (defaults to the last 30 days)
 exports.earnings = async (req, res) => {
-  const to = req.query.to || todayISO();
+  const to = req.query.to || await appointmentModel.hospitalToday(req.hospitalId);
   const from = req.query.from || addDays(to, -29);
   if (!isISODate(from) || !isISODate(to)) throw badRequest('"from" and "to" must be valid dates (YYYY-MM-DD).');
   if (from > to) throw badRequest('"from" must not be after "to".', { from: 'Must be on or before the end date.' });
   if (addDays(from, 366) < to) throw badRequest('Choose a range of one year or less.');
 
   const all = await appointmentModel.query(req.hospitalId, { doctorId: req.doctorId });
-  const paid = all.filter((a) => a.paymentStatus === 'paid' && a.date >= from && a.date <= to);
+  const paid = all.filter((a) => a.paymentStatus === 'paid' && a.status !== 'cancelled' && a.date >= from && a.date <= to);
   const pending = all.filter((a) => a.paymentStatus === 'pending' && a.status !== 'cancelled' && a.date >= from && a.date <= to);
   res.json({
     from, to,

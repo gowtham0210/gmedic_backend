@@ -95,8 +95,8 @@ export default async function LoginPage({ searchParams }) {
             </div>
 
             <div className="demo-creds" style={{ display: role === 'RECEPTIONIST' ? 'block' : 'none' }} data-demo-box="RECEPTIONIST">
-              <strong>Demo account</strong> — <code>riya.sharma@sunrisegeneral.in</code> / <code>Gmedic@123</code>
-              {' · '}<button type="button" data-fill-demo data-role="RECEPTIONIST" data-identifier="riya.sharma@sunrisegeneral.in" data-password="Gmedic@123">Use demo login</button>
+              <strong>Demo account</strong> — <code>riya.sharma@sunrisegeneral.in</code> / <code>Gmedic@9767</code>
+              {' · '}<button type="button" data-fill-demo data-role="RECEPTIONIST" data-identifier="riya.sharma@sunrisegeneral.in" data-password="Gmedic@9767">Use demo login</button>
             </div>
 
             <div className="demo-creds" style={{ display: role === 'DOCTOR' ? 'block' : 'none' }} data-demo-box="DOCTOR">

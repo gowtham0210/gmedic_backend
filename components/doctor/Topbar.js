@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Icon from '../Icon';
 import NotificationBell from './NotificationBell';
+import DoctorAvatar from '../DoctorAvatar';
+import AvailabilityToggle from './AvailabilityToggle';
 
 export default function Topbar({ user, doctor, hospital }) {
   const router = useRouter();
@@ -14,8 +16,6 @@ export default function Topbar({ user, doctor, hospital }) {
     e.preventDefault();
     if (q.trim()) router.push(`/doctor/patients?q=${encodeURIComponent(q.trim())}`);
   }
-
-  const present = doctor.availability === 'present';
 
   return (
     <header className="topbar">
@@ -34,9 +34,7 @@ export default function Topbar({ user, doctor, hospital }) {
       </form>
 
       <div className="topbar__actions">
-        <Link href="/doctor/availability" className={`badge badge--${present ? 'confirmed' : 'cancelled'} badge--plain`} title="Your availability status" style={{ textDecoration: 'none' }}>
-          <Icon name="toggle-left" className="icon--xs" /> {present ? 'Available' : 'Unavailable'}
-        </Link>
+        <AvailabilityToggle initial={doctor.availability} />
 
         <NotificationBell />
 
@@ -44,13 +42,13 @@ export default function Topbar({ user, doctor, hospital }) {
 
         <div className="dropdown" data-dropdown>
           <button type="button" className="profile-btn" aria-haspopup="true" aria-expanded="false" data-dropdown-toggle aria-label="Account menu">
-            <span className="avatar avatar--teal" data-user-initials>{user.initials}</span>
+            <DoctorAvatar name={user.name} photoUrl={doctor.photoUrl} />
             <span className="profile-btn__text"><strong data-user-name>{user.name}</strong><small>{doctor.specialization}</small></span>
             <Icon name="chevron-down" />
           </button>
           <div className="dropdown__menu" role="menu">
             <div className="dropdown__header">
-              <span className="avatar avatar--teal" data-user-initials>{user.initials}</span>
+              <DoctorAvatar name={user.name} photoUrl={doctor.photoUrl} />
               <div><strong data-user-name>{user.name}</strong><small>{user.email}</small></div>
             </div>
             <Link className="dropdown__item" role="menuitem" href="/doctor/profile"><Icon name="user" />My Profile</Link>

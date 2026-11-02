@@ -1,5 +1,15 @@
 # Gmedic data model v2
 
+> **2026-10-15 update: booking-token model (migration 031).** The patient app now charges only a fixed booking token
+> (platform setting `booking_token_amount`, ₹5) that Gmedic keeps and never refunds; the consultation fee is paid at the
+> hospital and recorded at the front desk. `payments.purpose` (`TOKEN` / `CONSULTATION`) separates the two; one PAID
+> payment per appointment *per purpose*; only a PAID `CONSULTATION` payment sets `appointments.payment_status = 'paid'`.
+> Every hospital is on `booking_model = 'TOKEN'` (`booking_fee` mirrors the token, `convenience_fee` 0). Hospital
+> settlements and payouts are retired: the Settlements page, API, service and scheduler were removed. The `settlements`,
+> `settlement_items`, `settlement_adjustments` and `hospital_rate_history` tables remain (empty / historical). The sections
+> below describe the model as reviewed before this change.
+
+
 Applied by `database/migrations/007_data_model_v2.sql` (run `npm run db:setup`).
 Full resulting DDL: [schema-v2.sql](schema-v2.sql). Diagram: [gmedic-er-diagram-v2.png](gmedic-er-diagram-v2.png).
 
@@ -169,6 +179,7 @@ Rules moved from triggers to declarative constraints wherever SQLite allows.
 | Triggers instead of constraints | **Done for the drift guards.** Composite foreign keys now enforce: appointment (doctor, hospital) -> doctor; appointment (branch, hospital) -> branch; token (appointment, doctor, hospital, date) -> appointment (with ON UPDATE CASCADE, so a reschedule moves the token date); refund (payment, appointment) and (payment, currency) -> payment; dispute (payment, transaction) -> payment; doctor and QR (branch, hospital) -> branch; doctor login (doctor, hospital) -> doctor, plus a CHECK that a doctor login has a hospital (a NULL would otherwise skip the key). `doctors.verified_by` and the other actor columns are plain FKs. The 13 guard triggers they replace are gone. |
 | Overlap exclusion constraints | **Not possible in SQLite.** Schedule, leave and settlement-period overlap stay as triggers; PostgreSQL would use `EXCLUDE USING gist`. |
 | Capacity races | SQLite allows one writer at a time, so a trigger check and its insert run under one write lock; the unique `(doctor, date, time, seat_no)` index is the final guard either way. `online_quota` is now enforced (trigger: app bookings for a slot cannot exceed the covering schedule's quota). On PostgreSQL use a locked `slots` row (`SELECT ... FOR UPDATE`). |
+| Emergency walk-ins (migration 032) | `doctor_schedules.emergency_seats` (0-3) lets a **full** slot take that many more walk-ins today. They are `appointments.is_emergency = 1` on seats `capacity + 1 .. capacity + emergency_seats`, numbered `emergency_no` per doctor per day (token code E01...). The capacity triggers count regular bookings only; `trg_guard_appt_emergency_ins` caps emergencies per slot, `trg_guard_appt_seat_ins` allows the higher seat numbers only for an emergency, and `trg_guard_appt_emergency_upd` refuses moving one. The queue calls emergencies first (`bookingCore.queueOrder`). |
 
 ## Medium impact
 | Point | Result |

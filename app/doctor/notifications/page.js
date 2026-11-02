@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import Icon from '../../../components/Icon';
-import { formatDate, formatDateTime, formatTime } from '../../../lib/format';
+import { formatDateTime } from '../../../lib/format';
+import { ICON } from '../../../components/doctor/NotificationBell';
 
 const toast = (msg, type = 'success') => { if (typeof window !== 'undefined' && window.G) window.G.toast(msg, type); };
 
@@ -30,6 +31,12 @@ export default function NotificationsPage() {
 
   useEffect(() => { load(); }, []);
 
+  function openOne(n) {
+    if (!n.unread) return;
+    setItems((list) => list.map((i) => (i.id === n.id ? { ...i, unread: false } : i)));
+    fetch(`/api/doctor/notifications/${encodeURIComponent(n.id)}/read`, { method: 'POST', keepalive: true, credentials: 'same-origin' }).catch(() => {});
+  }
+
   async function markAllRead() {
     try {
       await api('/api/doctor/notifications/read', { method: 'POST' });
@@ -44,7 +51,7 @@ export default function NotificationsPage() {
       <div className="page-head">
         <div>
           <h1>Notifications</h1>
-          <p>New bookings and reminders for your own appointments.</p>
+          <p>New bookings, cancellations and updates for your own appointments.</p>
         </div>
         <div className="page-head__actions">
           <button type="button" className="btn btn--ghost" onClick={markAllRead}><Icon name="check" />Mark all as read</button>
@@ -55,21 +62,16 @@ export default function NotificationsPage() {
         <div className="table-wrap" style={{ padding: 8 }}>
           {loading && <div className="skeleton skeleton--row"></div>}
           {!loading && items.length === 0 && (
-            <div className="empty" style={{ padding: 40 }}><div className="empty__icon"><Icon name="bell" /></div><h3>You&apos;re all caught up</h3><p>New bookings and reminders will show up here.</p></div>
+            <div className="empty" style={{ padding: 40 }}><div className="empty__icon"><Icon name="bell" /></div><h3>You&apos;re all caught up</h3><p>New bookings and updates will show up here.</p></div>
           )}
           {items.map((n) => (
-            <div key={n.id} className={`notif__item${n.unread ? ' is-unread' : ''}`} style={{ display: 'flex', gap: 14, padding: '14px 10px', borderBottom: '1px solid var(--border-2)' }}>
-              <span className={`notif__icon ${n.type === 'reminder' ? 'tone-blue' : n.type === 'system' ? 'tone-teal' : 'tone-green'}`}><Icon name={n.type === 'reminder' ? 'clock' : n.type === 'system' ? 'bell' : 'calendar-check'} /></span>
+            <a key={n.id} href={n.link || '#'} onClick={() => openOne(n)} className={`notif__item${n.unread ? ' is-unread' : ''}`} style={{ display: 'flex', gap: 14, padding: '14px 10px', borderBottom: '1px solid var(--border-2)' }}>
+              <span className={`notif__icon ${ICON[n.eventKey]?.[1] || 'tone-teal'}`}><Icon name={ICON[n.eventKey]?.[0] || 'bell'} /></span>
               <span style={{ flex: 1 }}>
-                <p>{n.type === 'system'
-                  ? <><strong>{n.title}</strong> — {n.body}</>
-                  : n.type === 'reminder'
-                    ? <>Your appointment with <strong>{n.patientName}</strong> starts at {n.time}.</>
-                    : <>New appointment: <strong>{n.patientName}</strong> on {formatDate(n.date)} at {formatTime(n.time)}.</>}
-                </p>
+                <p><strong>{n.title}</strong> — {n.body}</p>
                 <small className="text-muted">{n.at ? formatDateTime(n.at) : ''}</small>
               </span>
-            </div>
+            </a>
           ))}
         </div>
       </article>

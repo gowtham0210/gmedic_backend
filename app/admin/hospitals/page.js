@@ -1,8 +1,12 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Icon from '../../../components/Icon';
+import HospitalStatusModal from '../../../components/admin/HospitalStatusModal';
+import usePermissions from '../../../components/admin/usePermissions';
+import Pager, { usePager } from '../../../components/admin/Pager';
 
 const STATUS_TONE = { ACTIVE: 'confirmed', ONBOARDING: 'pending', SUSPENDED: 'cancelled', OFFBOARDED: 'neutral' };
 const KYC_TONE = { VERIFIED: 'confirmed', PENDING: 'pending', UNDER_REVIEW: 'pending', REJECTED: 'cancelled' };
@@ -108,68 +112,23 @@ function AddHospitalModal({ open, onClose, onCreated }) {
   );
 }
 
-function StatusModal({ target, onClose, onDone }) {
-  const [reason, setReason] = useState('');
-  const [saving, setSaving] = useState(false);
-  if (!target) return null;
-  const { hospital, status } = target;
-  const needsReason = status === 'SUSPENDED' || status === 'OFFBOARDED';
 
-  async function submit(e) {
-    e.preventDefault();
-    setSaving(true);
-    try {
-      const res = await api(`/api/admin/hospitals/${hospital.id}/status`, { method: 'PATCH', body: { status, reason } });
-      toast(res.message, 'success');
-      onDone();
-      onClose();
-    } catch (err) {
-      toast(err.message, 'error');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="modal" role="dialog" aria-modal="true">
-      <div className="modal__backdrop" onClick={onClose}></div>
-      <div className="modal__panel modal__panel--sm">
-        <form onSubmit={submit}>
-          <div className="modal__head">
-            <div className={`modal__icon ${status === 'ACTIVE' ? 'tone-green' : 'tone-red'}`}><Icon name={status === 'ACTIVE' ? 'check-circle' : status === 'SUSPENDED' ? 'ban' : 'alert'} /></div>
-            <div><h2>{status === 'ACTIVE' ? 'Activate' : status === 'SUSPENDED' ? 'Suspend' : 'Offboard'} {hospital.name}?</h2>
-              {status === 'SUSPENDED' && <p>New bookings will be hidden. Historical appointments and payments are kept.</p>}
-            </div>
-          </div>
-          <div className="modal__body">
-            {needsReason && (
-              <div className="field">
-                <label>Reason *</label>
-                <textarea className="textarea" value={reason} onChange={(e) => setReason(e.target.value)} required rows={3}
-                  placeholder={status === 'SUSPENDED' ? 'Enter the reason for suspending this hospital…' : 'Enter the reason for offboarding this hospital…'} />
-              </div>
-            )}
-          </div>
-          <div className="modal__foot">
-            <button type="button" className="btn btn--ghost" onClick={onClose}>Cancel</button>
-            <button type="submit" className={`btn ${status === 'ACTIVE' ? 'btn--primary' : 'btn--danger'}${saving ? ' is-loading' : ''}`} disabled={saving}>{status === 'ACTIVE' ? 'Activate Hospital' : status === 'SUSPENDED' ? 'Suspend Hospital' : 'Offboard Hospital'}</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-export default function HospitalsPage() {
+function HospitalsPage() {
+  const can = usePermissions();
+  // Filters can be preset from the URL, e.g. the dashboard's "needs attention" links.
+  const params = useSearchParams();
   const [items, setItems] = useState([]);
   const [summary, setSummary] = useState({});
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
-  const [status, setStatus] = useState('');
-  const [kycStatus, setKycStatus] = useState('');
+  const [status, setStatus] = useState(() => params.get('status') || '');
+  const [kycStatus, setKycStatus] = useState(() => params.get('kycStatus') || '');
   const [showAdd, setShowAdd] = useState(false);
   const [statusTarget, setStatusTarget] = useState(null);
 
+  const [page, setPage] = usePager(JSON.stringify([q, status, kycStatus]));
+  const [pages, setPages] = useState(1);
+  const [total, setTotal] = useState(0);
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -177,15 +136,18 @@ export default function HospitalsPage() {
       if (q) qs.set('q', q);
       if (status) qs.set('status', status);
       if (kycStatus) qs.set('kycStatus', kycStatus);
+      qs.set('pageSize', '25');
+      qs.set('page', String(page));
       const data = await api(`/api/admin/hospitals?${qs}`);
       setItems(data.items);
+      setTotal(data.total); setPages(data.pages || 1);
       setSummary(data.summary);
     } catch (err) {
       toast(err.message, 'error');
     } finally {
       setLoading(false);
     }
-  }, [q, status, kycStatus]);
+  }, [q, status, kycStatus, page]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -209,7 +171,7 @@ export default function HospitalsPage() {
           <p>Every hospital on the Gmedic platform — onboarding, status and KYC.</p>
         </div>
         <div className="page-head__actions">
-          <button type="button" className="btn btn--primary" onClick={() => setShowAdd(true)}><Icon name="plus" />Add Hospital</button>
+          {can('hospitals.manage') && <button type="button" className="btn btn--primary" onClick={() => setShowAdd(true)}><Icon name="plus" />Add Hospital</button>}
         </div>
       </div>
 
@@ -270,7 +232,7 @@ export default function HospitalsPage() {
                       <div className="empty__icon"><Icon name="hospital" /></div>
                       <h3>No hospitals yet</h3>
                       <p>Hospitals you onboard will appear here with their status and KYC.</p>
-                      <button type="button" className="btn btn--primary" style={{ marginTop: 14 }} onClick={() => setShowAdd(true)}><Icon name="plus" />Add Hospital</button>
+                      {can('hospitals.manage') && <button type="button" className="btn btn--primary" style={{ marginTop: 14 }} onClick={() => setShowAdd(true)}><Icon name="plus" />Add Hospital</button>}
                     </div>
                   ) : (
                     <div className="empty">
@@ -292,8 +254,11 @@ export default function HospitalsPage() {
                   <td className="col-actions">
                     <div className="action-group">
                       <Link className="action-btn" href={`/admin/hospitals/${h.id}`}><Icon name="eye" />View</Link>
-                      {h.status !== 'ACTIVE' && <button type="button" className="action-btn" onClick={() => setStatusTarget({ hospital: h, status: 'ACTIVE' })}><Icon name="check" />Activate</button>}
-                      {h.status === 'ACTIVE' && <button type="button" className="action-btn" onClick={() => setStatusTarget({ hospital: h, status: 'SUSPENDED' })}><Icon name="ban" />Suspend</button>}
+                      {can('hospitals.manage') && (h.nextStatuses || []).map((next) => (
+                        <button key={next} type="button" className="action-btn" disabled={next === 'ACTIVE' && h.kycStatus !== 'VERIFIED'} title={next === 'ACTIVE' && h.kycStatus !== 'VERIFIED' ? 'Verify KYC first' : undefined} onClick={() => setStatusTarget({ hospital: h, status: next })}>
+                          <Icon name={next === 'ACTIVE' ? 'check' : next === 'SUSPENDED' ? 'ban' : 'alert'} />{next === 'ACTIVE' ? 'Activate' : next === 'SUSPENDED' ? 'Suspend' : 'Offboard'}
+                        </button>
+                      ))}
                     </div>
                   </td>
                 </tr>
@@ -301,11 +266,16 @@ export default function HospitalsPage() {
             </tbody>
           </table>
         </div>
-        <div className="pager"><span>{items.length} hospital{items.length === 1 ? '' : 's'}</span></div>
+        <Pager total={total} page={page} pages={pages} noun="hospital" onPage={setPage} />
       </article>
 
       <AddHospitalModal open={showAdd} onClose={() => setShowAdd(false)} onCreated={load} />
-      <StatusModal target={statusTarget} onClose={() => setStatusTarget(null)} onDone={load} />
+      <HospitalStatusModal target={statusTarget} onClose={() => setStatusTarget(null)} onDone={load} />
     </>
   );
+}
+
+// useSearchParams needs a Suspense boundary for the production build.
+export default function HospitalsPageRoute() {
+  return <Suspense fallback={null}><HospitalsPage /></Suspense>;
 }

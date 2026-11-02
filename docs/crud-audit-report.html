@@ -1,0 +1,683 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gmedic CRUD Audit</title>
+<style>
+:root {
+  --bg: #f6f7f9; --surface: #ffffff; --surface-2: #f1f3f6; --border: #e3e6eb;
+  --text: #17202b; --muted: #5d6877; --faint: #8a94a3;
+  --teal: #0f766e; --teal-bg: #e6f4f2;
+  --high: #b42318; --high-bg: #fdecea;
+  --med: #a15c07; --med-bg: #fdf3e2;
+  --low: #3b5bab; --low-bg: #eaf0fb;
+  --ok: #157f3d; --ok-bg: #e7f6ec;
+  --na: #5d6877; --na-bg: #eef0f3;
+  --shadow: 0 1px 2px rgba(16,24,40,.05);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1318; --surface: #171c23; --surface-2: #1e252e; --border: #2a323d;
+    --text: #e6eaf0; --muted: #a2acb9; --faint: #7a8594;
+    --teal: #4fc3b6; --teal-bg: #12302d;
+    --high: #f4867b; --high-bg: #3a1a17;
+    --med: #f0b35a; --med-bg: #36280f;
+    --low: #8fb0f5; --low-bg: #1a2742;
+    --ok: #6fd394; --ok-bg: #12301e;
+    --na: #a2acb9; --na-bg: #232a33;
+    --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1318; --surface: #171c23; --surface-2: #1e252e; --border: #2a323d;
+  --text: #e6eaf0; --muted: #a2acb9; --faint: #7a8594;
+  --teal: #4fc3b6; --teal-bg: #12302d;
+  --high: #f4867b; --high-bg: #3a1a17;
+  --med: #f0b35a; --med-bg: #36280f;
+  --low: #8fb0f5; --low-bg: #1a2742;
+  --ok: #6fd394; --ok-bg: #12301e;
+  --na: #a2acb9; --na-bg: #232a33;
+  --shadow: none;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif; }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 32px 16px 64px; }
+h1 { font-size: 28px; line-height: 1.2; margin: 0 0 6px; letter-spacing: -.01em; }
+h2 { font-size: 20px; margin: 40px 0 12px; }
+h3 { font-size: 16px; margin: 0; }
+p { margin: 0 0 10px; }
+.sub { color: var(--muted); margin-bottom: 20px; }
+code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow); }
+
+/* KPI row */
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin: 20px 0 8px; }
+.kpi { padding: 14px 16px; }
+.kpi small { display: block; color: var(--muted); font-size: 12.5px; }
+.kpi strong { font-size: 26px; line-height: 1.2; }
+.kpi .bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; margin-top: 10px; background: var(--surface-2); }
+.kpi .bar span { display: block; height: 100%; }
+@media (max-width: 760px) { .kpis { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+
+/* Legend */
+.legend { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px 24px; padding: 16px; }
+.legend div { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; }
+.legend div > span:first-child { flex: none; }
+@media (max-width: 760px) { .legend { grid-template-columns: 1fr; } }
+
+/* Pills */
+.pill { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 4px; white-space: nowrap; }
+.sev-high { color: var(--high); background: var(--high-bg); }
+.sev-med { color: var(--med); background: var(--med-bg); }
+.sev-low { color: var(--low); background: var(--low-bg); }
+.type { color: var(--muted); background: var(--surface-2); font-weight: 500; }
+
+/* Fix-first */
+.fixlist { list-style: none; margin: 0; padding: 0; }
+.fixlist li { display: grid; grid-template-columns: 28px 1fr auto; gap: 12px; padding: 12px 16px; border-top: 1px solid var(--border); align-items: start; }
+.fixlist li:first-child { border-top: 0; }
+.fixlist .n { color: var(--faint); font-weight: 600; }
+.fixlist .who { color: var(--muted); font-size: 13px; }
+.fixlist a { color: inherit; text-decoration: none; }
+.fixlist a:hover strong { text-decoration: underline; }
+@media (max-width: 600px) { .fixlist li { grid-template-columns: 22px 1fr; } .fixlist li > :last-child { grid-column: 2; } }
+
+/* Controls */
+.controls { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 12px 0; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+.tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 10px; }
+.tab { border: 1px solid var(--border); background: var(--surface); color: var(--text); padding: 7px 14px; border-radius: 6px; font: inherit; font-size: 14px; cursor: pointer; }
+.tab[aria-selected="true"] { border-color: var(--teal); box-shadow: inset 0 -3px 0 var(--teal); font-weight: 600; }
+.tab .c { color: var(--faint); font-weight: 500; margin-left: 4px; }
+.filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.filters select, .filters input { font: inherit; font-size: 14px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px; }
+.filters input { flex: 1 1 220px; min-width: 0; }
+.filters .count { color: var(--muted); font-size: 13px; margin-left: auto; }
+
+/* Module */
+.module { margin-bottom: 16px; overflow: hidden; }
+.module__head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+.module__head .actor { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.module__head .where { color: var(--faint); font-size: 12.5px; }
+.crud { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); border-bottom: 1px solid var(--border); }
+.crud > div { padding: 10px 16px; border-left: 1px solid var(--border); font-size: 13px; }
+.crud > div:first-child { border-left: 0; }
+.crud .op { display: flex; align-items: center; gap: 8px; font-weight: 600; margin-bottom: 2px; }
+.crud .note { color: var(--muted); }
+.st { font-size: 11.5px; font-weight: 600; padding: 1px 7px; border-radius: 4px; }
+.st-ok { color: var(--ok); background: var(--ok-bg); }
+.st-partial { color: var(--med); background: var(--med-bg); }
+.st-api { color: var(--low); background: var(--low-bg); }
+.st-none { color: var(--high); background: var(--high-bg); }
+.st-na { color: var(--na); background: var(--na-bg); }
+@media (max-width: 760px) { .crud { grid-template-columns: repeat(2, minmax(0,1fr)); } .crud > div:nth-child(3) { border-left: 0; } .crud > div:nth-child(n+3) { border-top: 1px solid var(--border); } }
+
+.finding { padding: 14px 16px; border-top: 1px solid var(--border); }
+.finding:first-of-type { border-top: 0; }
+.finding__top { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
+.finding__top .id { color: var(--faint); font-size: 12px; font-family: ui-monospace, Menlo, monospace; }
+.finding h4 { margin: 0 0 6px; font-size: 15px; }
+.finding .row { display: grid; grid-template-columns: 92px 1fr; gap: 10px; font-size: 14px; margin-top: 4px; }
+.finding .row > span:first-child { color: var(--muted); font-size: 12.5px; padding-top: 1px; }
+.finding .ev code { display: inline-block; background: var(--surface-2); border-radius: 4px; padding: 0 5px; margin: 0 4px 3px 0; word-break: break-all; }
+@media (max-width: 600px) { .finding .row { grid-template-columns: 1fr; gap: 2px; } }
+.nofind { padding: 14px 16px; color: var(--muted); font-size: 14px; }
+.empty { padding: 28px 16px; text-align: center; color: var(--muted); }
+:target { scroll-margin-top: 140px; }
+.finding:target { background: var(--teal-bg); }
+
+/* Delete table */
+.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
+.tbl th, .tbl td { text-align: left; padding: 10px 16px; border-top: 1px solid var(--border); vertical-align: top; }
+.tbl th { color: var(--muted); font-weight: 600; font-size: 12.5px; border-top: 0; background: var(--surface-2); }
+.tblwrap { overflow-x: auto; }
+.note-box { padding: 14px 16px; font-size: 14px; color: var(--muted); }
+.note-box strong { color: var(--text); }
+footer { margin-top: 40px; color: var(--faint); font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Gmedic portal — CRUD completeness audit</h1>
+  <p class="sub">Super Admin, Receptionist and Doctor portals · reviewed 11 Oct 2026 · every page, API route, controller and the database schema read and cross-checked</p>
+</header>
+
+<section class="card note-box">
+  <p><strong>What this report answers:</strong> for each screen, can the user Create, View, Edit and Remove what they should be able to? Where something is missing, is it missing only on the screen (the API already exists), missing everywhere, or present but broken? It also flags places where a hard <em>Delete</em> would be the <em>wrong</em> answer and a cancel, deactivate or archive is needed instead.</p>
+  <p style="margin:0"><strong>Headline:</strong> no screen is missing Create or View outright. The real gaps are <strong>Edit</strong> and <strong>Remove/Deactivate</strong> on secondary records, several <strong>buttons that silently fail or do less than they say</strong>, and status changes (cancel, complete) that <strong>don't carry their side effects</strong> such as refunds, queue tokens or notifications.</p>
+</section>
+
+<div class="kpis" id="kpis"></div>
+
+<h2>How to read each finding</h2>
+<div class="card legend">
+  <div><span class="pill sev-high">High</span><span>Loses money, data or patients' trust, or blocks a core job. Fix first.</span></div>
+  <div><span class="pill type">API ready, screen missing</span><span>The backend already supports it; only a button or form is needed. Cheapest wins.</span></div>
+  <div><span class="pill sev-med">Medium</span><span>A real workflow gap staff will hit weekly; there is a workaround.</span></div>
+  <div><span class="pill type">Missing in API &amp; screen</span><span>Needs backend + UI work (sometimes a DB column).</span></div>
+  <div><span class="pill sev-low">Low</span><span>Polish, consistency, or an edge case.</span></div>
+  <div><span class="pill type">Broken / misleading</span><span>A button or label exists but fails, does nothing, or shows wrong data.</span></div>
+  <div><span></span><span></span></div>
+  <div><span class="pill type">Risky design</span><span>Works, but has no guard, no confirmation, or can't be undone.</span></div>
+</div>
+<p class="sub" style="margin-top:10px">CRUD cells: <span class="st st-ok">Done</span> screen + API · <span class="st st-partial">Partial</span> some fields/cases only · <span class="st st-api">API only</span> no screen · <span class="st st-none">Missing</span> nowhere · <span class="st st-na">Not needed</span> correct by design.</p>
+
+<h2>Fix these first</h2>
+<div class="card"><ol class="fixlist" id="fixfirst"></ol></div>
+
+<h2>All findings by portal</h2>
+<div class="controls">
+  <div class="tabs" role="tablist" id="tabs"></div>
+  <div class="filters">
+    <select id="fSev" aria-label="Severity"><option value="">All severities</option><option value="high">High</option><option value="med">Medium</option><option value="low">Low</option></select>
+    <select id="fType" aria-label="Type"><option value="">All types</option><option value="ui">API ready, screen missing</option><option value="api">Missing in API &amp; screen</option><option value="broken">Broken / misleading</option><option value="risk">Risky design</option></select>
+    <input id="fq" type="search" placeholder="Search findings, e.g. delete, refund, token…" aria-label="Search">
+    <span class="count" id="count"></span>
+  </div>
+</div>
+<div id="modules"></div>
+
+<h2>Delete: where it belongs and where it doesn't</h2>
+<div class="card tblwrap">
+<table class="tbl">
+  <thead><tr><th>Record</th><th>Right "remove" action</th><th>Why not a hard delete</th><th>Status today</th></tr></thead>
+  <tbody id="deltbl"></tbody>
+</table>
+</div>
+
+<h2>Notes on the codebase</h2>
+<div class="card note-box">
+  <p><strong>Database:</strong> the app runs on SQLite via <code>node:sqlite</code> (<code>db/index.js</code>), not MySQL. <code>database/schema.sql</code> is stale — it predates migration 014 (still has the old per-hospital token index and <code>uq_schedule_slot</code>), so a DB built from it would differ from one built by <code>npm run db:setup</code>.</p>
+  <p><strong>Wiring script:</strong> <code>scripts/check-api-wiring.py</code> reports the Doctor dashboard, analytics and earnings APIs as unwired, but they are called from <code>components/doctor/DashboardView.js</code> and <code>app/doctor/earnings/page.js</code> (template-string URLs the regex misses). The Admin QR PNG/poster downloads are also wired. The only genuinely unused route is <code>PATCH /api/doctor/schedule/[id]</code>.</p>
+  <p style="margin:0"><strong>Permissions:</strong> FINANCE, SUPPORT and OPERATIONS roles are defined in <code>config/permissions.js</code>, but no screen or API can create a user with those roles (see X1).</p>
+</div>
+
+<footer>Generated from a read-only code review of <code>gmedic/</code>. No files other than this report were changed. File references are relative to the <code>gmedic/</code> folder.</footer>
+</div>
+
+<script>
+const TYPE_LABEL = { ui: 'API ready, screen missing', api: 'Missing in API & screen', broken: 'Broken / misleading', risk: 'Risky design' };
+const SEV_LABEL = { high: 'High', med: 'Medium', low: 'Low' };
+const ST_LABEL = { ok: 'Done', partial: 'Partial', api: 'API only', none: 'Missing', na: 'Not needed' };
+const ACTORS = { all: 'All portals', cross: 'Platform-wide', admin: 'Super Admin', reception: 'Receptionist', doctor: 'Doctor' };
+
+const MODULES = [
+/* ============================== PLATFORM-WIDE ============================== */
+{ actor: 'cross', name: 'Accounts & access', where: 'config/permissions.js · components/admin/Topbar.js', findings: [
+  { id: 'X1', sev: 'high', type: 'api', title: 'No way to create or manage Finance / Support / Operations admins, or doctor logins',
+    what: 'The roles exist in the permission map and database, but no screen or API creates, edits, resets or deactivates these accounts. Doctor login accounts are only created by a legacy import script, so a doctor added through the portal can never sign in.',
+    ev: ['config/permissions.js:42-75', 'db/importLegacy.js:149-166'],
+    fix: 'Add an "Admin team" module (invite, change role, deactivate, reset password) and an "Invite doctor to portal" action. Use deactivate, never delete.' },
+  { id: 'X2', sev: 'high', type: 'broken', title: 'Admin "My profile" and "Change password" lead nowhere',
+    what: 'Both menu items in the admin top bar open Platform Settings, which has neither a profile section nor a password form. There is no admin password-change API either, so admins cannot rotate their own password.',
+    ev: ['components/admin/Topbar.js:31-32', 'app/admin/settings/page.js'],
+    fix: 'Add an admin profile/password page backed by an admin-scoped password endpoint (the receptionist one is scope-locked).' },
+  { id: 'X3', sev: 'med', type: 'broken', title: 'Duplicate values crash with a generic "Something went wrong"',
+    what: 'A duplicate email, phone, GSTIN or registration number hits a database unique rule and comes back as a 500 instead of a field error, so the user does not know what to fix.',
+    ev: ['lib/adaptExpress.js (catch block)'],
+    fix: 'Map "UNIQUE constraint failed: table.column" to a 409 with a per-field message.' },
+  { id: 'X4', sev: 'med', type: 'risk', title: 'Queue token and appointment status never stay in sync',
+    what: 'Completing a consultation in the queue leaves the appointment "confirmed"; completing or cancelling the appointment leaves its token open. The doctor\'s "Completed today" count never moves, and a cancelled patient can still be called.',
+    ev: ['controllers/doctor/queueController.js:51-56', 'models/tokenModel.js', 'models/appointmentModel.js:93-97'],
+    fix: 'Update token and appointment together in one transaction, in both directions, for all three portals.' },
+  { id: 'X5', sev: 'med', type: 'broken', title: 'Every new booking shows up twice in notifications',
+    what: 'Receptionist and doctor bells build a "booking" item from the appointments table and also receive a stored NEW_APPOINTMENT notification. The generated items\' read state lives in the login session, so they come back unread after each login.',
+    ev: ['controllers/notificationController.js:5-29', 'controllers/doctor/notificationsController.js:13-46', 'services/appointmentEvents.js:13'],
+    fix: 'Drop the generated feed and use the notifications table only; add per-item mark-read.' },
+]},
+
+/* ============================== SUPER ADMIN ============================== */
+{ actor: 'admin', name: 'Lists, filters & dashboard', where: 'app/admin/*', findings: [
+  { id: 'A1', sev: 'med', type: 'ui', title: 'Most admin lists only ever show page 1',
+    what: 'The pager prints the total but has no Next/Previous. Affected: Hospitals (15 rows), Payments, Refunds, Disputes, Settlements (25), Support (50), Audit logs (30), Doctors and Receptionists (100). Everything beyond is unreachable. The APIs already return page counts.',
+    ev: ['app/admin/hospitals/page.js:180,304', 'app/admin/audit-logs/page.js:80,142'],
+    fix: 'Reuse the working pager from the Appointments page (app/admin/appointments/page.js:171-177).' },
+  { id: 'A2', sev: 'low', type: 'broken', title: 'Dashboard "needs attention" links don\'t filter the target list',
+    what: 'Links such as ?status=SUSPENDED or /admin/refunds?status=PENDING open the right page but the page ignores the query, so the admin sees everything.',
+    ev: ['app/admin/dashboard/page.js:31-36'],
+    fix: 'Initialise each list\'s filters from useSearchParams().' },
+  { id: 'A3', sev: 'low', type: 'risk', title: 'Action buttons ignore the user\'s role',
+    what: 'The sidebar hides pages by permission, but buttons inside pages do not. A Support user sees "Decide" on Disputes and gets a 403 on click. Operations can manage feature flags but can\'t open the Settings page that holds them.',
+    ev: ['components/admin/Sidebar.js', 'app/admin/disputes/page.js'],
+    fix: 'Hide or disable actions using the permissions already sent to the page.' },
+]},
+{ actor: 'admin', name: 'Hospitals', where: 'app/admin/hospitals/* · controllers/admin/hospitalsController.js',
+  crud: { C: ['ok', 'Basics only; KYC added later'], R: ['ok', 'List + detail (list capped, A1)'], U: ['partial', 'Name not editable on screen; blanks can\'t be cleared'], D: ['partial', 'Suspend works; Offboard is API-only'] },
+  findings: [
+  { id: 'H1', sev: 'high', type: 'broken', title: 'Saving KYC details with a blank GSTIN breaks the next hospital',
+    what: 'The KYC form always sends gstin:"" and registrationNumber:"". The update stores the empty string (it isn\'t null), and both columns are unique, so the second hospital saved this way fails with a 500. The same path lets an admin wipe a verified GSTIN.',
+    ev: ['app/admin/hospitals/[id]/page.js:111', 'controllers/admin/hospitalsController.js:123-128', 'database/schema.sql:37-38'],
+    fix: 'Convert "" to NULL before saving; only allow clearing as an explicit action.' },
+  { id: 'H2', sev: 'high', type: 'api', title: 'Hospital booking policies can\'t be edited anywhere',
+    what: 'Each hospital\'s cancellation window, refund % and booking window (hospital_policies) drive the patient app\'s cancel/refund rules, but no screen or API can change them. They are only set by seed scripts.',
+    ev: ['services/patient/common.js:121-122', 'database/schema.sql:77-84', 'db/seedPatientDemo.js:32'],
+    fix: 'Add a "Booking policy" card on the hospital detail page with GET/PUT /api/admin/hospitals/[id]/policy.' },
+  { id: 'H3', sev: 'high', type: 'risk', title: 'GSTIN and registration number stay editable after KYC is verified',
+    what: 'Changing them doesn\'t send the hospital back for review. Doctors already get this treatment when their registration number changes.',
+    ev: ['controllers/admin/hospitalsController.js:118-128', 'controllers/admin/doctorsController.js:45-56'],
+    fix: 'Lock them once VERIFIED, or move KYC back to UNDER_REVIEW on change.' },
+  { id: 'H4', sev: 'med', type: 'risk', title: 'KYC can be marked Verified with no verified documents',
+    what: 'Any KYC status can be set from any other, with no confirmation. The rejection reason is required on screen but only kept in the audit log.',
+    ev: ['controllers/admin/hospitalsController.js:242-250', 'app/admin/hospitals/[id]/page.js:315-317'],
+    fix: 'Require all required documents verified before VERIFIED; store the reason; add a confirm step.' },
+  { id: 'H5', sev: 'med', type: 'risk', title: 'Hospital status changes skip checks',
+    what: 'A hospital can be activated while KYC is pending, and an offboarded hospital can be switched straight back to Active.',
+    ev: ['controllers/admin/hospitalsController.js:137-147', 'app/admin/hospitals/page.js:295'],
+    fix: 'Add an allowed-transitions table and require verified KYC for ACTIVE.' },
+  { id: 'H6', sev: 'med', type: 'ui', title: 'Offboard a hospital: API ready, no button',
+    what: 'The status modal supports OFFBOARDED but nothing opens it with that option, and the detail page has no status controls.',
+    ev: ['app/admin/hospitals/page.js:116,295-296'],
+    fix: 'Add "Offboard" (with confirm + reason) to the list row menu and the detail page.' },
+  { id: 'H7', sev: 'med', type: 'risk', title: 'Suspending a hospital doesn\'t lock its staff or QR codes',
+    what: 'Bookings are blocked correctly, but receptionists and doctors can still sign in and the hospital\'s QR codes stay active.',
+    ev: ['controllers/authController.js', 'controllers/admin/qrController.js'],
+    fix: 'On offboard, deactivate staff logins and revoke QR codes (or ask the admin to confirm doing so).' },
+  { id: 'H8', sev: 'med', type: 'risk', title: 'Fee and commission changes have no confirmation, and Finance can\'t make them',
+    what: 'Operations (hospitals.manage) can change commission rates in one click; the Finance role cannot.',
+    ev: ['app/api/admin/hospitals/[id]/fees/route.js', 'config/permissions.js:62-71'],
+    fix: 'Add a fees.manage permission for Finance, an effective-from date and a confirm step.' },
+  { id: 'H9', sev: 'low', type: 'ui', title: 'Hospital name can\'t be edited on screen',
+    what: 'The API accepts a new name but the detail form has no field for it. Optional fields can\'t be cleared once set.',
+    ev: ['app/admin/hospitals/[id]/page.js:167,234'],
+    fix: 'Add the name field; send explicit nulls for cleared optional fields.' },
+]},
+{ actor: 'admin', name: 'Hospital branches', where: 'app/admin/hospitals/[id]/page.js · /api/admin/branches/[id]',
+  crud: { C: ['ok', ''], R: ['ok', ''], U: ['none', 'Only status can change'], D: ['ok', 'Deactivate (correct model)'] },
+  findings: [
+  { id: 'B1', sev: 'med', type: 'api', title: 'Branch name, address and phone can\'t be edited',
+    what: 'PATCH only changes status. A typo means deactivating and re-creating the branch. The add form keeps a contact person in state but has no input for it.',
+    ev: ['controllers/admin/hospitalsController.js:274-282', 'app/admin/hospitals/[id]/page.js:44,335-337'],
+    fix: 'Extend PATCH /api/admin/branches/[id] to accept details, and add an Edit modal.' },
+  { id: 'B2', sev: 'med', type: 'risk', title: 'Branches aren\'t used anywhere, so deactivating one does nothing',
+    what: 'No doctor or QR code can be assigned to a branch, and booking never checks branch status. Deactivate also has no confirmation.',
+    ev: ['controllers/admin/qrController.js:46-57'],
+    fix: 'Add branch pickers to doctors and QR codes, and block bookings at inactive branches.' },
+]},
+{ actor: 'admin', name: 'KYC documents', where: 'app/admin/hospitals/[id]/page.js · /api/admin/hospitals/[id]/documents',
+  crud: { C: ['ok', 'Upload'], R: ['ok', ''], U: ['partial', 'Verify / Reject only while pending'], D: ['none', 'No withdraw'] },
+  findings: [
+  { id: 'K1', sev: 'med', type: 'api', title: 'A document uploaded by mistake can\'t be removed',
+    what: 'Every upload moves the hospital to UNDER_REVIEW, and a wrong file stays forever. A reviewed document also can\'t be re-reviewed.',
+    ev: ['controllers/admin/hospitalsController.js:193-218'],
+    fix: 'Add a soft "Withdraw / Superseded" status that keeps the file for audit. Don\'t hard-delete.' },
+  { id: 'K2', sev: 'low', type: 'broken', title: 'Reject uses a browser prompt and the reason is never shown',
+    what: 'The API returns rejectionReason but the page never displays it.',
+    ev: ['app/admin/hospitals/[id]/page.js:143,291-305'],
+    fix: 'Use the standard modal and show the reason on the document row.' },
+]},
+{ actor: 'admin', name: 'Doctors (admin)', where: 'app/admin/doctors/page.js · controllers/admin/doctorsController.js',
+  crud: { C: ['na', 'Hospitals add doctors'], R: ['partial', 'List only; no detail view'], U: ['partial', 'Fee, specialty, dept, qualifications, reg. no.'], D: ['none', 'No deactivate; only "Reject"'] },
+  findings: [
+  { id: 'AD1', sev: 'high', type: 'broken', title: 'Editing a second doctor without a registration number fails',
+    what: 'The Edit modal always sends registrationNumber:"". It\'s stored as "" and the column is unique, so once one doctor has "", editing any other (even just the fee) fails with a 500.',
+    ev: ['app/admin/doctors/page.js:28', 'controllers/admin/doctorsController.js:37-40', 'database/schema.sql:223'],
+    fix: 'Convert "" to NULL before saving.' },
+  { id: 'AD2', sev: 'med', type: 'api', title: 'No way to deactivate a doctor; no department management',
+    what: 'The doctors table has no status column, so "Reject verification" is the only way to hide one. Department is free text that creates a platform-wide department, may pick another hospital\'s department with the same name, and doesn\'t appear in the patient app (which lists per-hospital departments).',
+    ev: ['controllers/admin/doctorsController.js:30-36', 'services/patient/catalog.js:122'],
+    fix: 'Add doctors.status (Active/Inactive) with an upcoming-appointments warning, and a per-hospital Departments screen (create, rename, archive).' },
+  { id: 'AD3', sev: 'low', type: 'api', title: 'Admin can\'t edit a doctor\'s name, branch, photo or bio',
+    what: 'Fields also can\'t be cleared, because the update keeps old values for blanks.',
+    ev: ['controllers/admin/doctorsController.js:37-40'],
+    fix: 'Extend the admin edit to these fields.' },
+]},
+{ actor: 'admin', name: 'Receptionists', where: 'app/admin/receptionists/page.js · controllers/admin/receptionistsController.js',
+  crud: { C: ['ok', ''], R: ['ok', 'No hospital filter on screen'], U: ['none', 'No edit at all'], D: ['ok', 'Deactivate / Activate with confirm'] },
+  findings: [
+  { id: 'R1', sev: 'med', type: 'api', title: 'A receptionist\'s name, email, phone or hospital can\'t be changed',
+    what: 'A typo or transfer means creating a new account.',
+    ev: ['app/api/admin/receptionists/route.js (GET/POST only)'],
+    fix: 'Add PUT /api/admin/receptionists/[id]; end their sessions if the hospital changes.' },
+  { id: 'R2', sev: 'med', type: 'ui', title: '"Reset password" fires instantly, with no confirmation',
+    what: 'One click invalidates the current password and signs the person out everywhere.',
+    ev: ['app/admin/receptionists/page.js:172-180,227'],
+    fix: 'Add a confirm dialog.' },
+  { id: 'R3', sev: 'med', type: 'risk', title: 'Temporary passwords are guessable',
+    what: 'They are "Gmedic@" plus 4 random digits from Math.random — about 9,000 possibilities.',
+    ev: ['controllers/admin/receptionistsController.js:43,66'],
+    fix: 'Generate with crypto.randomBytes and force a change on first login.' },
+  { id: 'R4', sev: 'low', type: 'broken', title: 'Credentials modal shows different "Username" after create vs. reset', what: 'After reset it shows the email; after create the slug. Both work, but it confuses staff.', ev: ['app/admin/receptionists/page.js:50,176'], fix: 'Show the same login identifier in both.' },
+]},
+{ actor: 'admin', name: 'QR codes', where: 'app/admin/qr/page.js · controllers/admin/qrController.js',
+  crud: { C: ['ok', ''], R: ['ok', 'Plus analytics and downloads'], U: ['none', 'Label / branch not editable'], D: ['ok', 'Revoke + reissue, with confirm (correct)'] },
+  findings: [
+  { id: 'Q1', sev: 'low', type: 'risk', title: 'Revoke and reissue don\'t check the current status', what: 'An already-revoked code can be revoked again (overwriting the reason) or reissued. Reissue does two writes outside a transaction.', ev: ['controllers/admin/qrController.js:62-81'], fix: 'Add WHERE status = \'ACTIVE\' and wrap in a transaction.' },
+  { id: 'Q2', sev: 'low', type: 'api', title: 'No branch selection; desk label can\'t be edited', what: 'QR codes can\'t be tied to a branch even though scans record a branch.', ev: ['controllers/admin/qrController.js:46-57'], fix: 'Add branch and label to create, and a small edit action.' },
+  { id: 'Q3', sev: 'low', type: 'risk', title: 'QR codes can be created for suspended or offboarded hospitals', what: 'Hospital dropdowns across admin pages are capped at 100 and include inactive hospitals; create doesn\'t check status (same for receptionists).', ev: ['controllers/admin/qrController.js:52', 'controllers/admin/receptionistsController.js:40'], fix: 'Reject creates for inactive hospitals; use a lightweight hospital-options endpoint.' },
+]},
+{ actor: 'admin', name: 'Appointments & patients (admin)', where: 'app/admin/appointments · app/admin/patients',
+  crud: { C: ['na', 'By design'], R: ['ok', 'Search, filters, detail'], U: ['na', 'View-only by policy'], D: ['na', 'Never'] },
+  findings: [
+  { id: 'AP1', sev: 'med', type: 'api', title: 'No escalation path for stuck appointments',
+    what: 'View-only is deliberate, but when a hospital is offboarded or a doctor is rejected, a paid appointment has no owner who can cancel and refund it. The detail view also omits the status history.',
+    ev: ['config/permissions.js:8-9', 'app/admin/appointments/page.js:32'],
+    fix: 'Add a narrowly-permissioned "Cancel + refund" with a mandatory reason; show status history.' },
+  { id: 'PT1', sev: 'med', type: 'api', title: 'A patient account can\'t be blocked',
+    what: 'users.status, consent records and dependants exist, but admin has no Block/Unblock, consent view, family list or data-erasure handling.',
+    ev: ['controllers/admin/patientsController.js', 'database/schema.sql (users, consent_records)'],
+    fix: 'Add Block/Unblock (status + end sessions) and a read-only consent tab. For erasure, anonymise; don\'t hard-delete.' },
+  { id: 'PT2', sev: 'low', type: 'broken', title: 'Patient "Linked hospitals" includes removed links; search silently caps at 10', what: '', ev: ['controllers/admin/patientsController.js:26,42'], fix: 'Filter removed_at IS NULL; paginate search.' },
+]},
+{ actor: 'admin', name: 'Payments, refunds & disputes', where: 'app/admin/{payments,refunds,disputes}',
+  crud: { C: ['partial', 'Refunds: requested by hospitals only; disputes: nothing creates them'], R: ['ok', ''], U: ['ok', 'Refund decision, dispute resolve'], D: ['na', 'Financial records — never'] },
+  findings: [
+  { id: 'F1', sev: 'high', type: 'api', title: 'Nothing in the system ever creates a dispute',
+    what: 'There is no webhook handler for chargebacks, no admin "raise dispute" and no patient flow. The Disputes screen can only work on rows inserted by hand.',
+    ev: ['controllers/admin/disputesController.js (no INSERT anywhere in the codebase)'],
+    fix: 'Ingest gateway chargeback webhooks, or add "Raise dispute" on a payment.' },
+  { id: 'F2', sev: 'high', type: 'risk', title: 'Resolving a dispute has no money effect',
+    what: 'Marking it resolved only changes its status. No refund is created and no settlement adjustment is written — the settlement_adjustments table is never used.',
+    ev: ['controllers/admin/disputesController.js:35-44', 'database/schema.sql:766-779'],
+    fix: 'On a patient-favour outcome, create a refund and/or a settlement adjustment.' },
+  { id: 'F3', sev: 'high', type: 'risk', title: 'Refund "maker-checker" can always be satisfied by one admin',
+    what: 'The check is "requester ≠ approver". Requests come from receptionists, so any single admin can approve a refund above the threshold. The screen claims a second admin\'s sign-off is needed.',
+    ev: ['controllers/admin/refundsController.js:82-85', 'app/admin/refunds/page.js:100'],
+    fix: 'Above the threshold, require two different admin approvals.' },
+  { id: 'F4', sev: 'med', type: 'broken', title: 'Two admins can approve the same refund at once',
+    what: 'The approval update has no "WHERE status = PENDING" guard, and approval marks the refund completed instantly (simulated gateway).',
+    ev: ['controllers/admin/refundsController.js:87-91'],
+    fix: 'Make the update conditional on PENDING and check affected rows.' },
+  { id: 'F5', sev: 'med', type: 'risk', title: 'Refund rejection doesn\'t require a reason', what: 'The hospital is told "rejected" with no explanation; the decision note is never shown in the list either.', ev: ['controllers/admin/refundsController.js:80', 'app/admin/refunds/page.js:57-58'], fix: 'Require a note for rejection and display it.' },
+  { id: 'F6', sev: 'med', type: 'api', title: 'Admin can\'t raise a refund', what: 'Needed to settle disputes or clean up an offboarded hospital. No search or hospital filter on the refunds list.', ev: ['app/api/admin/refunds/route.js (GET only)'], fix: 'Add an admin "Issue refund" on a payment, with reason.' },
+  { id: 'F7', sev: 'med', type: 'ui', title: 'Closed disputes can\'t be opened', what: 'The detail modal (resolution, internal notes) only opens while a dispute is open. No search or hospital filter.', ev: ['app/admin/disputes/page.js:167'], fix: 'Allow opening any dispute read-only.' },
+  { id: 'F8', sev: 'med', type: 'broken', title: '"Retry sync" on webhooks doesn\'t retry anything', what: 'It only sets sync_status = SYNCED. With no gateway it says it\'s simulated, but with a live gateway it would claim success without reprocessing.', ev: ['controllers/admin/paymentsController.js:40-47'], fix: 'Actually re-fetch/re-apply the event before marking synced.' },
+  { id: 'F9', sev: 'low', type: 'ui', title: 'Payments: no detail view, no hospital/doctor filter, no "Pending" filter', what: 'The API supports hospital and doctor filters. The date filter uses appointment date, not paid date. A banner says sample webhooks "should be removed" but there is no way to hide them.', ev: ['app/admin/payments/page.js:43', 'models/paymentModel.js:35-36'], fix: 'Add the filters and an is_sample toggle. Don\'t add delete for webhook rows.' },
+]},
+{ actor: 'admin', name: 'Settlements', where: 'app/admin/settlements/page.js · services/settlementService.js',
+  crud: { C: ['ok', 'Custom period + weekly auto'], R: ['partial', 'List only; no line items'], U: ['partial', 'Mark paid only'], D: ['none', 'No void / hold'] },
+  findings: [
+  { id: 'S1', sev: 'high', type: 'broken', title: 'Some payments can never be settled',
+    what: 'If a custom settlement covers part of a week, the weekly auto-generator skips that whole week. Money from the other days of the week is never paid out.',
+    ev: ['services/settlementService.js:90-92'],
+    fix: 'Settle only the uncovered days, or only allow week-aligned custom periods.' },
+  { id: 'S2', sev: 'high', type: 'risk', title: 'Commission uses today\'s rate, not the rate during the period',
+    what: 'If a hospital\'s rate changes before an old week is settled, that week is charged at the new rate.',
+    ev: ['services/settlementService.js:38,48'],
+    fix: 'Look up the rate in force for the period from hospital_rate_history.' },
+  { id: 'S3', sev: 'med', type: 'api', title: 'A settlement created by mistake can\'t be voided or held',
+    what: 'ON_HOLD and PROCESSING statuses exist but nothing sets them. Line items are stored but not viewable.',
+    ev: ['controllers/admin/settlementsController.js'],
+    fix: 'Add Void (with reason; releases its items), Hold/Release and a detail view. Never hard-delete; paid ones are frozen by trigger.' },
+  { id: 'S4', sev: 'med', type: 'broken', title: 'Overlapping custom period fails with a 500', what: 'Only exact duplicates are pre-checked; the DB trigger aborts the rest with a generic error.', ev: ['controllers/admin/settlementsController.js:46'], fix: 'Pre-check overlap and return a clear message.' },
+  { id: 'S5', sev: 'med', type: 'risk', title: 'Opening the settlements list creates settlements', what: 'GET runs the auto-generator, so a view-only user writes financial records just by visiting.', ev: ['controllers/admin/settlementsController.js:21'], fix: 'Move generation to a scheduled job.' },
+]},
+{ actor: 'admin', name: 'Support (admin)', where: 'app/admin/support/page.js',
+  crud: { C: ['na', 'Users raise tickets'], R: ['ok', ''], U: ['ok', 'Reply, assign, priority, status'], D: ['na', 'Messages are append-only'] },
+  findings: [
+  { id: 'SP1', sev: 'med', type: 'api', title: 'No internal (staff-only) notes on tickets', what: 'internal_notes already supports TICKET and is used for disputes.', ev: ['controllers/admin/disputesController.js:50-59'], fix: 'Reuse the dispute notes endpoint pattern for tickets.' },
+  { id: 'SP2', sev: 'low', type: 'risk', title: 'Close Ticket is final with no confirmation; closed tickets can still be reassigned', what: '', ev: ['controllers/admin/supportController.js:79-90', 'app/admin/support/page.js:102'], fix: 'Confirm close; block assign on closed.' },
+]},
+{ actor: 'admin', name: 'Communications', where: 'components/admin/CommunicationsView.js',
+  crud: { C: ['ok', 'Templates, announcements, banners'], R: ['ok', ''], U: ['partial', 'Templates & banners only — announcements can\'t be edited'], D: ['partial', 'Archive / disable; no banner archive'] },
+  findings: [
+  { id: 'CM1', sev: 'med', type: 'api', title: 'Announcements can\'t be edited — not even drafts', what: 'A typo in a draft means archiving it and starting again. Drafts can\'t be discarded either.', ev: ['app/api/admin/communications/announcements/*'], fix: 'Add PATCH for drafts and a "Discard draft" (hard delete is fine for never-published drafts).' },
+  { id: 'CM2', sev: 'med', type: 'ui', title: 'Publish sends to every portal with one click', what: 'No confirmation on publish; archive is permanent.', ev: ['components/admin/CommunicationsView.js:275-276'], fix: 'Confirm with an audience summary before publishing.' },
+  { id: 'CM3', sev: 'med', type: 'risk', title: 'Banner links accept "//other-site.com"', what: 'Protocol-relative and plain http:// links pass validation, enabling an off-site redirect from the patient app.', ev: ['controllers/admin/communicationsController.js:157'], fix: 'Allow only https:// or in-app paths.' },
+  { id: 'CM4', sev: 'low', type: 'api', title: 'Banners can\'t be archived or scheduled', what: 'Inactive banners pile up; start is always "now" and the end date is never set or enforced.', ev: ['controllers/admin/communicationsController.js'], fix: 'Add archive and start/end dates.' },
+  { id: 'CM5', sev: 'low', type: 'api', title: '"Selected hospitals" announcement targeting isn\'t used', what: 'The schema supports it, but create always writes ALL.', ev: ['controllers/admin/communicationsController.js:125'], fix: 'Add a hospital picker.' },
+  { id: 'CM6', sev: 'low', type: 'ui', title: 'Disabling a template has no confirmation', what: 'Disabling a critical event (e.g. booking confirmation) silently stops those messages.', ev: ['components/admin/CommunicationsView.js:179-186'], fix: 'Confirm, and warn for critical events.' },
+]},
+{ actor: 'admin', name: 'Settings, flags & app versions', where: 'app/admin/settings/page.js · controllers/admin/settingsController.js',
+  crud: { C: ['none', 'Flags can\'t be added'], R: ['ok', ''], U: ['ok', 'But see findings'], D: ['na', ''] },
+  findings: [
+  { id: 'SE1', sev: 'high', type: 'broken', title: 'Three of the five general settings do nothing',
+    what: 'Booking window, cancellation cutoff and no-show grace are saved but never read. Booking actually uses the per-hospital policy table, which has no screen (H2).',
+    ev: ['app/admin/settings/page.js:22-25', 'services/patient/common.js:121-126'],
+    fix: 'Wire them in as platform defaults, or remove them and point admins to the hospital policy card.' },
+  { id: 'SE2', sev: 'high', type: 'broken', title: 'Feature flags are never checked by the app', what: 'Toggling a flag has no effect anywhere; there is also no per-hospital override.', ev: ['controllers/admin/settingsController.js (only reader)'], fix: 'Add an isEnabled(flag, hospitalId) helper and use it, or hide the screen until it is.' },
+  { id: 'SE3', sev: 'high', type: 'risk', title: 'Settings accept any key and any value', what: 'No allow-list or range checks; an empty box saves 0 (e.g. a 0-minute slot hold).', ev: ['controllers/admin/settingsController.js:12-23', 'app/admin/settings/page.js:53'], fix: 'Validate against a known key list with min/max.' },
+  { id: 'SE4', sev: 'med', type: 'risk', title: 'App versions: no format check and partial saves reset fields', what: 'Min version can exceed latest; saving one field resets force_update and the message. No endpoint serves these to the apps.', ev: ['controllers/admin/settingsController.js:57-61'], fix: 'Validate semver, merge partial updates, expose a public version endpoint.' },
+]},
+{ actor: 'admin', name: 'Audit logs', where: 'app/admin/audit-logs/page.js',
+  crud: { C: ['na', 'System-written'], R: ['partial', 'Newest 30 only'], U: ['na', ''], D: ['na', 'Append-only — correct'] },
+  findings: [
+  { id: 'AU1', sev: 'med', type: 'ui', title: 'Only the newest 30 audit entries can ever be seen', what: 'No pager, no entity or user filter on screen (the API supports both), no export.', ev: ['app/admin/audit-logs/page.js:80,142'], fix: 'Add paging, filters and CSV export.' },
+]},
+
+/* ============================== RECEPTIONIST ============================== */
+{ actor: 'reception', name: 'Appointments', where: 'app/(receptionist)/appointments · public/js/appointment-modal.js · controllers/appointmentController.js',
+  crud: { C: ['ok', 'Walk-in / phone booking'], R: ['ok', 'Detail misses mobile, reason, payment'], U: ['partial', 'Status dropdown only — no reschedule or edit'], D: ['partial', 'Cancel via dropdown, without side effects'] },
+  findings: [
+  { id: 'RA1', sev: 'high', type: 'broken', title: 'Cancelling an appointment only changes its label',
+    what: 'No refund is created, the queue token stays live (the doctor can still call the patient), the patient isn\'t notified, no reason is stored and nothing is audited. The patient-app cancel does all of these.',
+    ev: ['models/appointmentModel.js:93-97', 'controllers/appointmentController.js:48-55', 'services/patient/booking.js:271-295'],
+    fix: 'Add POST /api/appointments/[id]/cancel {reason} reusing the patient cancel logic; confirm dialog; remove "Cancelled" from the generic dropdown.' },
+  { id: 'RA2', sev: 'high', type: 'risk', title: 'Any status can be changed to any other',
+    what: 'Completed can go back to pending, future appointments can be marked completed, and un-cancelling can crash on the seat rule or overbook a slot.',
+    ev: ['controllers/appointmentController.js:48-55'],
+    fix: 'Add an allowed-transitions map (like tokenModel.js:15-22) and a time-limited "undo cancel" that re-checks seat availability.' },
+  { id: 'RA3', sev: 'high', type: 'api', title: 'Reception can\'t reschedule an appointment',
+    what: 'The database already has reschedule columns and a capacity check, and the booking core supports moving a seat. Staff must cancel and re-book, losing payment linkage.',
+    ev: ['services/bookingCore.js:99', 'database/schema.sql (rescheduled_from_*)'],
+    fix: 'Add POST /api/appointments/[id]/reschedule {date,time} using bookingCore.takeSeat and fire APPOINTMENT_RESCHEDULED.' },
+  { id: 'RA4', sev: 'high', type: 'risk', title: 'Booking with an existing mobile silently uses the old patient\'s name',
+    what: 'The typed name is discarded and the existing patient is reused. A second family member sharing that phone then can\'t be booked with the same doctor that day.',
+    ev: ['services/receptionBooking.js:97-99,122-126'],
+    fix: 'Look up the mobile first, show the matching patient(s), and let staff pick one or add a dependant.' },
+  { id: 'RA5', sev: 'med', type: 'api', title: 'No "No-show" action', what: 'appointments.no_show exists and the patient app reads it, but nothing sets it. A no-show grace setting exists but is unused.', ev: ['database/schema.sql:411', 'services/patient/booking.js:39'], fix: 'Add a same-day reversible No-show that also skips the token.' },
+  { id: 'RA6', sev: 'med', type: 'broken', title: 'Appointment details never show payment — paid ones say "Awaiting payment"', what: 'The modal reads a.payment but the API never returns a payment object.', ev: ['public/js/appointment-modal.js:14,38', 'models/appointmentModel.js:22-48'], fix: 'Return method, transaction ID and paid time from findById.' },
+  { id: 'RA7', sev: 'med', type: 'api', title: 'A misspelt walk-in name can\'t be corrected', what: 'No patient or appointment edit endpoint exists. Patient mobile is returned but not shown.', ev: ['app/api/appointments/[id]/route.js (GET only)'], fix: 'Add PATCH for reason-for-visit and a scoped patient edit (name, gender, DOB).' },
+  { id: 'RA8', sev: 'low', type: 'risk', title: 'Who booked is never recorded; phone vs walk-in not distinguished', what: 'booked_by_user_id is never set.', ev: ['services/receptionBooking.js:137'], fix: 'Record the receptionist and the channel.' },
+  { id: 'RA9', sev: 'low', type: 'risk', title: 'List loads every appointment then slices in memory', what: 'Will slow down as data grows.', ev: ['controllers/appointmentController.js:33-39'], fix: 'Use SQL LIMIT/OFFSET.' },
+]},
+{ actor: 'reception', name: 'Payments & refunds', where: 'app/(receptionist)/payments · public/js/pages/payments.js',
+  crud: { C: ['partial', 'Refund request only — can\'t record cash'], R: ['ok', ''], U: ['na', 'Payments must not be edited'], D: ['na', 'Never'] },
+  findings: [
+  { id: 'RP1', sev: 'high', type: 'api', title: 'Walk-in fees can\'t be collected or recorded',
+    what: 'Front-desk bookings are created as pending and stay in "Pending amount" forever. The database already accepts Cash as a method.',
+    ev: ['services/receptionBooking.js:138', 'database/schema.sql:597-600'],
+    fix: 'Add "Collect payment" (Cash / UPI / Card + reference) that inserts a PAID payment and prints a receipt.' },
+  { id: 'RP2', sev: 'med', type: 'api', title: 'Refund requests can\'t be tracked', what: 'No refund status is shown, and "Request refund" stays visible after a full refund.', ev: ['public/js/pages/payments.js:57'], fix: 'Return refund totals/status per payment and add a hospital-scoped refunds list.' },
+  { id: 'RP3', sev: 'med', type: 'ui', title: 'Cancelled-but-paid appointments look like normal paid rows', what: 'The appointment status is fetched but not shown — exactly the rows that need a refund.', ev: ['models/paymentModel.js:16'], fix: 'Show a "Cancelled" badge and a refund prompt.' },
+  { id: 'RP4', sev: 'low', type: 'broken', title: '"Paid" filter doesn\'t actually filter on paid status', what: 'Failed or pending payment rows would appear under Paid.', ev: ['models/paymentModel.js:48-55'], fix: 'Add pay.status = \'PAID\'.' },
+]},
+{ actor: 'reception', name: 'Doctors', where: 'app/(receptionist)/doctors · public/js/doctor-modals.js · public/js/walk-in-seats.js',
+  crud: { C: ['partial', 'Created, but can never be booked'], R: ['ok', ''], U: ['ok', 'Details, availability, walk-in seats'], D: ['none', 'No deactivate for a doctor who left'] },
+  findings: [
+  { id: 'RD1', sev: 'high', type: 'api', title: 'A doctor added by reception can never take a booking',
+    what: 'Booking needs verified status and weekly hours. Only the doctor can add hours, but no login is created for them (X1). The screen tells staff to wait until "the doctor adds working hours", which can\'t happen.',
+    ev: ['services/receptionBooking.js:35', 'public/js/walk-in-seats.js:26', 'public/js/pages/doctors.js:37'],
+    fix: 'Let reception manage weekly hours, invite the doctor to log in, and show "Pending verification / No hours" badges.' },
+  { id: 'RD2', sev: 'high', type: 'api', title: 'No way to deactivate a doctor who has left',
+    what: 'The doctor keeps appearing to patients and staff. There is no status column.',
+    ev: ['database/schema.sql:198-222'],
+    fix: 'Add Active/Inactive; block new bookings and list future appointments to reassign or cancel with refund. Never hard-delete.' },
+  { id: 'RD3', sev: 'med', type: 'risk', title: '"Absent" never resets and the two booking channels disagree', what: 'Reception blocks only today; the patient app blocks every date until someone flips it back.', ev: ['services/receptionBooking.js:39', 'services/patient/catalog.js:194', 'components/receptionist/modals/DoctorFormModal.js:59'], fix: 'Store absence as a dated leave, or reset daily; use one rule.' },
+  { id: 'RD4', sev: 'med', type: 'api', title: 'Doctor leaves are invisible to the front desk', what: 'A doctor on approved leave still shows as Present on the dashboard, and affected bookings aren\'t flagged.', ev: ['controllers/dashboardController.js:15-16'], fix: 'Show leaves on the doctor page and include them in present/absent counts.' },
+  { id: 'RD5', sev: 'low', type: 'ui', title: 'Fee or specialty change saves without confirmation', what: 'Existing appointments keep their fee, so there is no data risk.', ev: ['public/js/doctor-modals.js'], fix: 'Optional confirm.' },
+]},
+{ actor: 'reception', name: 'Tokens', where: 'app/(receptionist)/tokens · public/js/pages/tokens.js · components/receptionist/modals/TokenDetailModal.js',
+  crud: { C: ['ok', 'Generate from eligible appointments'], R: ['ok', ''], U: ['partial', '"Complete" always fails'], D: ['ok', 'Cancel with confirm (correct)'] },
+  findings: [
+  { id: 'RT1', sev: 'high', type: 'broken', title: 'The "Complete" button on a called token always fails',
+    what: 'It sends called → completed, but the server only allows completed after in_consultation. The detail dropdown also offers Completed from waiting/called.',
+    ev: ['public/js/pages/tokens.js:46', 'components/receptionist/modals/TokenDetailModal.js:24-26', 'models/tokenModel.js:16-17'],
+    fix: 'Allow called → completed for reception (or add "Send in"), and build the dropdown from the allowed transitions.' },
+  { id: 'RT2', sev: 'med', type: 'ui', title: 'No token reprint / slip', what: 'Patients who lose their number can\'t be given a new slip.', ev: ['components/receptionist/modals/TokenDetailModal.js'], fix: 'Printable slip (code, doctor, time) on generate and in the detail modal.' },
+  { id: 'RT3', sev: 'low', type: 'ui', title: 'Skipped and in-consultation tokens have no actions', what: 'The dropdown is blank; only Cancel remains. Recall is allowed by the server.', ev: ['components/receptionist/modals/TokenDetailModal.js:24-26'], fix: 'Add tabs and a Recall action.' },
+  { id: 'RT4', sev: 'low', type: 'broken', title: 'Completed appointments are offered for new tokens', what: '', ev: ['controllers/tokenController.js:34'], fix: 'Exclude completed/cancelled.' },
+]},
+{ actor: 'reception', name: 'Hospital profile, dashboard, search', where: 'app/(receptionist)/{hospital,dashboard} · controllers/searchController.js',
+  crud: { C: ['na', ''], R: ['ok', ''], U: ['partial', 'Phone, email, address only'], D: ['na', ''] },
+  findings: [
+  { id: 'RH1', sev: 'med', type: 'broken', title: '"Active on Gmedic" badge is hard-coded', what: 'A suspended or onboarding hospital still shows Active, while bookings are actually blocked — staff can\'t tell why.', ev: ['app/(receptionist)/hospital/page.js:35'], fix: 'Render the real hospital status with an explanation.' },
+  { id: 'RH2', sev: 'med', type: 'api', title: 'Search can\'t find a patient by mobile number', what: 'Global search matches names only and merges different people with the same name. There is no patient profile page.', ev: ['controllers/searchController.js:16-23', 'models/appointmentModel.js:60'], fix: 'Search by mobile and patient ID, group by patient ID.' },
+  { id: 'RH3', sev: 'low', type: 'risk', title: 'A revoked QR silently produces a broken code', what: 'With no active QR, the link is built with an empty key.', ev: ['models/hospitalModel.js:43-45'], fix: 'Show "No active QR — contact Gmedic".' },
+  { id: 'RH4', sev: 'low', type: 'ui', title: 'Dashboard rows aren\'t clickable; no Book / Generate token shortcuts', what: '', ev: ['app/(receptionist)/dashboard/page.js'], fix: 'Link rows and add quick actions.' },
+  { id: 'RH5', sev: 'low', type: 'api', title: 'Logo and "about" can\'t be edited', what: 'Columns exist. May be admin-owned — if so, say so on screen.', ev: ['database/schema.sql:12,35'], fix: 'Decide owner; add upload.' },
+]},
+{ actor: 'reception', name: 'Support & notifications', where: 'components/shared/SupportCenter.js · public/js/layout.js',
+  crud: { C: ['ok', ''], R: ['ok', 'Own tickets; latest 12 notifications'], U: ['partial', 'Reply; mark all read'], D: ['none', 'Can\'t close own ticket'] },
+  findings: [
+  { id: 'RS1', sev: 'med', type: 'risk', title: 'Tickets are visible only to the receptionist who raised them', what: 'Colleagues can\'t follow up, and tickets are orphaned when staff leave.', ev: ['controllers/supportTicketsController.js:19,26'], fix: 'Let receptionists see their hospital\'s tickets.' },
+  { id: 'RS2', sev: 'low', type: 'api', title: 'Can\'t close or withdraw your own ticket', what: '', ev: ['controllers/supportTicketsController.js:23-71'], fix: 'Add POST /api/support/[id]/close.' },
+  { id: 'RS3', sev: 'low', type: 'api', title: 'Ticket can\'t be linked to an appointment; no attachments', what: 'support_tickets.appointment_id exists but create ignores it.', ev: ['controllers/supportTicketsController.js'], fix: 'Accept appointmentId on create.' },
+]},
+
+/* ============================== DOCTOR ============================== */
+{ actor: 'doctor', name: 'Appointments', where: 'app/doctor/appointments/page.js · controllers/doctor/appointmentsController.js',
+  crud: { C: ['na', 'Doctors don\'t book'], R: ['partial', 'Only first 25 reachable'], U: ['partial', 'Complete / cancel only'], D: ['na', 'Never'] },
+  findings: [
+  { id: 'DA1', sev: 'high', type: 'broken', title: 'Doctor cancellation skips refund, patient notice and token',
+    what: 'Only the status and reason are saved and receptionists are told. The paid patient gets no refund and no message, and the queue token stays waiting.',
+    ev: ['controllers/doctor/appointmentsController.js:30-37', 'services/patient/booking.js:276-288'],
+    fix: 'Route through one shared cancel service (same as RA1).' },
+  { id: 'DA2', sev: 'high', type: 'risk', title: '"Mark Completed" is one click, permanent, and works on future appointments',
+    what: 'No confirmation, no date check, and no way back from completed.',
+    ev: ['controllers/doctor/appointmentsController.js:18-21', 'app/doctor/appointments/page.js:79-90,130'],
+    fix: 'Confirm, block before the appointment date, allow a short "reopen" recorded in status history.' },
+  { id: 'DA3', sev: 'med', type: 'api', title: 'No consultation notes, diagnosis or prescription',
+    what: 'There is nowhere to record clinical notes. Even the patient\'s reason for visit is stored but never returned or shown.',
+    ev: ['database/schema.sql:397-425', 'models/appointmentModel.js:22-47'],
+    fix: 'Add a consultation_notes table (append-only/versioned) and show reason for visit.' },
+  { id: 'DA4', sev: 'med', type: 'api', title: 'Can\'t mark a no-show', what: 'Same missing action as RA5.', ev: ['controllers/doctor/appointmentsController.js:27'], fix: 'Add a reversible same-day No-show.' },
+  { id: 'DA5', sev: 'med', type: 'ui', title: 'Only the first 25 appointments are reachable; stat cards count that page only', what: 'The API returns page counts; the screen ignores them.', ev: ['app/doctor/appointments/page.js:159,172-178,259'], fix: 'Add a pager and return counts from the server.' },
+  { id: 'DA6', sev: 'low', type: 'broken', title: 'Booking source always says "Gmedic App"; cancel reason never shown', what: 'Walk-ins are labelled as app bookings.', ev: ['app/doctor/appointments/page.js:117'], fix: 'Render a.source and a.cancelReason.' },
+]},
+{ actor: 'doctor', name: 'Queue', where: 'app/doctor/queue/page.js · controllers/doctor/queueController.js',
+  crud: { C: ['na', 'Tokens come from reception/booking'], R: ['ok', ''], U: ['ok', 'Call, start, complete, skip, recall'], D: ['na', ''] },
+  findings: [
+  { id: 'DQ1', sev: 'high', type: 'broken', title: 'Completing a consultation doesn\'t complete the appointment', what: 'See X4. The dashboard\'s "Completed today" never increases and "Mark Completed" stays on the appointment.', ev: ['controllers/doctor/queueController.js:51-56'], fix: 'Sync both in one transaction.' },
+  { id: 'DQ2', sev: 'med', type: 'broken', title: '"Skip" shows during a consultation and always fails', what: 'The server doesn\'t allow in_consultation → skipped.', ev: ['app/doctor/queue/page.js:125-127', 'models/tokenModel.js:18'], fix: 'Show Skip only for called tokens.' },
+  { id: 'DQ3', sev: 'med', type: 'risk', title: 'Completing a token can\'t be undone', what: 'No confirm, no undo.', ev: ['models/tokenModel.js:20', 'app/doctor/queue/page.js:116'], fix: 'Add a 5–10 s undo toast and a same-day reopen.' },
+  { id: 'DQ4', sev: 'low', type: 'broken', title: 'Skipped rows show both "Call" and "Recall" (same action)', what: '', ev: ['app/doctor/queue/page.js:151-156'], fix: 'Show one.' },
+  { id: 'DQ5', sev: 'low', type: 'risk', title: 'Queue actions work on past and future dates', what: '', ev: ['controllers/doctor/queueController.js:14-18'], fix: 'Make non-today dates read-only.' },
+]},
+{ actor: 'doctor', name: 'Weekly schedule', where: 'app/doctor/schedule/page.js · controllers/doctor/scheduleController.js · models/doctorScheduleModel.js',
+  crud: { C: ['ok', 'Effective tomorrow; overlap checked'], R: ['ok', ''], U: ['api', 'PATCH exists (capacity only), not wired'], D: ['ok', 'Soft-end today (correct)'] },
+  findings: [
+  { id: 'DS1', sev: 'med', type: 'ui', title: 'A schedule block can\'t be edited', what: 'PATCH /api/doctor/schedule/[id] exists but no screen calls it, and it only changes capacity. To change hours the doctor must delete and re-add.', ev: ['controllers/doctor/scheduleController.js:35-50', 'app/doctor/schedule/page.js:203-206'], fix: 'Add an Edit modal; extend PATCH to start/end/slot length with the same versioning.' },
+  { id: 'DS2', sev: 'med', type: 'broken', title: 'Removing a block says "done" but it stays on screen until tomorrow', what: 'The block is end-dated today, and the list still shows blocks ending today. Clicking again "succeeds" again.', ev: ['models/doctorScheduleModel.js:44-50,125-133'], fix: 'Show "Ends today" / "Starts <date>" badges and hide remove once ending.' },
+  { id: 'DS3', sev: 'med', type: 'ui', title: 'No confirmation or impact preview before removing a block', what: 'The count of affected bookings only appears in the toast afterwards.', ev: ['app/doctor/schedule/page.js:171-179', 'controllers/doctor/scheduleController.js:56-62'], fix: 'Confirm with an affected-appointments count.' },
+]},
+{ actor: 'doctor', name: 'Leaves', where: 'app/doctor/schedule/page.js · controllers/doctor/leavesController.js',
+  crud: { C: ['ok', ''], R: ['ok', ''], U: ['none', 'DB supports it'], D: ['ok', 'Hard delete'] },
+  findings: [
+  { id: 'DL1', sev: 'high', type: 'risk', title: 'Adding leave ignores appointments already booked on those days',
+    what: 'New bookings are blocked, but existing ones are silently kept and nobody — patient or reception — is told.',
+    ev: ['controllers/doctor/leavesController.js:14-35'],
+    fix: 'Show affected bookings, require confirmation, notify reception, offer bulk reschedule/cancel with refund.' },
+  { id: 'DL2', sev: 'med', type: 'risk', title: 'Leave delete is a hard delete with no confirmation', what: 'Past or ongoing leave can be erased, losing attendance history.', ev: ['controllers/doctor/leavesController.js:38-42', 'app/doctor/schedule/page.js:126-128,144'], fix: 'Confirm; block deleting started leave (allow shortening); prefer a cancelled_at soft delete.' },
+  { id: 'DL3', sev: 'low', type: 'api', title: 'Leave dates or reason can\'t be edited', what: '', ev: ['app/api/doctor/leaves/[id]/route.js (DELETE only)'], fix: 'Add PATCH with the same checks.' },
+]},
+{ actor: 'doctor', name: 'Patients, profile, settings', where: 'app/doctor/{patients,profile,settings,availability}',
+  crud: { C: ['na', ''], R: ['ok', ''], U: ['partial', 'Bio, languages, experience'], D: ['na', ''] },
+  findings: [
+  { id: 'DP1', sev: 'med', type: 'broken', title: 'Patient "Age / Gender" is always "—"', what: 'Date of birth and gender exist in the database but the API doesn\'t return them.', ev: ['app/doctor/patients/[id]/page.js:49', 'controllers/doctor/patientsController.js:49'], fix: 'Return them and compute age.' },
+  { id: 'DP2', sev: 'med', type: 'broken', title: 'Notification and preference toggles do nothing', what: 'They are stored only in the browser; the server never reads them. Default view and time format aren\'t used anywhere.', ev: ['app/doctor/settings/page.js:40-66,115-144'], fix: 'Store server-side and honour them, or remove.' },
+  { id: 'DP3', sev: 'low', type: 'api', title: 'No profile photo upload', what: 'doctors.photo_url exists.', ev: ['controllers/doctor/profileController.js:14-28'], fix: 'Add upload (optionally admin-moderated).' },
+  { id: 'DP4', sev: 'low', type: 'broken', title: 'Clearing "Years of experience" saves 0; field errors aren\'t shown', what: '', ev: ['controllers/doctor/profileController.js:19', 'app/doctor/profile/page.js:48-50'], fix: 'Treat "" as null; render err.fields.' },
+  { id: 'DP5', sev: 'low', type: 'broken', title: 'Top-bar availability badge goes stale after toggling', what: '', ev: ['components/doctor/Topbar.js:18,37'], fix: 'router.refresh() after save.' },
+  { id: 'DP6', sev: 'low', type: 'ui', title: 'Patients list has no paging; appointment rows on patient page aren\'t clickable', what: '', ev: ['controllers/doctor/patientsController.js:13-23', 'app/doctor/patients/[id]/page.js:80-89'], fix: 'Add paging and row links.' },
+  { id: 'DP7', sev: 'low', type: 'api', title: 'Doctor can\'t close own support ticket', what: 'Same as RS2.', ev: ['controllers/supportTicketsController.js:23-71'], fix: 'Add a close action.' },
+]},
+];
+
+const FIX_FIRST = ['RT1', 'RA1', 'X4', 'AD1', 'H1', 'RP1', 'RD1', 'X1', 'S1', 'F3', 'SE1', 'DL1', 'RA3', 'RD2', 'X2'];
+
+const DELETE_ROWS = [
+  ['Appointment', 'Cancel (with reason, refund, token release)', 'Status history, payments and tokens reference it', 'Cancel exists but has no side effects (RA1, DA1)'],
+  ['Payment / refund / settlement', 'Void / reverse / settlement adjustment', 'Financial and tax records; paid settlements are frozen by trigger', 'No void for settlements (S3)'],
+  ['Queue token', 'Cancel', 'Numbers must never be reused that day', 'Done — but Complete is broken (RT1)'],
+  ['Doctor', 'Deactivate', 'Appointments, tokens and payments reference the doctor', 'Missing (RD2, AD2)'],
+  ['Hospital', 'Suspend / Offboard', 'Everything hangs off the hospital', 'Offboard is API-only (H6)'],
+  ['Receptionist / admin user', 'Deactivate', 'Audit trail needs the actor', 'Done for receptionists; missing for admins (X1)'],
+  ['Branch', 'Deactivate', 'Scans and appointments reference it', 'Done (but has no effect, B2)'],
+  ['KYC document', 'Withdraw / Superseded', 'Compliance evidence must be kept', 'Missing (K1)'],
+  ['QR code', 'Revoke + reissue', 'Printed posters must stop working, not vanish', 'Done'],
+  ['Notification template', 'Disable', 'Logs reference the template', 'Done'],
+  ['Announcement', 'Archive (published) · Discard (draft)', 'Published ones were seen by users', 'Archive done; no draft edit/discard (CM1)'],
+  ['Banner', 'Archive', 'Keep for history', 'Missing (CM4)'],
+  ['Department', 'Archive', 'Doctors reference it', 'No department screen at all (AD2)'],
+  ['Patient account', 'Block · anonymise on erasure request', 'Medical and payment history must remain', 'Missing (PT1)'],
+  ['Audit log, webhook, status history, rate history', 'None', 'Append-only by design (triggers)', 'Correct'],
+  ['Doctor leave (future)', 'Hard delete is fine', 'Nothing references a leave', 'Done — add confirm and block on started leave (DL2)'],
+  ['Schedule block not yet in force', 'Hard delete is fine', 'No bookings yet', 'Done'],
+];
+
+/* ---------- render ---------- */
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const ALL = MODULES.flatMap((m) => m.findings.map((f) => ({ ...f, actor: m.actor, module: m.name })));
+const byId = Object.fromEntries(ALL.map((f) => [f.id, f]));
+
+function kpis() {
+  const n = (fn) => ALL.filter(fn).length;
+  const total = ALL.length, hi = n((f) => f.sev === 'high'), me = n((f) => f.sev === 'med'), lo = n((f) => f.sev === 'low');
+  const bar = (parts) => `<div class="bar">${parts.map(([v, c]) => `<span style="width:${(v / total) * 100}%;background:${c}"></span>`).join('')}</div>`;
+  $('#kpis').innerHTML = `
+    <div class="card kpi"><small>Findings</small><strong>${total}</strong>${bar([[hi, 'var(--high)'], [me, 'var(--med)'], [lo, 'var(--low)']])}</div>
+    <div class="card kpi"><small>High severity</small><strong style="color:var(--high)">${hi}</strong><small>${me} medium · ${lo} low</small></div>
+    <div class="card kpi"><small>Quick wins — API ready, screen missing</small><strong>${n((f) => f.type === 'ui')}</strong><small>front-end work only</small></div>
+    <div class="card kpi"><small>Broken or misleading buttons</small><strong>${n((f) => f.type === 'broken')}</strong><small>${n((f) => f.type === 'api')} need new API + screen</small></div>`;
+}
+
+function fixFirst() {
+  $('#fixfirst').innerHTML = FIX_FIRST.map((id, i) => {
+    const f = byId[id];
+    return `<li><span class="n">${i + 1}</span><a href="#f-${id}" data-jump="${id}"><strong>${esc(f.title)}</strong><div class="who">${ACTORS[f.actor]} · ${esc(f.module)} · ${id}</div></a><span class="pill type">${TYPE_LABEL[f.type]}</span></li>`;
+  }).join('');
+}
+
+let actor = 'all';
+function tabs() {
+  $('#tabs').innerHTML = Object.entries(ACTORS).map(([k, v]) => {
+    const c = k === 'all' ? ALL.length : ALL.filter((f) => f.actor === k).length;
+    return `<button class="tab" role="tab" data-actor="${k}" aria-selected="${k === actor}">${v}<span class="c">${c}</span></button>`;
+  }).join('');
+}
+
+function crudCell(op, label, v) {
+  if (!v) return `<div><div class="op">${label}</div><div class="note">—</div></div>`;
+  return `<div><div class="op">${label} <span class="st st-${v[0]}">${ST_LABEL[v[0]]}</span></div><div class="note">${esc(v[1])}</div></div>`;
+}
+
+function render() {
+  const sev = $('#fSev').value, type = $('#fType').value, q = $('#fq').value.trim().toLowerCase();
+  const filtering = sev || type || q;
+  let shown = 0;
+  const html = MODULES.filter((m) => actor === 'all' || m.actor === actor).map((m) => {
+    const fs = m.findings.filter((f) => (!sev || f.sev === sev) && (!type || f.type === type) &&
+      (!q || [f.id, f.title, f.what, f.fix, m.name, (f.ev || []).join(' ')].join(' ').toLowerCase().includes(q)));
+    if (filtering && !fs.length) return '';
+    shown += fs.length;
+    const crud = m.crud ? `<div class="crud">${crudCell('C', 'Create', m.crud.C)}${crudCell('R', 'View', m.crud.R)}${crudCell('U', 'Edit', m.crud.U)}${crudCell('D', 'Remove', m.crud.D)}</div>` : '';
+    const body = fs.length ? fs.map((f) => `
+      <div class="finding" id="f-${f.id}">
+        <div class="finding__top"><span class="pill sev-${f.sev}">${SEV_LABEL[f.sev]}</span><span class="pill type">${TYPE_LABEL[f.type]}</span><span class="id">${f.id}</span></div>
+        <h4>${esc(f.title)}</h4>
+        ${f.what ? `<div class="row"><span>What happens</span><span>${esc(f.what)}</span></div>` : ''}
+        <div class="row"><span>Fix</span><span>${esc(f.fix)}</span></div>
+        ${f.ev && f.ev.length ? `<div class="row ev"><span>Evidence</span><span>${f.ev.map((e) => `<code>${esc(e)}</code>`).join('')}</span></div>` : ''}
+      </div>`).join('') : '<div class="nofind">No gaps found.</div>';
+    return `<section class="card module"><div class="module__head"><div><div class="actor">${ACTORS[m.actor]}</div><h3>${esc(m.name)}</h3></div><div class="where mono">${esc(m.where)}</div></div>${crud}${body}</section>`;
+  }).join('');
+  $('#modules').innerHTML = html || '<div class="card empty">No findings match these filters.</div>';
+  $('#count').textContent = `${shown} finding${shown === 1 ? '' : 's'}`;
+}
+
+function delTable() {
+  $('#deltbl').innerHTML = DELETE_ROWS.map((r) => `<tr><td><strong>${esc(r[0])}</strong></td><td>${esc(r[1])}</td><td>${esc(r[2])}</td><td>${esc(r[3])}</td></tr>`).join('');
+}
+
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('[data-actor]');
+  if (t) { actor = t.dataset.actor; try { localStorage.setItem('crudAuditActor', actor); } catch (_) {} tabs(); render(); return; }
+  const j = e.target.closest('[data-jump]');
+  if (j) {
+    const f = byId[j.dataset.jump];
+    if (actor !== 'all' && actor !== f.actor) { actor = 'all'; tabs(); }
+    $('#fSev').value = ''; $('#fType').value = ''; $('#fq').value = ''; render();
+  }
+});
+['#fSev', '#fType'].forEach((s) => $(s).addEventListener('change', render));
+$('#fq').addEventListener('input', render);
+
+try { const a = localStorage.getItem('crudAuditActor'); if (a && ACTORS[a]) actor = a; } catch (_) {}
+kpis(); fixFirst(); tabs(); render(); delTable();
+</script>
+</body>
+</html>

@@ -1,6 +1,7 @@
 import Script from 'next/script';
 import Icon from '../../../components/Icon';
 import RefundRequestModal from '../../../components/receptionist/RefundRequestModal';
+import CollectPaymentModal from '../../../components/receptionist/modals/CollectPaymentModal';
 import { requireReceptionist } from '../../../lib/rbac';
 
 export const metadata = { title: 'Payments · Gmedic' };
@@ -14,7 +15,7 @@ export default async function PaymentsPage() {
         <div>
           <nav className="breadcrumb" aria-label="Breadcrumb"><a href="/dashboard">Dashboard</a><Icon name="chevron-right" /><span>Payments</span></nav>
           <h1>Payments</h1>
-          <p>Payment status for appointments. Patients pay in the Gmedic app.</p>
+          <p>Payment status for appointments. Patients pay in the Gmedic app, or at the front desk where you record it here.</p>
         </div>
         <div className="chips" role="group" aria-label="Quick date range" data-date-chips>
           <button type="button" className="chip" data-range="today">Today</button>
@@ -73,7 +74,22 @@ export default async function PaymentsPage() {
         <div className="pager" data-pager></div>
       </article>
 
+      <article className="card card--flush" style={{ marginTop: 20 }}>
+        <div className="card__head"><h2 className="card__title"><Icon name="refresh" />Refund requests</h2></div>
+        <div className="table-wrap" style={{ padding: '0 8px' }}>
+          <table className="table table--stack">
+            <thead><tr><th>Request</th><th>Patient</th><th className="num">Amount</th><th>Reason</th><th>Status</th></tr></thead>
+            <tbody data-refund-rows>
+              <tr><td colSpan={5}><div className="skeleton skeleton--row"></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div className="pager" data-refund-pager></div>
+      </article>
+
       <RefundRequestModal />
+      <CollectPaymentModal />
+      <Script src="/js/collect-payment.js" strategy="afterInteractive" />
       <Script src="/js/pages/payments.js" strategy="afterInteractive" />
     </>
   );

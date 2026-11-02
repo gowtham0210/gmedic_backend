@@ -88,7 +88,7 @@ async function seedSampleActivity() {
 
   const webhookCount = await db.one('SELECT COUNT(*) AS n FROM payment_webhooks');
   if (Number(webhookCount.n) === 0) {
-    const payments = await db.query('SELECT id, transaction_id, status FROM payments ORDER BY created_at DESC LIMIT 30');
+    const payments = await db.query("SELECT id, transaction_id, status FROM payments WHERE purpose = 'TOKEN' ORDER BY created_at DESC LIMIT 30");
     let n = 0;
     for (const p of payments) {
       const failed = p.status === 'PAID' && Math.random() < 0.06;

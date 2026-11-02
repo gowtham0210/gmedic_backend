@@ -24,8 +24,9 @@ const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
 // draws the booking and revenue charts. The QR funnel (HTML, not a chart) is
 // rendered when `qrFunnel` is passed (Analytics shows it; the Dashboard doesn't).
 // `children` are extra cards placed in the same grid (Analytics adds Hospital Growth).
-export default function DashboardCharts({ bookingTrend, revenueTrend, qrFunnel, children }) {
+export default function DashboardCharts({ bookingTrend, revenueTrend, sourceTrend, qrFunnel, children }) {
   const bookingRef = useRef(null);
+  const sourceRef = useRef(null);
   const revenueRef = useRef(null);
   const chartsRef = useRef([]);
 
@@ -63,7 +64,7 @@ export default function DashboardCharts({ bookingTrend, revenueTrend, qrFunnel, 
       }));
 
       const revenueSets = [
-        { label: 'Gross revenue (₹)', data: revenueTrend.map((r) => r.gross), backgroundColor: teal, borderRadius: 4 },
+        { label: 'Booking tokens (₹)', data: revenueTrend.map((r) => r.gross), backgroundColor: teal, borderRadius: 4 },
         { label: 'Refunded (₹)', data: revenueTrend.map((r) => -r.refunded), backgroundColor: red, borderRadius: 4 },
       ].filter(hasValues);
       chartsRef.current.push(new Chart(revenueRef.current, {
@@ -73,13 +74,33 @@ export default function DashboardCharts({ bookingTrend, revenueTrend, qrFunnel, 
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: revenueSets.length > 1, position: 'bottom', labels: { font, boxWidth: 10 } } }, scales: { x: categoryAxis({ stacked: true }), y: valueAxis({ stacked: true }) } },
       }));
 
+      // Bookings by source (Dashboard only): grouped bars so app vs walk-in compare day by day. A source
+      // with no bookings in the window is left out of the chart; the header totals state it as 0.
+      if (sourceTrend && sourceRef.current) {
+        const sourceSets = [
+          { label: 'Gmedic App', data: sourceTrend.map((r) => r.app), backgroundColor: teal, borderRadius: 4 },
+          { label: 'Walk-in', data: sourceTrend.map((r) => r.walkIn), backgroundColor: navy, borderRadius: 4 },
+          { label: 'Phone', data: sourceTrend.map((r) => r.phone), backgroundColor: '#8fa1b3', borderRadius: 4 },
+        ].filter((ds, i) => i < 2 || hasValues(ds));
+        chartsRef.current.push(new Chart(sourceRef.current, {
+          type: 'bar',
+          data: { labels: sourceTrend.map((r) => formatShortDate(r.date)), datasets: sourceSets },
+          options: {
+            responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+            plugins: { legend: { position: 'bottom', labels: { font, boxWidth: 10 } } },
+            scales: { x: categoryAxis(), y: valueAxis({ beginAtZero: true, ticks: { ...TICKS, precision: 0 } }) },
+          },
+        }));
+      }
     });
     return () => { cancelled = true; chartsRef.current.forEach((c) => c.destroy()); chartsRef.current = []; };
-  }, [bookingTrend, revenueTrend]);
+  }, [bookingTrend, revenueTrend, sourceTrend]);
 
   // Period totals, shown as figures so a ₹0 refund total is stated, not implied by an invisible bar.
   const grossTotal = revenueTrend.reduce((t, r) => t + r.gross, 0);
   const refundedTotal = revenueTrend.reduce((t, r) => t + r.refunded, 0);
+
+  const sourceTotals = (sourceTrend || []).reduce((t, r) => ({ app: t.app + r.app, walkIn: t.walkIn + r.walkIn, phone: t.phone + r.phone }), { app: 0, walkIn: 0, phone: 0 });
 
   return (
     <div className="dash-grid dash-grid--charts" style={{ marginBottom: 24 }}>
@@ -97,6 +118,24 @@ export default function DashboardCharts({ bookingTrend, revenueTrend, qrFunnel, 
         </div>
         <div style={{ height: 220 }}><canvas ref={revenueRef}></canvas></div>
       </article>
+      {sourceTrend && (
+        <article className="card" style={{ gridColumn: '1 / -1' }}>
+          <div className="card__head">
+            <div><h2 className="card__title">Booking Sources</h2><p className="card__subtitle">Last 14 days · Gmedic app vs walk-in bookings · cancelled excluded</p></div>
+            <dl className="chart-totals">
+              <div><dt>Gmedic App</dt><dd>{sourceTotals.app.toLocaleString('en-IN')}</dd></div>
+              <div><dt>Walk-in</dt><dd>{sourceTotals.walkIn.toLocaleString('en-IN')}</dd></div>
+              {sourceTotals.phone > 0 && <div><dt>Phone</dt><dd>{sourceTotals.phone.toLocaleString('en-IN')}</dd></div>}
+            </dl>
+          </div>
+          {sourceTotals.app + sourceTotals.walkIn + sourceTotals.phone === 0 ? (
+            <div className="empty chart-empty" style={{ height: 220 }}>
+              <h3>No bookings in the last 14 days</h3>
+              <p>App and walk-in bookings will appear here as appointments are made.</p>
+            </div>
+          ) : <div style={{ height: 220 }}><canvas ref={sourceRef}></canvas></div>}
+        </article>
+      )}
       {qrFunnel && (
         <article className="card">
           <QrFunnel funnel={qrFunnel} />

@@ -19,7 +19,6 @@ router.get('/appointments', requireAdmin('appointments.view'), pages.appointment
 router.get('/patients', requireAdmin('patients.view'), pages.patients);
 router.get('/payments', requireAdmin('payments.view'), pages.payments);
 router.get('/refunds', requireAdmin('refunds.view'), pages.refunds);
-router.get('/settlements', requireAdmin('settlements.view'), pages.settlements);
 router.get('/support', requireAdmin('support.view'), pages.support);
 router.get('/disputes', requireAdmin('disputes.view'), pages.disputes);
 router.get('/communications', requireAdmin('communications.view'), pages.communications);

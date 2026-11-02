@@ -1,4 +1,4 @@
--- Gmedic database schema (SQLite). Generated from the live database after migrations 001-013.
+-- Gmedic database schema (SQLite). Generated from the live database; last migration applied: 032_emergency_walk_ins.
 -- Load into an empty database:  sqlite3 gmedic.sqlite < database/schema.sql
 -- The application itself builds the same schema from database/migrations (npm run db:setup).
 
@@ -32,7 +32,7 @@ CREATE TABLE hospitals (
   activated_at         TEXT,
   created_at           TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at           TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-, timezone TEXT NOT NULL DEFAULT 'Asia/Kolkata', currency TEXT NOT NULL DEFAULT 'INR' CHECK (length(currency) = 3), kind TEXT, area TEXT, lat REAL, lng REAL, brand_color INTEGER, initials TEXT, about TEXT);
+, timezone TEXT NOT NULL DEFAULT 'Asia/Kolkata', currency TEXT NOT NULL DEFAULT 'INR' CHECK (length(currency) = 3), kind TEXT, area TEXT, lat REAL, lng REAL, brand_color INTEGER, initials TEXT, about TEXT, kyc_reason TEXT, kyc_decided_by TEXT REFERENCES users (id), kyc_decided_at TEXT);
 
 CREATE UNIQUE INDEX uq_hospitals_gstin ON hospitals (gstin);
 CREATE UNIQUE INDEX uq_hospitals_registration ON hospitals (registration_number);
@@ -52,13 +52,22 @@ WHEN OLD.booking_model IS NOT NEW.booking_model OR OLD.booking_fee IS NOT NEW.bo
   VALUES (NEW.id, NEW.booking_model, NEW.booking_fee, NEW.convenience_fee, NEW.commission_type, NEW.commission_value);
 END;
 
-CREATE TRIGGER trg_hospital_rate_history_ins AFTER INSERT ON hospitals BEGIN
-  INSERT INTO hospital_rate_history (hospital_id, booking_model, booking_fee, convenience_fee, commission_type, commission_value)
-  VALUES (NEW.id, NEW.booking_model, NEW.booking_fee, NEW.convenience_fee, NEW.commission_type, NEW.commission_value);
+CREATE TRIGGER trg_hospital_policy_ins AFTER INSERT ON hospitals BEGIN
+  INSERT INTO hospital_policies (hospital_id, cancellation_window_hours, refund_percent, booking_window_days)
+  VALUES (
+    NEW.id,
+    MAX(0, COALESCE((SELECT CAST(value AS INTEGER) FROM platform_settings WHERE setting_key = 'cancellation_cutoff_hours'), 4)),
+    100,
+    MAX(1, COALESCE((SELECT CAST(value AS INTEGER) FROM platform_settings WHERE setting_key = 'booking_window_days'), 7))
+  );
 END;
 
-CREATE TRIGGER trg_hospital_policy_ins AFTER INSERT ON hospitals BEGIN
-  INSERT INTO hospital_policies (hospital_id) VALUES (NEW.id);
+CREATE TRIGGER trg_hospital_rate_history_ins AFTER INSERT ON hospitals BEGIN
+  UPDATE hospitals SET booking_model = 'TOKEN', convenience_fee = 0,
+         booking_fee = COALESCE((SELECT CAST(value AS REAL) FROM platform_settings WHERE setting_key = 'booking_token_amount'), 5)
+   WHERE id = NEW.id;
+  INSERT INTO hospital_rate_history (hospital_id, booking_model, booking_fee, convenience_fee, commission_type, commission_value)
+  SELECT id, booking_model, booking_fee, convenience_fee, commission_type, commission_value FROM hospitals WHERE id = NEW.id;
 END;
 
 CREATE TABLE hospital_rate_history (
@@ -107,7 +116,7 @@ CREATE TRIGGER trg_branches_updated AFTER UPDATE ON hospital_branches BEGIN
   UPDATE hospital_branches SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
 END;
 
-CREATE TABLE hospital_documents (
+CREATE TABLE "hospital_documents" (
   id               TEXT PRIMARY KEY,
   hospital_id      TEXT NOT NULL REFERENCES hospitals (id),
   doc_type         TEXT NOT NULL CHECK (doc_type IN ('LICENCE','BANK_PROOF','GST_CERTIFICATE','REGISTRATION')),
@@ -115,11 +124,14 @@ CREATE TABLE hospital_documents (
   storage_path     TEXT NOT NULL,
   mime_type        TEXT NOT NULL,
   size_bytes       INTEGER NOT NULL,
-  status           TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','VERIFIED','REJECTED')),
+  status           TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','VERIFIED','REJECTED','WITHDRAWN')),
   rejection_reason TEXT,
   reviewed_by      TEXT REFERENCES users (id),
   reviewed_at      TEXT,
   uploaded_by      TEXT,
+  withdrawn_reason TEXT,
+  withdrawn_by     TEXT REFERENCES users (id),
+  withdrawn_at     TEXT,
   created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -153,7 +165,7 @@ CREATE TABLE "departments" (
   name        TEXT NOT NULL,
   created_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-, icon TEXT);
+, icon TEXT, archived_at TEXT);
 
 CREATE UNIQUE INDEX uq_departments_scope_name ON departments (COALESCE(hospital_id, ''), name);
 
@@ -216,7 +228,7 @@ CREATE TABLE "doctors" (
   verified_by             TEXT REFERENCES users (id),
   verified_at             TEXT,
   created_at              TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at              TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, gender TEXT CHECK (gender IS NULL OR gender IN ('MALE','FEMALE','OTHER')),
+  updated_at              TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, gender TEXT CHECK (gender IS NULL OR gender IN ('MALE','FEMALE','OTHER')), status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','INACTIVE')), status_reason TEXT, status_changed_at TEXT,
   FOREIGN KEY (branch_id, hospital_id) REFERENCES hospital_branches (id, hospital_id)
 );
 
@@ -247,9 +259,9 @@ CREATE TABLE doctor_schedules (
   start_time   TEXT NOT NULL,
   end_time     TEXT NOT NULL,
   slot_minutes INTEGER NOT NULL DEFAULT 15
-, capacity_per_slot INTEGER NOT NULL DEFAULT 1 CHECK (capacity_per_slot >= 1), online_quota INTEGER CHECK (online_quota IS NULL OR online_quota >= 0), effective_from TEXT, effective_to TEXT, created_at TEXT, updated_at TEXT);
+, capacity_per_slot INTEGER NOT NULL DEFAULT 1 CHECK (capacity_per_slot >= 1), online_quota INTEGER CHECK (online_quota IS NULL OR online_quota >= 0), effective_from TEXT, effective_to TEXT, created_at TEXT, updated_at TEXT, emergency_seats INTEGER NOT NULL DEFAULT 0 CHECK (emergency_seats BETWEEN 0 AND 3));
 
-CREATE UNIQUE INDEX uq_schedule_slot ON doctor_schedules (doctor_id, day_of_week, start_time);
+CREATE INDEX ix_schedule_doctor_day ON doctor_schedules (doctor_id, day_of_week, start_time);
 
 CREATE TRIGGER trg_schedules_created AFTER INSERT ON doctor_schedules WHEN NEW.created_at IS NULL BEGIN
   UPDATE doctor_schedules SET created_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
@@ -281,7 +293,7 @@ CREATE TABLE doctor_leaves (
   reason     TEXT,
   created_by TEXT REFERENCES users (id),
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, cancelled_at TEXT, cancelled_by TEXT REFERENCES users (id),
   CHECK (end_date >= start_date)
 );
 
@@ -292,12 +304,12 @@ CREATE TRIGGER trg_leaves_updated AFTER UPDATE ON doctor_leaves BEGIN
 END;
 
 CREATE TRIGGER trg_guard_leave_overlap_ins BEFORE INSERT ON doctor_leaves
-WHEN EXISTS (SELECT 1 FROM doctor_leaves l WHERE l.doctor_id = NEW.doctor_id AND l.start_date <= NEW.end_date AND NEW.start_date <= l.end_date) BEGIN
+WHEN NEW.cancelled_at IS NULL AND EXISTS (SELECT 1 FROM doctor_leaves l WHERE l.doctor_id = NEW.doctor_id AND l.cancelled_at IS NULL AND l.start_date <= NEW.end_date AND NEW.start_date <= l.end_date) BEGIN
   SELECT RAISE(ABORT, 'leave overlaps an existing leave for this doctor');
 END;
 
 CREATE TRIGGER trg_guard_leave_overlap_upd BEFORE UPDATE OF doctor_id, start_date, end_date ON doctor_leaves
-WHEN EXISTS (SELECT 1 FROM doctor_leaves l WHERE l.id <> NEW.id AND l.doctor_id = NEW.doctor_id AND l.start_date <= NEW.end_date AND NEW.start_date <= l.end_date) BEGIN
+WHEN NEW.cancelled_at IS NULL AND EXISTS (SELECT 1 FROM doctor_leaves l WHERE l.id <> NEW.id AND l.doctor_id = NEW.doctor_id AND l.cancelled_at IS NULL AND l.start_date <= NEW.end_date AND NEW.start_date <= l.end_date) BEGIN
   SELECT RAISE(ABORT, 'leave overlaps an existing leave for this doctor');
 END;
 
@@ -362,11 +374,12 @@ CREATE TABLE "patients" (
   relation        TEXT NOT NULL DEFAULT 'SELF' CHECK (relation IN ('SELF','SPOUSE','CHILD','PARENT','SIBLING','OTHER')),
   date_of_birth   TEXT,
   gender          TEXT CHECK (gender IS NULL OR gender IN ('MALE','FEMALE','OTHER'))
-);
+, contact_patient_id TEXT REFERENCES patients (id));
 
 CREATE UNIQUE INDEX uq_patients_mobile ON patients (mobile) WHERE mobile IS NOT NULL;
 CREATE INDEX ix_patients_name ON patients (name);
 CREATE INDEX ix_patients_account ON patients (account_user_id);
+CREATE INDEX ix_patients_contact ON patients (contact_patient_id);
 
 CREATE TRIGGER trg_patients_updated AFTER UPDATE ON patients BEGIN
   UPDATE patients SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
@@ -394,6 +407,18 @@ WHEN NEW.account_user_id IS NOT NULL AND NEW.account_user_id IS NOT (SELECT acco
   SELECT RAISE(ABORT, 'link.account_user_id must equal the patient''s account');
 END;
 
+CREATE TABLE otp_codes (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  phone      TEXT NOT NULL,
+  code_hash  TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  attempts   INTEGER NOT NULL DEFAULT 0,
+  consumed_at TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX ix_otp_phone ON otp_codes (phone, id);
+
 CREATE TABLE "appointments" (
   id                    TEXT PRIMARY KEY,
   hospital_id           TEXT NOT NULL REFERENCES hospitals (id),
@@ -417,7 +442,7 @@ CREATE TABLE "appointments" (
   rescheduled_from_id   TEXT REFERENCES "appointments" (id),
   reason_for_visit      TEXT,
   created_at            TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at            TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, token_no INTEGER, reschedule_count INTEGER NOT NULL DEFAULT 0 CHECK (reschedule_count >= 0), booked_by_user_id TEXT REFERENCES users (id),
+  updated_at            TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, token_no INTEGER, reschedule_count INTEGER NOT NULL DEFAULT 0 CHECK (reschedule_count >= 0), booked_by_user_id TEXT REFERENCES users (id), reopen_count INTEGER NOT NULL DEFAULT 0, is_emergency INTEGER NOT NULL DEFAULT 0 CHECK (is_emergency IN (0, 1)), emergency_no INTEGER CHECK (emergency_no IS NULL OR emergency_no >= 1),
   FOREIGN KEY (doctor_id, hospital_id) REFERENCES doctors (id, hospital_id),
   FOREIGN KEY (doctor_id, currency) REFERENCES doctors (id, currency),
   FOREIGN KEY (branch_id, hospital_id) REFERENCES hospital_branches (id, hospital_id)
@@ -432,6 +457,9 @@ CREATE INDEX ix_appts_patient ON appointments (patient_id);
 CREATE INDEX ix_appts_date ON appointments (appt_date);
 CREATE INDEX ix_appts_created ON appointments (created_at);
 CREATE INDEX ix_appts_booked_by ON appointments (booked_by_user_id, appt_date);
+CREATE UNIQUE INDEX uq_appt_doctor_token ON appointments (doctor_id, appt_date, token_no)
+  WHERE token_no IS NOT NULL AND status <> 'cancelled';
+CREATE UNIQUE INDEX uq_appt_emergency_no ON appointments (doctor_id, appt_date, emergency_no) WHERE emergency_no IS NOT NULL;
 
 CREATE TRIGGER trg_appts_updated AFTER UPDATE ON appointments BEGIN
   UPDATE appointments SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
@@ -447,11 +475,6 @@ END;
 
 CREATE TRIGGER trg_appt_cancelled_at AFTER UPDATE OF status ON appointments WHEN NEW.status = 'cancelled' AND NEW.cancelled_at IS NULL BEGIN
   UPDATE appointments SET cancelled_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
-END;
-
-CREATE TRIGGER trg_guard_appt_source_ins BEFORE INSERT ON appointments
-WHEN NEW.source NOT IN ('Gmedic App', 'Walk-in') BEGIN
-  SELECT RAISE(ABORT, 'appointment.source must be Gmedic App or Walk-in');
 END;
 
 CREATE TRIGGER trg_guard_appt_online_quota_ins BEFORE INSERT ON appointments
@@ -470,8 +493,69 @@ WHEN OLD.fee <> NEW.fee AND EXISTS (SELECT 1 FROM payments WHERE appointment_id 
   SELECT RAISE(ABORT, 'the fee of a paid appointment cannot change');
 END;
 
+CREATE TRIGGER trg_sync_appt_completed AFTER UPDATE OF status ON appointments
+WHEN NEW.status = 'completed' AND OLD.status <> 'completed' BEGIN
+  UPDATE tokens SET status = 'completed', called_at = COALESCE(called_at, CURRENT_TIMESTAMP), completed_at = CURRENT_TIMESTAMP
+   WHERE appointment_id = NEW.id AND status IN ('waiting', 'called', 'in_consultation', 'skipped');
+END;
+
+CREATE TRIGGER trg_sync_appt_cancelled AFTER UPDATE OF status ON appointments
+WHEN NEW.status = 'cancelled' AND OLD.status <> 'cancelled' BEGIN
+  UPDATE tokens SET status = 'cancelled', cancelled_at = CURRENT_TIMESTAMP
+   WHERE appointment_id = NEW.id AND status IN ('waiting', 'called', 'in_consultation', 'skipped');
+END;
+
+CREATE TRIGGER trg_guard_appt_source_ins BEFORE INSERT ON appointments
+WHEN NEW.source NOT IN ('Gmedic App', 'Walk-in', 'Phone') BEGIN
+  SELECT RAISE(ABORT, 'appointment.source must be Gmedic App, Walk-in or Phone');
+END;
+
+CREATE TRIGGER trg_guard_appt_reopen BEFORE UPDATE OF status ON appointments
+WHEN OLD.status IN ('completed', 'cancelled') AND NEW.status <> OLD.status
+ AND NOT (OLD.status = 'completed' AND NEW.status IN ('confirmed', 'pending') AND NEW.reopen_count = OLD.reopen_count + 1) BEGIN
+  SELECT RAISE(ABORT, 'a completed or cancelled appointment cannot be reopened');
+END;
+
+CREATE TRIGGER trg_guard_appt_capacity_ins BEFORE INSERT ON appointments
+WHEN NEW.status <> 'cancelled' AND NEW.is_emergency = 0
+ AND (SELECT COUNT(*) FROM appointments WHERE doctor_id = NEW.doctor_id AND appt_date = NEW.appt_date AND appt_time = NEW.appt_time
+        AND status <> 'cancelled' AND is_emergency = 0)
+     >= COALESCE((SELECT MAX(capacity_per_slot) FROM doctor_schedules
+       WHERE doctor_id = NEW.doctor_id AND day_of_week = CAST(strftime('%w', NEW.appt_date) AS INTEGER)
+         AND start_time <= NEW.appt_time AND end_time > NEW.appt_time
+         AND (effective_from IS NULL OR effective_from <= NEW.appt_date) AND (effective_to IS NULL OR effective_to >= NEW.appt_date)), 1) BEGIN
+  SELECT RAISE(ABORT, 'slot capacity is full');
+END;
+
+CREATE TRIGGER trg_guard_appt_capacity_upd BEFORE UPDATE OF appt_date, appt_time ON appointments
+WHEN NEW.status <> 'cancelled' AND NEW.is_emergency = 0 AND (NEW.appt_date <> OLD.appt_date OR NEW.appt_time <> OLD.appt_time)
+ AND (SELECT COUNT(*) FROM appointments WHERE doctor_id = NEW.doctor_id AND appt_date = NEW.appt_date AND appt_time = NEW.appt_time
+        AND status <> 'cancelled' AND is_emergency = 0 AND id <> NEW.id)
+     >= COALESCE((SELECT MAX(capacity_per_slot) FROM doctor_schedules
+       WHERE doctor_id = NEW.doctor_id AND day_of_week = CAST(strftime('%w', NEW.appt_date) AS INTEGER)
+         AND start_time <= NEW.appt_time AND end_time > NEW.appt_time
+         AND (effective_from IS NULL OR effective_from <= NEW.appt_date) AND (effective_to IS NULL OR effective_to >= NEW.appt_date)), 1) BEGIN
+  SELECT RAISE(ABORT, 'slot capacity is full');
+END;
+
+CREATE TRIGGER trg_guard_appt_emergency_ins BEFORE INSERT ON appointments
+WHEN NEW.status <> 'cancelled' AND NEW.is_emergency = 1
+ AND (SELECT COUNT(*) FROM appointments WHERE doctor_id = NEW.doctor_id AND appt_date = NEW.appt_date AND appt_time = NEW.appt_time
+        AND status <> 'cancelled' AND is_emergency = 1)
+     >= COALESCE((SELECT MAX(emergency_seats) FROM doctor_schedules
+       WHERE doctor_id = NEW.doctor_id AND day_of_week = CAST(strftime('%w', NEW.appt_date) AS INTEGER)
+         AND start_time <= NEW.appt_time AND end_time > NEW.appt_time
+         AND (effective_from IS NULL OR effective_from <= NEW.appt_date) AND (effective_to IS NULL OR effective_to >= NEW.appt_date)), 0) BEGIN
+  SELECT RAISE(ABORT, 'emergency seats for this slot are full');
+END;
+
+CREATE TRIGGER trg_guard_appt_emergency_upd BEFORE UPDATE OF appt_date, appt_time ON appointments
+WHEN NEW.is_emergency = 1 AND (NEW.appt_date <> OLD.appt_date OR NEW.appt_time <> OLD.appt_time) BEGIN
+  SELECT RAISE(ABORT, 'an emergency appointment cannot be moved');
+END;
+
 CREATE TRIGGER trg_guard_appt_seat_ins BEFORE INSERT ON appointments
-WHEN NEW.seat_no > COALESCE((SELECT MAX(capacity_per_slot) FROM doctor_schedules
+WHEN NEW.seat_no > COALESCE((SELECT MAX(capacity_per_slot + CASE WHEN NEW.is_emergency = 1 THEN emergency_seats ELSE 0 END) FROM doctor_schedules
        WHERE doctor_id = NEW.doctor_id AND day_of_week = CAST(strftime('%w', NEW.appt_date) AS INTEGER)
          AND start_time <= NEW.appt_time AND end_time > NEW.appt_time
          AND (effective_from IS NULL OR effective_from <= NEW.appt_date) AND (effective_to IS NULL OR effective_to >= NEW.appt_date)), 1) BEGIN
@@ -492,6 +576,29 @@ CREATE INDEX ix_appt_history ON appointment_status_history (appointment_id, id);
 
 CREATE TRIGGER trg_frozen_history BEFORE UPDATE ON appointment_status_history BEGIN
   SELECT RAISE(ABORT, 'status history is append-only');
+END;
+
+CREATE TABLE consultation_notes (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  appointment_id TEXT NOT NULL REFERENCES appointments (id),
+  doctor_id      TEXT NOT NULL REFERENCES doctors (id),
+  version        INTEGER NOT NULL CHECK (version >= 1),
+  diagnosis      TEXT CHECK (diagnosis IS NULL OR length(diagnosis) <= 500),
+  notes          TEXT CHECK (notes IS NULL OR length(notes) <= 4000),
+  prescription   TEXT CHECK (prescription IS NULL OR length(prescription) <= 2000),
+  created_by     TEXT REFERENCES users (id),
+  created_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (appointment_id, version)
+);
+
+CREATE INDEX ix_consultation_notes_appt ON consultation_notes (appointment_id, version);
+
+CREATE TRIGGER trg_frozen_consultation_notes BEFORE UPDATE ON consultation_notes BEGIN
+  SELECT RAISE(ABORT, 'consultation notes are append-only; save a new version');
+END;
+
+CREATE TRIGGER trg_keep_consultation_notes BEFORE DELETE ON consultation_notes BEGIN
+  SELECT RAISE(ABORT, 'consultation notes cannot be deleted');
 END;
 
 CREATE TABLE slot_holds (
@@ -539,13 +646,32 @@ CREATE TABLE "tokens" (
   FOREIGN KEY (appointment_id, doctor_id, hospital_id, token_date) REFERENCES appointments (id, doctor_id, hospital_id, appt_date) ON UPDATE CASCADE
 );
 
-CREATE UNIQUE INDEX uq_tokens_day_number ON tokens (hospital_id, token_date, number);
 CREATE INDEX ix_tokens_appointment ON tokens (appointment_id);
 CREATE INDEX ix_tokens_doctor ON tokens (doctor_id, token_date);
+CREATE UNIQUE INDEX uq_tokens_doctor_day_number ON tokens (doctor_id, token_date, number) WHERE status <> 'cancelled';
 
 CREATE TRIGGER trg_tokens_updated AFTER UPDATE ON tokens BEGIN
   UPDATE tokens SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
 END;
+
+CREATE TRIGGER trg_sync_token_completed AFTER UPDATE OF status ON tokens
+WHEN NEW.status = 'completed' AND OLD.status <> 'completed' AND NEW.appointment_id IS NOT NULL BEGIN
+  UPDATE appointments SET status = 'completed' WHERE id = NEW.appointment_id AND status IN ('confirmed', 'pending');
+END;
+
+CREATE TRIGGER trg_guard_token_closed_appt BEFORE INSERT ON tokens
+WHEN NEW.status NOT IN ('cancelled', 'completed')
+ AND (SELECT status FROM appointments WHERE id = NEW.appointment_id) IN ('completed', 'cancelled') BEGIN
+  SELECT RAISE(ABORT, 'a completed or cancelled appointment cannot get a token');
+END;
+
+CREATE TABLE token_counters (
+  doctor_id   TEXT NOT NULL REFERENCES doctors (id),
+  token_date  TEXT NOT NULL,
+  last_number INTEGER NOT NULL CHECK (last_number >= 0),
+  PRIMARY KEY (doctor_id, token_date)
+);
+
 
 -- ============================================================ Payments and settlements
 
@@ -567,20 +693,20 @@ CREATE TABLE "payments" (
   failure_reason      TEXT,
   paid_at             TEXT,
   created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, idempotency_key TEXT,
+  updated_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, idempotency_key TEXT, purpose TEXT NOT NULL DEFAULT 'CONSULTATION' CHECK (purpose IN ('TOKEN', 'CONSULTATION')),
   CHECK (consultation_amount IS NULL OR ABS(consultation_amount + convenience_fee + tax_amount - amount) < 0.005),
   FOREIGN KEY (appointment_id, currency) REFERENCES appointments (id, currency)
 );
 
 CREATE UNIQUE INDEX uq_payments_txn ON payments (transaction_id);
 CREATE UNIQUE INDEX uq_payments_receipt ON payments (receipt_number) WHERE receipt_number IS NOT NULL;
-CREATE UNIQUE INDEX uq_payments_one_paid ON payments (appointment_id) WHERE status = 'PAID';
 CREATE UNIQUE INDEX uq_payments_id_appt ON payments (id, appointment_id);
 CREATE UNIQUE INDEX uq_payments_id_txn ON payments (id, transaction_id);
 CREATE UNIQUE INDEX uq_payments_id_currency ON payments (id, currency);
 CREATE INDEX ix_payments_appointment ON payments (appointment_id);
 CREATE INDEX ix_payments_status ON payments (status);
 CREATE UNIQUE INDEX uq_payments_idem ON payments (idempotency_key) WHERE idempotency_key IS NOT NULL;
+CREATE UNIQUE INDEX uq_payments_one_paid ON payments (appointment_id, purpose) WHERE status = 'PAID';
 
 CREATE TRIGGER trg_payments_updated AFTER UPDATE ON payments BEGIN
   UPDATE payments SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
@@ -599,11 +725,11 @@ WHEN NEW.method IS NOT NULL AND NEW.method NOT IN ('UPI', 'Card', 'Net Banking',
   SELECT RAISE(ABORT, 'payment.method must be UPI, Card, Net Banking, Wallet or Cash');
 END;
 
-CREATE TRIGGER trg_payment_sets_appt_ins AFTER INSERT ON payments WHEN NEW.status = 'PAID' BEGIN
+CREATE TRIGGER trg_payment_sets_appt_ins AFTER INSERT ON payments WHEN NEW.status = 'PAID' AND NEW.purpose = 'CONSULTATION' BEGIN
   UPDATE appointments SET payment_status = 'paid' WHERE id = NEW.appointment_id AND payment_status <> 'paid';
 END;
 
-CREATE TRIGGER trg_payment_sets_appt_upd AFTER UPDATE OF status ON payments WHEN NEW.status = 'PAID' BEGIN
+CREATE TRIGGER trg_payment_sets_appt_upd AFTER UPDATE OF status ON payments WHEN NEW.status = 'PAID' AND NEW.purpose = 'CONSULTATION' BEGIN
   UPDATE appointments SET payment_status = 'paid' WHERE id = NEW.appointment_id AND payment_status <> 'paid';
 END;
 
@@ -621,8 +747,7 @@ CREATE TABLE "payment_webhooks" (
   payload         TEXT,
   is_sample       INTEGER NOT NULL DEFAULT 0,
   received_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-,
-  event_id        TEXT);
+, event_id TEXT);
 
 CREATE INDEX ix_webhooks_status ON payment_webhooks (status, received_at);
 CREATE INDEX ix_webhooks_txn ON payment_webhooks (transaction_id);
@@ -643,7 +768,7 @@ CREATE TABLE "refunds" (
   decision_note    TEXT,
   completed_at     TEXT,
   created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, dispute_id TEXT REFERENCES disputes (id), first_approved_by TEXT REFERENCES users (id), first_approved_at TEXT,
   FOREIGN KEY (payment_id, appointment_id) REFERENCES payments (id, appointment_id),
   FOREIGN KEY (payment_id, currency) REFERENCES payments (id, currency)
 );
@@ -652,6 +777,7 @@ CREATE UNIQUE INDEX uq_refunds_id_currency ON refunds (id, currency);
 CREATE INDEX ix_refunds_status ON refunds (status, created_at);
 CREATE INDEX ix_refunds_payment ON refunds (payment_id);
 CREATE INDEX ix_refunds_appointment ON refunds (appointment_id);
+CREATE UNIQUE INDEX uq_refund_dispute ON refunds (dispute_id) WHERE dispute_id IS NOT NULL AND status <> 'REJECTED';
 
 CREATE TRIGGER trg_refunds_updated AFTER UPDATE ON refunds BEGIN
   UPDATE refunds SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
@@ -681,7 +807,7 @@ CREATE TABLE "disputes" (
   status         TEXT NOT NULL DEFAULT 'OPEN' CHECK (status IN ('OPEN','UNDER_REVIEW','RESOLVED','REJECTED')),
   resolution     TEXT,
   created_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, decided_by TEXT REFERENCES users (id), decided_at TEXT,
   FOREIGN KEY (payment_id, transaction_id) REFERENCES payments (id, transaction_id),
   FOREIGN KEY (payment_id, currency) REFERENCES payments (id, currency)
 );
@@ -708,19 +834,24 @@ CREATE TABLE "settlements" (
   rate_history_id    INTEGER REFERENCES hospital_rate_history (id),
   commission_amount  REAL NOT NULL DEFAULT 0,
   convenience_fees   REAL NOT NULL DEFAULT 0,
+  carry_in           REAL NOT NULL DEFAULT 0 CHECK (carry_in >= 0),
   net_payout         REAL NOT NULL DEFAULT 0,
   auto_generated     INTEGER NOT NULL DEFAULT 0,
   payout_date        TEXT,
   payout_reference   TEXT,
-  status             TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','PROCESSING','PAID','ON_HOLD')),
+  status             TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','PROCESSING','PAID','ON_HOLD','VOID')),
+  hold_reason        TEXT,
+  void_reason        TEXT,
+  voided_by          TEXT REFERENCES users (id),
+  voided_at          TEXT,
   created_at         TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at         TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CHECK (period_start <= period_end),
-  CHECK (ABS(net_payout - MAX(0, gross_collection - refunds_amount - commission_amount - convenience_fees)) < 0.01),
+  CHECK (ABS(net_payout - MAX(0, gross_collection - refunds_amount - commission_amount - convenience_fees - carry_in)) < 0.01),
   FOREIGN KEY (hospital_id, currency) REFERENCES hospitals (id, currency)
 );
 
-CREATE UNIQUE INDEX uq_settlement_period ON settlements (hospital_id, period_start, period_end);
+CREATE UNIQUE INDEX uq_settlement_period ON settlements (hospital_id, period_start, period_end) WHERE status <> 'VOID';
 CREATE UNIQUE INDEX uq_settlements_id_currency ON settlements (id, currency);
 CREATE INDEX ix_settlements_status ON settlements (status);
 
@@ -729,18 +860,18 @@ CREATE TRIGGER trg_settlements_updated AFTER UPDATE ON settlements BEGIN
 END;
 
 CREATE TRIGGER trg_frozen_settlement BEFORE UPDATE OF hospital_id, period_start, period_end, gross_collection, refunds_amount, commission_amount,
-  convenience_fees, net_payout, commission_type, commission_value, rate_history_id ON settlements
+  convenience_fees, carry_in, net_payout, commission_type, commission_value, rate_history_id ON settlements
 WHEN OLD.status = 'PAID' BEGIN
   SELECT RAISE(ABORT, 'a paid settlement is frozen');
 END;
 
 CREATE TRIGGER trg_guard_settlement_overlap_ins BEFORE INSERT ON settlements
-WHEN EXISTS (SELECT 1 FROM settlements s WHERE s.hospital_id = NEW.hospital_id AND s.period_start <= NEW.period_end AND NEW.period_start <= s.period_end) BEGIN
+WHEN NEW.status <> 'VOID' AND EXISTS (SELECT 1 FROM settlements s WHERE s.status <> 'VOID' AND s.hospital_id = NEW.hospital_id AND s.period_start <= NEW.period_end AND NEW.period_start <= s.period_end) BEGIN
   SELECT RAISE(ABORT, 'settlement period overlaps an existing settlement for this hospital');
 END;
 
-CREATE TRIGGER trg_guard_settlement_overlap_upd BEFORE UPDATE OF hospital_id, period_start, period_end ON settlements
-WHEN EXISTS (SELECT 1 FROM settlements s WHERE s.id <> NEW.id AND s.hospital_id = NEW.hospital_id AND s.period_start <= NEW.period_end AND NEW.period_start <= s.period_end) BEGIN
+CREATE TRIGGER trg_guard_settlement_overlap_upd BEFORE UPDATE OF hospital_id, period_start, period_end, status ON settlements
+WHEN NEW.status <> 'VOID' AND EXISTS (SELECT 1 FROM settlements s WHERE s.status <> 'VOID' AND s.id <> NEW.id AND s.hospital_id = NEW.hospital_id AND s.period_start <= NEW.period_end AND NEW.period_start <= s.period_end) BEGIN
   SELECT RAISE(ABORT, 'settlement period overlaps an existing settlement for this hospital');
 END;
 
@@ -877,6 +1008,15 @@ CREATE TABLE "notification_logs" (
 CREATE INDEX ix_notification_logs_time ON notification_logs (id);
 CREATE INDEX ix_notification_logs_event ON notification_logs (event_key);
 
+CREATE TABLE user_notification_prefs (
+  user_id    TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  pref_key   TEXT NOT NULL CHECK (length(pref_key) BETWEEN 1 AND 40),
+  enabled    INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (user_id, pref_key)
+);
+
+
 CREATE TABLE device_tokens (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id    TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
@@ -941,10 +1081,11 @@ CREATE TABLE "banners" (
   cta_url    TEXT,
   starts_at  TEXT NOT NULL,
   ends_at    TEXT,
-  status     TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','INACTIVE')),
+  status     TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','INACTIVE','ARCHIVED')),
   created_by TEXT REFERENCES users (id),
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CHECK (ends_at IS NULL OR ends_at > starts_at)
 );
 
 CREATE INDEX ix_banners_live ON banners (status, starts_at, ends_at);
@@ -1039,19 +1180,5 @@ CREATE TABLE meta (
       meta_value TEXT NOT NULL
     );
 
-
--- ============================================================ Other
-
-CREATE TABLE otp_codes (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
-  phone      TEXT NOT NULL,
-  code_hash  TEXT NOT NULL,
-  expires_at TEXT NOT NULL,
-  attempts   INTEGER NOT NULL DEFAULT 0,
-  consumed_at TEXT,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX ix_otp_phone ON otp_codes (phone, id);
 
 PRAGMA foreign_keys = ON;

@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState, useCallback, Suspense } from 'react';
+import { useEffect, useState, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Icon from '../../../components/Icon';
+import Pager, { usePager } from '../../../components/admin/Pager';
 
 const toast = (msg, type = 'success') => { if (typeof window !== 'undefined' && window.G) window.G.toast(msg, type); };
 
@@ -21,21 +22,31 @@ function PatientsPageInner() {
   const [items, setItems] = useState([]);
   const [summary, setSummary] = useState({});
   const [loading, setLoading] = useState(true);
+  const [total, setTotal] = useState(0);
+  const [pages, setPages] = useState(1);
+  const [page, setPage] = usePager(q);
 
+  const seq = useRef(0); // only the newest search may fill the table
   const load = useCallback(async () => {
+    const mine = ++seq.current;
     setLoading(true);
     try {
       const qs = new URLSearchParams();
       if (q) qs.set('q', q);
+      qs.set('page', String(page));
+      qs.set('pageSize', '20');
       const data = await api(`/api/doctor/patients?${qs}`);
+      if (mine !== seq.current) return;
       setItems(data.items);
       setSummary(data.summary);
+      setTotal(data.total);
+      setPages(data.pages || 1);
     } catch (err) {
-      toast(err.message, 'error');
+      if (mine === seq.current) toast(err.message, 'error');
     } finally {
-      setLoading(false);
+      if (mine === seq.current) setLoading(false);
     }
-  }, [q]);
+  }, [q, page]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -59,7 +70,7 @@ function PatientsPageInner() {
         <div className="toolbar">
           <div className="field toolbar__search">
             <label>Search</label>
-            <div className="input-wrap"><Icon name="search" /><input className="input" placeholder="Patient name, ID or appointment ID…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+            <div className="input-wrap"><Icon name="search" /><input className="input" placeholder="Patient name, mobile, ID or appointment ID…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
           </div>
           <button type="button" className="btn btn--ghost" onClick={() => setQ('')}><Icon name="refresh" />Reset</button>
         </div>
@@ -83,7 +94,7 @@ function PatientsPageInner() {
             </tbody>
           </table>
         </div>
-        <div className="pager"><span>{items.length} patient{items.length === 1 ? '' : 's'}</span></div>
+        <Pager total={total} page={page} pages={pages} noun="patient" onPage={setPage} />
       </article>
     </>
   );

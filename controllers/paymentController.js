@@ -1,4 +1,5 @@
-// Payments are made by patients in the Gmedic app. The portal only displays them.
+// Payments are made by patients in the Gmedic app, or collected at the front desk (collect-payment).
+// This screen lists them with the state of any refund.
 
 const paymentModel = require('../models/paymentModel');
 const { readFilters } = require('./appointmentController');
@@ -25,6 +26,12 @@ exports.list = async (req, res) => {
     fee: a.fee,
     paymentStatus: a.paymentStatus.toLowerCase(),
     payment: a.payment,
+    // A cancelled appointment that was paid is exactly the row that may need a refund.
+    appointmentStatus: a.appointmentStatus,
+    refunded: a.refunded,
+    refundable: a.paymentStatus === 'PAID' && !(a.payment && a.payment.gateway === 'FRONT_DESK') ? Math.max(0, a.fee - a.refunded) : 0,
+    refundStatus: a.refundStatus,
+    collectedAtDesk: !!(a.payment && a.payment.gateway === 'FRONT_DESK'),
   }));
 
   res.json({

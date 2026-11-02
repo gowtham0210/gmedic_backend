@@ -40,6 +40,14 @@
 
       const values = G.formValues(form);
       const payload = { name: values.name, specialization: values.specialization, fee: Number(values.fee), availability: values.availability };
+      // A new fee or specialist applies to bookings from now on (existing appointments keep theirs): confirm it.
+      if (editing && (payload.fee !== editing.fee || payload.specialization !== editing.specialization)) {
+        const parts = [];
+        if (payload.fee !== editing.fee) parts.push(`the fee from ${G.money(editing.fee)} to ${G.money(payload.fee)}`);
+        if (payload.specialization !== editing.specialization) parts.push(`the specialist from ${editing.specialization} to ${payload.specialization}`);
+        const ok = await G.confirm({ title: `Change ${editing.name}'s details?`, body: `This changes ${parts.join(' and ')}. Patients and the front desk see the new details straight away. Appointments already booked keep the fee they were booked at.`, action: 'Save Changes' });
+        if (!ok) return;
+      }
       const btn = $('[data-doctor-submit]', form);
       G.setLoading(btn, true);
       try {
@@ -71,17 +79,19 @@
     const present = doctors.filter((d) => current(d) === 'present').length;
     $('[data-avail-summary]').innerHTML = `
       ${G.badge('present', `${present} Present`)}
-      ${G.badge('absent', `${doctors.length - present} Absent / On Leave`)}`;
+      ${G.badge('absent', `${doctors.length - present} Absent today / On leave`)}`;
 
     list.innerHTML = rows.length
       ? rows.map((d) => {
         const on = current(d) === 'present';
+        // A doctor on leave can't be switched here: the leave decides until it ends.
+        if (d.onLeave) return `<div class="avail-row"><div class="person">${G.avatar(d.name, '', d.photoUrl)}<div><div class="person__name">${esc(d.name)}</div><small>${esc(d.specialization)}</small></div></div><span class="text-muted">${G.badge('absent', 'On leave')} <small>${esc(d.leaveNote)}</small></span></div>`;
         return `<div class="avail-row${pending.has(d.id) ? ' is-changed' : ''}">
-          <div class="person">${G.avatar(d.name)}<div><div class="person__name">${esc(d.name)}</div><small>${esc(d.specialization)}</small></div></div>
+          <div class="person">${G.avatar(d.name, '', d.photoUrl)}<div><div class="person__name">${esc(d.name)}</div><small>${esc(d.specialization)}</small></div></div>
           <label class="switch">
             <input type="checkbox" data-avail-id="${esc(d.id)}" ${on ? 'checked' : ''} aria-label="${esc(d.name)} present today">
             <span class="switch__track"></span>
-            <span class="switch__label ${on ? 'is-present' : 'is-absent'}">${on ? 'Present' : 'Absent / On Leave'}</span>
+            <span class="switch__label ${on ? 'is-present' : 'is-absent'}">${on ? 'Present' : 'Absent today'}</span>
           </label>
         </div>`;
       }).join('')

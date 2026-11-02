@@ -3,6 +3,10 @@ import Icon from '../../../components/Icon';
 import DoctorFormModal from '../../../components/receptionist/modals/DoctorFormModal';
 import AvailabilityModal from '../../../components/receptionist/modals/AvailabilityModal';
 import QrModal from '../../../components/receptionist/modals/QrModal';
+import AppointmentModal from '../../../components/receptionist/modals/AppointmentModal';
+import BookAppointmentModal from '../../../components/receptionist/modals/BookAppointmentModal';
+import CollectPaymentModal from '../../../components/receptionist/modals/CollectPaymentModal';
+import { HospitalStatusNotice, NoActiveQr } from '../../../components/receptionist/HospitalStatusBadge';
 import { requireReceptionist } from '../../../lib/rbac';
 import hospitalModel from '../../../models/hospitalModel';
 import config from '../../../config';
@@ -15,6 +19,7 @@ export default async function DashboardPage() {
 
   return (
     <>
+      <HospitalStatusNotice hospital={hospital} style={{ marginBottom: 16 }} />
       <section className="welcome-row">
         <div className="welcome">
           <div className="welcome__text">
@@ -88,6 +93,7 @@ export default async function DashboardPage() {
             <li><Icon name="mail" /><a href={`mailto:${hospital.email}`} data-h-email>{hospital.email}</a></li>
             <li><Icon name="map-pin" /><span data-h-address>{hospital.addressText}</span></li>
           </ul>
+          {!hospital.qrLink ? <NoActiveQr compact /> : (
           <div className="qr-panel">
             <div className="qr-panel__img"><img src="/api/hospital/qr.svg" alt="Hospital QR code" /></div>
             <div>
@@ -99,6 +105,7 @@ export default async function DashboardPage() {
               <button type="button" className="btn btn--outline btn--sm" data-open-qr><Icon name="eye" />View QR</button>
             </div>
           </div>
+          )}
         </article>
       </section>
 
@@ -107,7 +114,7 @@ export default async function DashboardPage() {
           <div className="card__head">
             <div>
               <h2 className="card__title"><Icon name="calendar-check" />Recent Appointments</h2>
-              <p className="card__subtitle">Latest 6 · bookings from the Gmedic app</p>
+              <p className="card__subtitle">Latest 6 bookings · app, walk-in and phone</p>
             </div>
             <a className="link-more" href="/appointments">View All <Icon name="arrow-right" /></a>
           </div>
@@ -135,6 +142,16 @@ export default async function DashboardPage() {
           <article className="card">
             <div className="card__head"><h2 className="card__title"><Icon name="zap" />Quick Actions</h2></div>
             <div className="qa-list">
+              <button type="button" className="qa" data-open-book>
+                <span className="qa__icon tone-teal"><Icon name="plus" /></span>
+                <span className="qa__text"><strong>Book Appointment</strong><small>Walk-in or phone booking</small></span>
+                <Icon name="chevron-right" />
+              </button>
+              <a className="qa" href="/tokens">
+                <span className="qa__icon tone-violet"><Icon name="ticket" /></span>
+                <span className="qa__text"><strong>Today&apos;s Tokens</strong><small>Queue, slips and status</small></span>
+                <Icon name="chevron-right" />
+              </a>
               <button type="button" className="qa" data-open-add-doctor>
                 <span className="qa__icon tone-blue"><Icon name="user-plus" /></span>
                 <span className="qa__text"><strong>Add Doctor</strong><small>Register a new doctor</small></span>
@@ -145,11 +162,6 @@ export default async function DashboardPage() {
                 <span className="qa__text"><strong>Update Availability</strong><small>Mark present / absent</small></span>
                 <Icon name="chevron-right" />
               </button>
-              <a className="qa" href="/appointments">
-                <span className="qa__icon tone-violet"><Icon name="calendar" /></span>
-                <span className="qa__text"><strong>View Appointments</strong><small>Check patient bookings</small></span>
-                <Icon name="chevron-right" />
-              </a>
               <a className="qa" href="/payments">
                 <span className="qa__icon tone-amber"><Icon name="wallet" /></span>
                 <span className="qa__text"><strong>View Payments</strong><small>Track payment status</small></span>
@@ -163,9 +175,15 @@ export default async function DashboardPage() {
       <DoctorFormModal hospitalName={hospital.name} specializations={config.specializations} />
       <AvailabilityModal />
       <QrModal hospitalName={hospital.name} />
+      <AppointmentModal />
+      <BookAppointmentModal />
+      <CollectPaymentModal />
 
       <Script src="/js/doctor-modals.js" strategy="afterInteractive" />
       <Script src="/js/qr-modal.js" strategy="afterInteractive" />
+      <Script src="/js/collect-payment.js" strategy="afterInteractive" />
+      <Script src="/js/appointment-modal.js" strategy="afterInteractive" />
+      <Script src="/js/book-appointment.js" strategy="afterInteractive" />
       <Script src="/js/pages/dashboard.js" strategy="afterInteractive" />
     </>
   );

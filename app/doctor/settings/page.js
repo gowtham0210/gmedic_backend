@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import Icon from '../../../components/Icon';
+import { DEFAULT_PREFS, readPrefs, savePrefs } from '../../../lib/doctorPrefs';
 
 const toast = (msg, type = 'success') => { if (typeof window !== 'undefined' && window.G) window.G.toast(msg, type); };
-const PREFS_KEY = 'gmedic.doctor.preferences';
 
 async function api(url, opts = {}) {
   const res = await fetch(url, {
@@ -18,13 +18,6 @@ async function api(url, opts = {}) {
   return data;
 }
 
-function readPrefs() {
-  try { return JSON.parse(localStorage.getItem(PREFS_KEY)) || {}; } catch { return {}; }
-}
-function savePrefs(p) {
-  try { localStorage.setItem(PREFS_KEY, JSON.stringify(p)); } catch { /* storage unavailable */ }
-}
-
 function AccountTab({ data }) {
   return (
     <article className="card">
@@ -33,35 +26,6 @@ function AccountTab({ data }) {
         <div><dt>Phone</dt><dd>{data?.user?.phone || '—'}</dd></div>
       </dl>
       <p className="text-muted" style={{ fontSize: 12.5, marginTop: 14 }}>To change your email or phone, contact your hospital administrator.</p>
-    </article>
-  );
-}
-
-function NotificationsTab() {
-  const [prefs, setPrefs] = useState({ appointment: true, queue: true, schedule: true, sms: false, push: true });
-  useEffect(() => { setPrefs((p) => ({ ...p, ...readPrefs().notifications })); }, []);
-  function toggle(key) {
-    setPrefs((p) => {
-      const next = { ...p, [key]: !p[key] };
-      savePrefs({ ...readPrefs(), notifications: next });
-      return next;
-    });
-  }
-  const rows = [
-    ['appointment', 'Appointment notifications'],
-    ['queue', 'Queue notifications'],
-    ['schedule', 'Schedule change notifications'],
-    ['sms', 'SMS notifications'],
-    ['push', 'Push notifications'],
-  ];
-  return (
-    <article className="card">
-      {rows.map(([key, label]) => (
-        <label key={key} className="checkbox" style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--border-2)' }}>
-          <span>{label}</span>
-          <input type="checkbox" checked={!!prefs[key]} onChange={() => toggle(key)} />
-        </label>
-      ))}
     </article>
   );
 }
@@ -112,34 +76,83 @@ function SecurityTab() {
   );
 }
 
+// Display preferences for this device (lib/doctorPrefs): honoured by Appointments and Today's Queue.
+// Which notices reach the bell, saved on the server (GET/PUT /api/doctor/notification-preferences)
+// and applied when a notice is sent. Each switch saves on its own.
+function NotificationPrefs() {
+  const [data, setData] = useState(null);
+  const [busy, setBusy] = useState(null);
+  useEffect(() => { api('/api/doctor/notification-preferences').then(setData).catch((err) => toast(err.message, 'error')); }, []);
+
+  async function toggle(p) {
+    setBusy(p.key);
+    try {
+      const res = await api('/api/doctor/notification-preferences', { method: 'PUT', body: { preferences: { [p.key]: !p.enabled } } });
+      setData(res);
+      toast(`${p.label}: ${!p.enabled ? 'on' : 'off'}.`, 'success');
+    } catch (err) {
+      toast(err.message, 'error');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <article className="card" style={{ marginBottom: 20 }}>
+      <div className="card__head"><div><h2 className="card__title"><Icon name="bell" />Notifications</h2><p className="card__subtitle">What appears in the bell at the top of the portal. Saved to your account.</p></div></div>
+      {!data && <div className="skeleton skeleton--row"></div>}
+      {data && data.preferences.map((p) => (
+        <div key={p.key} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--border-2)' }}>
+          <div style={{ flex: 1 }}><strong>{p.label}</strong><div className="text-muted" style={{ fontSize: 12.5 }}>{p.help}</div></div>
+          <label className="switch" title={p.enabled ? 'On' : 'Off'}>
+            <input type="checkbox" checked={p.enabled} disabled={busy === p.key} onChange={() => toggle(p)} aria-label={`${p.label} notifications`} />
+            <span className="switch__track"></span>
+          </label>
+        </div>
+      ))}
+      {data && data.alwaysOn.map((a) => (
+        <div key={a.label} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0' }}>
+          <div style={{ flex: 1 }}><strong>{a.label}</strong><div className="text-muted" style={{ fontSize: 12.5 }}>{a.help}</div></div>
+          <span className="badge badge--neutral"><Icon name="lock" className="icon--xs" /> Always on</span>
+        </div>
+      ))}
+    </article>
+  );
+}
+
 function PreferencesTab() {
-  const [prefs, setPrefs] = useState({ defaultView: 'upcoming', timeFormat: '12h' });
-  useEffect(() => { setPrefs((p) => ({ ...p, ...readPrefs().preferences })); }, []);
+  const [prefs, setPrefs] = useState(DEFAULT_PREFS);
+  useEffect(() => { setPrefs(readPrefs()); }, []);
   function set(key, value) {
-    setPrefs((p) => {
-      const next = { ...p, [key]: value };
-      savePrefs({ ...readPrefs(), preferences: next });
-      return next;
-    });
+    const next = { ...prefs, [key]: value };
+    setPrefs(next);
+    savePrefs(next);
+    toast('Preference saved on this device.', 'success');
   }
   return (
+    <>
+    <NotificationPrefs />
     <article className="card">
+      <div className="card__head"><div><h2 className="card__title"><Icon name="settings" />Display</h2></div></div>
       <div className="field" style={{ marginBottom: 14 }}>
-        <label>Default appointment view</label>
-        <select className="select" value={prefs.defaultView} onChange={(e) => set('defaultView', e.target.value)}>
-          <option value="all">All</option>
-          <option value="upcoming">Upcoming</option>
-          <option value="waiting">Waiting</option>
+        <label>Appointments list opens on</label>
+        <select className="select" value={prefs.defaultStatus} onChange={(e) => set('defaultStatus', e.target.value)}>
+          <option value="">All appointments</option>
+          <option value="confirmed">Confirmed</option>
+          <option value="pending">Pending</option>
+          <option value="completed">Completed</option>
         </select>
       </div>
       <div className="field">
         <label>Time format</label>
         <select className="select" value={prefs.timeFormat} onChange={(e) => set('timeFormat', e.target.value)}>
-          <option value="12h">12-hour (AM/PM)</option>
-          <option value="24h">24-hour</option>
+          <option value="12h">12-hour (09:30 AM)</option>
+          <option value="24h">24-hour (09:30)</option>
         </select>
       </div>
+      <p className="field__hint" style={{ marginTop: 12 }}>Saved on this device only. Used on Appointments and Today&apos;s Queue.</p>
     </article>
+    </>
   );
 }
 
@@ -154,19 +167,17 @@ export default function SettingsPage() {
       <div className="page-head">
         <div>
           <h1>Settings</h1>
-          <p>Account, notifications, security and preferences.</p>
+          <p>Account, security, notification and display preferences.</p>
         </div>
       </div>
 
       <div className="tabs" role="tablist" style={{ marginBottom: 16 }}>
         <button type="button" className={`tab${tab === 'account' ? ' is-active' : ''}`} onClick={() => setTab('account')}>Account</button>
-        <button type="button" className={`tab${tab === 'notifications' ? ' is-active' : ''}`} onClick={() => setTab('notifications')}>Notifications</button>
         <button type="button" className={`tab${tab === 'security' ? ' is-active' : ''}`} onClick={() => setTab('security')}>Security</button>
         <button type="button" className={`tab${tab === 'preferences' ? ' is-active' : ''}`} onClick={() => setTab('preferences')}>Preferences</button>
       </div>
 
       {tab === 'account' && <AccountTab data={data} />}
-      {tab === 'notifications' && <NotificationsTab />}
       {tab === 'security' && <SecurityTab />}
       {tab === 'preferences' && <PreferencesTab />}
     </>

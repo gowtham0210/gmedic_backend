@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Icon from '../Icon';
-import { formatDate, formatDateTime, formatTime } from '../../lib/format';
+import { formatDateTime } from '../../lib/format';
 
 const toast = (msg, type = 'success') => { if (typeof window !== 'undefined' && window.G) window.G.toast(msg, type); };
 
@@ -18,6 +18,8 @@ async function api(url, opts = {}) {
   if (!res.ok) throw new Error(data.error || 'Something went wrong.');
   return data;
 }
+
+export const ICON = { NEW_APPOINTMENT: ['calendar-check', 'tone-green'], APPOINTMENT_CANCELLED: ['calendar-x', 'tone-red'], APPOINTMENT_RESCHEDULED: ['calendar', 'tone-blue'] };
 
 export default function NotificationBell() {
   const wrapRef = useRef(null);
@@ -46,6 +48,14 @@ export default function NotificationBell() {
     return () => el.removeEventListener('dropdown:open', load);
   }, []);
 
+  // Opening one marks just that one read.
+  function openOne(n) {
+    if (!n.unread) return;
+    setItems((list) => list.map((i) => (i.id === n.id ? { ...i, unread: false } : i)));
+    fetch(`/api/doctor/notifications/${encodeURIComponent(n.id)}/read`, { method: 'POST', keepalive: true, credentials: 'same-origin' })
+      .then((r) => r.json()).then((d) => setUnread(d.unread)).catch(() => {});
+  }
+
   async function markAllRead() {
     try {
       await api('/api/doctor/notifications/read', { method: 'POST' });
@@ -72,15 +82,10 @@ export default function NotificationBell() {
             <div className="empty" style={{ padding: '28px 16px' }}><div className="empty__icon"><Icon name="bell" /></div><p>You&apos;re all caught up.</p></div>
           )}
           {!loading && items.map((n) => (
-            <Link key={n.id} className={`notif__item${n.unread ? ' is-unread' : ''}`} href={n.type === 'system' ? (n.link || '/doctor/notifications') : `/doctor/appointments?q=${encodeURIComponent(n.patientName || '')}`}>
-              <span className={`notif__icon ${n.type === 'reminder' ? 'tone-blue' : n.type === 'system' ? 'tone-teal' : 'tone-green'}`}><Icon name={n.type === 'reminder' ? 'clock' : n.type === 'system' ? 'bell' : 'calendar-check'} /></span>
+            <Link key={n.id} className={`notif__item${n.unread ? ' is-unread' : ''}`} href={n.link || '/doctor/notifications'} onClick={() => openOne(n)}>
+              <span className={`notif__icon ${ICON[n.eventKey]?.[1] || 'tone-teal'}`}><Icon name={ICON[n.eventKey]?.[0] || 'bell'} /></span>
               <span>
-                <p>{n.type === 'system'
-                  ? <><strong>{n.title}</strong> — {n.body}</>
-                  : n.type === 'reminder'
-                    ? <>Upcoming today: <strong>{n.patientName}</strong> at {n.time}</>
-                    : <>New appointment booked: <strong>{n.patientName}</strong> on {formatDate(n.date)} at {formatTime(n.time)}</>}
-                </p>
+                <p><strong>{n.title}</strong> — {n.body}</p>
                 <small>{n.at ? formatDateTime(n.at) : ''}</small>
               </span>
             </Link>

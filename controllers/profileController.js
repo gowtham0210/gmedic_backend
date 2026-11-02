@@ -32,3 +32,15 @@ exports.changePassword = async (req, res) => {
   req.session.sessionVersion = (req.session.sessionVersion || 0) + 1;
   res.json({ ok: true, message: 'Your password has been changed.' });
 };
+
+// Admin console accounts (Super Admin, Finance, Support, Operations): phone is optional for them.
+exports.updateAdmin = async (req, res) => {
+  const { value, errors, ok } = validate(req.body, {
+    name: { label: 'Full name', required: true, minLength: 3, maxLength: 60, pattern: /^[A-Za-z][A-Za-z .'-]*$/, message: 'Name can only contain letters and spaces.' },
+    phone: { label: 'Phone', type: 'phone' },
+  });
+  if (!ok) throw badRequest('Please correct the highlighted fields.', errors);
+  if (value.phone) await require('../services/staffAccounts').assertContactFree({ phone: value.phone }, req.user.id);
+  const user = await userModel.updateProfile(req.user.id, { name: value.name, phone: value.phone || null });
+  res.json({ ok: true, message: 'Profile updated.', user: userModel.toPublic(user) });
+};

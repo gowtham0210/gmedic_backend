@@ -33,9 +33,24 @@ function isISODate(value) {
   return !Number.isNaN(d.getTime()) && toISODate(d) === value;
 }
 
+// The calendar day (YYYY-MM-DD) of a moment in a time zone: a stored UTC "YYYY-MM-DD HH:MM:SS" string, a Date, or now.
+// (Used for "today at the hospital" wherever a time zone matters.)
+function dateInZone(value, timezone = 'Asia/Kolkata') {
+  let when = value === undefined ? new Date() : value;
+  if (typeof when === 'string') when = new Date(`${when.replace(' ', 'T')}${/Z|[+-]\d\d:?\d\d$/.test(when) ? '' : 'Z'}`);
+  try { return new Intl.DateTimeFormat('en-CA', { timeZone: timezone || 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(when); }
+  catch { return when.toISOString().slice(0, 10); }
+}
+
 function nowTimeHHmm() {
   const d = new Date();
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-module.exports = { pad, toISODate, todayISO, startOfToday, addDays, parseISODate, isISODate, nowTimeHHmm };
+// The wall-clock time (HH:MM) now in a time zone.
+function timeInZone(timezone = 'Asia/Kolkata') {
+  try { return new Intl.DateTimeFormat('en-GB', { timeZone: timezone || 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date()); }
+  catch { return nowTimeHHmm(); }
+}
+
+module.exports = { pad, toISODate, todayISO, startOfToday, addDays, parseISODate, isISODate, nowTimeHHmm, dateInZone, timeInZone };

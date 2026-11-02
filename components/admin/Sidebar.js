@@ -37,7 +37,6 @@ const NAV = [
       { href: '/admin/payments', label: 'Payments', icon: 'credit-card', perm: 'payments.view' },
       { href: '/admin/refunds', label: 'Refunds', icon: 'refresh', perm: 'refunds.view' },
       { href: '/admin/disputes', label: 'Disputes', icon: 'alert-triangle', perm: 'disputes.view' },
-      { href: '/admin/settlements', label: 'Settlements', icon: 'wallet', perm: 'settlements.view' },
     ],
   },
   {
@@ -51,14 +50,15 @@ const NAV = [
 ];
 
 const FOOT_NAV = [
-  { href: '/admin/settings', label: 'Settings', icon: 'settings', perm: 'settings.view' },
+  { href: '/admin/team', label: 'Admin Team', icon: 'shield-check', perm: 'team.view' },
+  { href: '/admin/settings', label: 'Settings', icon: 'settings', perm: ['settings.view', 'feature_flags.view', 'app_versions.view'] },
   { href: '/admin/audit-logs', label: 'Audit Logs', icon: 'clipboard-list', perm: 'audit_logs.view' },
 ];
 
 export default function Sidebar({ permissions }) {
   const pathname = usePathname();
   const perms = new Set(permissions || []);
-  const canSee = (item) => !item.perm || perms.has(item.perm);
+  const canSee = (item) => !item.perm || [].concat(item.perm).some((p) => perms.has(p));
   const isActive = (href) => pathname === href || pathname.startsWith(`${href}/`);
 
   const renderLink = (item) => (
@@ -92,10 +92,11 @@ export default function Sidebar({ permissions }) {
           })}
         </nav>
 
-        <nav className="nav nav--footer" aria-label="Platform">
-          {FOOT_NAV.filter(canSee).map(renderLink)}
-          <button type="button" className="nav__link" data-logout><Icon name="log-out" /><span className="nav__text">Logout</span></button>
-        </nav>
+        {FOOT_NAV.some(canSee) && (
+          <nav className="nav nav--footer" aria-label="Platform">
+            {FOOT_NAV.filter(canSee).map(renderLink)}
+          </nav>
+        )}
 
         <div className="sidebar__resizer" role="separator" aria-orientation="vertical" aria-label="Resize sidebar (arrow keys to resize, Enter to collapse)" tabIndex={0} title="Drag to resize · double-click to collapse" data-sidebar-resizer></div>
       </aside>

@@ -12,6 +12,13 @@ async function load(req) {
   return hospital;
 }
 
+// The hospital's active QR link; a 404 with a clear message when every code was revoked.
+async function activeLink(hospital) {
+  const link = await hospitalModel.qrPayload(hospital);
+  if (!link) throw notFound('This hospital has no active QR code. Contact Gmedic support to issue a new one.');
+  return link;
+}
+
 exports.get = async (req, res) => {
   res.json({ hospital: await hospitalModel.toPublic(await load(req)) });
 };
@@ -43,7 +50,7 @@ exports.update = async (req, res) => {
 
 exports.qrSvg = async (req, res) => {
   const hospital = await load(req);
-  const svg = await QRCode.toString(await hospitalModel.qrPayload(hospital), {
+  const svg = await QRCode.toString(await activeLink(hospital), {
     type: 'svg',
     errorCorrectionLevel: 'H',
     margin: 1,
@@ -55,7 +62,7 @@ exports.qrSvg = async (req, res) => {
 // The branded "Skip the Queue" poster with this hospital's QR code.
 exports.qrPoster = async (req, res) => {
   const hospital = await load(req);
-  const svg = await buildPosterSvg(hospital);
+  const svg = await buildPosterSvg(hospital, await activeLink(hospital));
   res.type('image/svg+xml').set('Cache-Control', 'no-store');
   if (req.query.download === '1') res.attachment(`gmedic-qr-poster-${hospital.id.toLowerCase()}.svg`);
   res.send(svg);
@@ -64,7 +71,7 @@ exports.qrPoster = async (req, res) => {
 exports.qrPng = async (req, res) => {
   const hospital = await load(req);
   const size = Math.min(Math.max(Number(req.query.size) || 1024, 256), 2048);
-  const buffer = await QRCode.toBuffer(await hospitalModel.qrPayload(hospital), {
+  const buffer = await QRCode.toBuffer(await activeLink(hospital), {
     type: 'png',
     errorCorrectionLevel: 'H',
     margin: 2,

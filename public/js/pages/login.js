@@ -20,7 +20,7 @@
   const form = $('#login-form');
   $('[data-fill-demo]').addEventListener('click', () => {
     form.elements.identifier.value = 'riya.sharma@sunrisegeneral.in';
-    form.elements.password.value = 'Gmedic@123';
+    form.elements.password.value = 'Gmedic@9767';
     G.clearErrors(form);
     form.querySelector('[type="submit"]').focus();
   });

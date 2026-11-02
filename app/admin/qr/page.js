@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Icon from '../../../components/Icon';
+import useHospitalOptions from '../../../components/admin/useHospitalOptions';
+import usePermissions from '../../../components/admin/usePermissions';
 
 const toast = (msg, type = 'success') => { if (typeof window !== 'undefined' && window.G) window.G.toast(msg, type); };
 
@@ -19,7 +21,12 @@ async function api(url, opts = {}) {
 }
 
 function GenerateModal({ open, hospitals, onClose, onCreated }) {
-  const [form, setForm] = useState({ hospitalId: '', deskLabel: '' });
+  const [form, setForm] = useState({ hospitalId: '', deskLabel: '', branchId: '' });
+  const [branches, setBranches] = useState([]);
+  useEffect(() => {
+    if (!form.hospitalId) { setBranches([]); return; }
+    api(`/api/admin/hospitals/${form.hospitalId}/branches`).then((d) => setBranches(d.branches.filter((b) => b.status === 'ACTIVE'))).catch(() => setBranches([]));
+  }, [form.hospitalId]);
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
   if (!open) return null;
@@ -33,7 +40,7 @@ function GenerateModal({ open, hospitals, onClose, onCreated }) {
       toast(res.message, 'success');
       onCreated();
       onClose();
-      setForm({ hospitalId: '', deskLabel: '' });
+      setForm({ hospitalId: '', deskLabel: '', branchId: '' });
     } catch (err) {
       setErrors(err.fields || {});
       if (!err.fields) toast(err.message, 'error');
@@ -55,12 +62,22 @@ function GenerateModal({ open, hospitals, onClose, onCreated }) {
           <div className="modal__body">
             <div className={`field${errors.hospitalId ? ' has-error' : ''}`} style={{ marginBottom: 14 }}>
               <label>Hospital *</label>
-              <select className="select" value={form.hospitalId} onChange={(e) => setForm((f) => ({ ...f, hospitalId: e.target.value }))} required>
+              <select className="select" value={form.hospitalId} onChange={(e) => setForm((f) => ({ ...f, hospitalId: e.target.value, branchId: '' }))} required>
                 <option value="">Select hospital</option>
-                {hospitals.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
+                {hospitals.filter((h) => h.status === 'ACTIVE' || h.status === 'ONBOARDING').map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
               </select>
               {errors.hospitalId && <p className="field__error">{errors.hospitalId}</p>}
             </div>
+            {branches.length > 0 && (
+              <div className={`field${errors.branchId ? ' has-error' : ''}`} style={{ marginBottom: 14 }}>
+                <label>Branch</label>
+                <select className="select" value={form.branchId} onChange={(e) => setForm((f) => ({ ...f, branchId: e.target.value }))}>
+                  <option value="">Main hospital (no branch)</option>
+                  {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+                {errors.branchId && <p className="field__error">{errors.branchId}</p>}
+              </div>
+            )}
             <div className={`field${errors.deskLabel ? ' has-error' : ''}`}>
               <label>Desk / location *</label>
               <input className="input" value={form.deskLabel} onChange={(e) => setForm((f) => ({ ...f, deskLabel: e.target.value }))} placeholder="e.g. Front Desk, Main Entrance" required />
@@ -70,6 +87,73 @@ function GenerateModal({ open, hospitals, onClose, onCreated }) {
           <div className="modal__foot">
             <button type="button" className="btn btn--ghost" onClick={onClose}>Cancel</button>
             <button type="submit" className={`btn btn--primary${saving ? ' is-loading' : ''}`} disabled={saving}><Icon name="check" /><span>Generate</span></button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// Rename the desk or move it to another branch. The link and any printed poster stay valid; later scans
+// are counted against the new branch.
+function EditModal({ target, onClose, onDone }) {
+  const [form, setForm] = useState({ deskLabel: '', branchId: '' });
+  const [branches, setBranches] = useState([]);
+  const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    if (!target) return;
+    setForm({ deskLabel: target.deskLabel || '', branchId: target.branchId || '' });
+    setErrors({});
+    api(`/api/admin/hospitals/${target.hospitalId}/branches`).then((d) => setBranches(d.branches.filter((b) => b.status === 'ACTIVE' || b.id === target.branchId))).catch(() => setBranches([]));
+  }, [target]);
+  if (!target) return null;
+
+  async function submit(e) {
+    e.preventDefault();
+    setSaving(true);
+    setErrors({});
+    try {
+      const res = await api(`/api/admin/qr/${target.id}`, { method: 'PATCH', body: form });
+      toast(res.message, 'success');
+      onDone();
+      onClose();
+    } catch (err) {
+      setErrors(err.fields || {});
+      if (!err.fields) toast(err.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="modal" role="dialog" aria-modal="true" aria-labelledby="qr-edit-title">
+      <div className="modal__backdrop" onClick={onClose}></div>
+      <div className="modal__panel modal__panel--sm">
+        <form onSubmit={submit}>
+          <div className="modal__head">
+            <div className="modal__icon tone-teal"><Icon name="pencil" /></div>
+            <div><h2 id="qr-edit-title">Edit QR · {target.deskLabel}</h2><p>{target.hospitalName} · <span className="mono">{target.id}</span>. The QR link and printed poster don&apos;t change.</p></div>
+            <button type="button" className="icon-btn" onClick={onClose} aria-label="Close"><Icon name="x" /></button>
+          </div>
+          <div className="modal__body">
+            <div className={`field${errors.deskLabel ? ' has-error' : ''}`} style={{ marginBottom: 14 }}>
+              <label>Desk / location *</label>
+              <input className="input" value={form.deskLabel} maxLength={60} onChange={(e) => setForm((f) => ({ ...f, deskLabel: e.target.value }))} required />
+              {errors.deskLabel && <p className="field__error">{errors.deskLabel}</p>}
+            </div>
+            <div className={`field${errors.branchId ? ' has-error' : ''}`}>
+              <label>Branch</label>
+              <select className="select" value={form.branchId} onChange={(e) => setForm((f) => ({ ...f, branchId: e.target.value }))}>
+                <option value="">Main hospital (no branch)</option>
+                {branches.map((b) => <option key={b.id} value={b.id}>{b.name}{b.status !== 'ACTIVE' ? ' (deactivated)' : ''}</option>)}
+              </select>
+              {errors.branchId ? <p className="field__error">{errors.branchId}</p> : <p className="field__hint">Scans of this code are counted against the branch.</p>}
+            </div>
+          </div>
+          <div className="modal__foot">
+            <button type="button" className="btn btn--ghost" onClick={onClose}>Cancel</button>
+            <button type="submit" className={`btn btn--primary${saving ? ' is-loading' : ''}`} disabled={saving}><Icon name="check" /><span>Save</span></button>
           </div>
         </form>
       </div>
@@ -270,9 +354,10 @@ function ReissueModal({ target, onClose, onDone }) {
 }
 
 export default function QrPage() {
+  const can = usePermissions();
   const [items, setItems] = useState([]);
   const [activeCodes, setActiveCodes] = useState(null);
-  const [hospitals, setHospitals] = useState([]);
+  const hospitals = useHospitalOptions();
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [hospitalId, setHospitalId] = useState('');
@@ -282,6 +367,7 @@ export default function QrPage() {
   const [revokeTarget, setRevokeTarget] = useState(null);
   const [downloadTarget, setDownloadTarget] = useState(null);
   const [reissueTarget, setReissueTarget] = useState(null);
+  const [editTarget, setEditTarget] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -303,7 +389,6 @@ export default function QrPage() {
   }, [hospitalId, status, q]);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { api('/api/admin/hospitals?pageSize=100').then((d) => setHospitals(d.items)).catch(() => {}); }, []);
   useEffect(() => { api('/api/admin/qr/analytics').then(setAnalytics).catch(() => {}); }, []);
 
   // After a reissue, open the download dialog for the replacement code.
@@ -327,7 +412,7 @@ export default function QrPage() {
           <p>Generate, revoke and monitor QR codes hospitals display at the front desk.</p>
         </div>
         <div className="page-head__actions">
-          <button type="button" className="btn btn--primary" onClick={() => setShowGenerate(true)}><Icon name="plus" />Generate QR</button>
+          {can('qr.manage') && <button type="button" className="btn btn--primary" onClick={() => setShowGenerate(true)}><Icon name="plus" />Generate QR</button>}
         </div>
       </div>
 
@@ -388,14 +473,15 @@ export default function QrPage() {
                 <tr key={qr.id}>
                   <td data-label="QR" className="cell-primary mono">{qr.id}</td>
                   <td data-label="Hospital" className="text-muted">{qr.hospitalName}</td>
-                  <td data-label="Desk / location">{qr.deskLabel}</td>
+                  <td data-label="Desk / location">{qr.deskLabel}{qr.branchName && <span className="cell-sub">{qr.branchName}</span>}</td>
                   <td data-label="Scans">{qr.scanCount}</td>
                   <td data-label="Status"><span className={`badge badge--${qr.status === 'ACTIVE' ? 'confirmed' : 'cancelled'}`}>{qr.status}</span></td>
                   <td className="col-actions">
                     <div className="action-group">
                       {qr.status === 'ACTIVE' && <button type="button" className="action-btn" onClick={() => setDownloadTarget(qr)}><Icon name="download" />Download</button>}
-                      {qr.status === 'ACTIVE' && <button type="button" className="action-btn" onClick={() => setRevokeTarget(qr)}><Icon name="ban" />Revoke</button>}
-                      {qr.status === 'ACTIVE' && <button type="button" className="action-btn" onClick={() => setReissueTarget(qr)}><Icon name="refresh" />Reissue</button>}
+                      {can('qr.manage') && qr.status === 'ACTIVE' && <button type="button" className="action-btn" onClick={() => setEditTarget(qr)}><Icon name="pencil" />Edit</button>}
+                      {can('qr.manage') && qr.status === 'ACTIVE' && <button type="button" className="action-btn" onClick={() => setRevokeTarget(qr)}><Icon name="ban" />Revoke</button>}
+                      {can('qr.manage') && qr.status === 'ACTIVE' && <button type="button" className="action-btn" onClick={() => setReissueTarget(qr)}><Icon name="refresh" />Reissue</button>}
                     </div>
                   </td>
                 </tr>
@@ -407,6 +493,7 @@ export default function QrPage() {
       </article>
 
       <GenerateModal open={showGenerate} hospitals={hospitals} onClose={() => setShowGenerate(false)} onCreated={load} />
+      <EditModal target={editTarget} onClose={() => setEditTarget(null)} onDone={load} />
       <RevokeModal target={revokeTarget} onClose={() => setRevokeTarget(null)} onDone={load} />
       <DownloadModal target={downloadTarget} onClose={() => setDownloadTarget(null)} />
       <ReissueModal target={reissueTarget} onClose={() => setReissueTarget(null)} onDone={afterReissue} />

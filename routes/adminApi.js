@@ -11,7 +11,6 @@ const appointments = require('../controllers/admin/appointmentsController');
 const patients = require('../controllers/admin/patientsController');
 const payments = require('../controllers/admin/paymentsController');
 const refunds = require('../controllers/admin/refundsController');
-const settlements = require('../controllers/admin/settlementsController');
 const support = require('../controllers/admin/supportController');
 const disputes = require('../controllers/admin/disputesController');
 const communications = require('../controllers/admin/communicationsController');
@@ -30,7 +29,6 @@ router.post('/hospitals', requireAdminApi('hospitals.manage'), hospitals.create)
 router.get('/hospitals/:id', requireAdminApi('hospitals.view'), hospitals.get);
 router.put('/hospitals/:id', requireAdminApi('hospitals.manage'), hospitals.update);
 router.patch('/hospitals/:id/status', requireAdminApi('hospitals.manage'), hospitals.setStatus);
-router.put('/hospitals/:id/fees', requireAdminApi('hospitals.manage'), hospitals.setFees);
 router.get('/hospitals/:id/documents', requireAdminApi('kyc.view'), hospitals.listDocuments);
 router.post('/hospitals/:id/documents', requireAdminApi('kyc.manage'), upload.single('document'), hospitals.uploadDocument);
 router.patch('/hospitals/:id/documents/:docId', requireAdminApi('kyc.manage'), hospitals.reviewDocument);
@@ -69,9 +67,6 @@ router.get('/refunds', requireAdminApi('refunds.view'), refunds.list);
 router.post('/refunds', requireAdminApi('refunds.manage'), refunds.create);
 router.post('/refunds/:id/decision', requireAdminApi('refunds.approve'), refunds.decide);
 
-router.get('/settlements', requireAdminApi('settlements.view'), settlements.list);
-router.post('/settlements/generate', requireAdminApi('settlements.manage'), settlements.generate);
-router.patch('/settlements/:id', requireAdminApi('settlements.manage'), settlements.update);
 
 router.get('/support', requireAdminApi('support.view'), support.list);
 router.post('/support', requireAdminApi('support.manage'), support.create);

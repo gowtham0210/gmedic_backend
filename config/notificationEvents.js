@@ -37,6 +37,9 @@ const EVENTS = {
   DOCTOR_AVAILABILITY_UPDATED: { name: 'Doctor Availability Updated', audience: 'Receptionist', variables: ['doctor_name', 'availability', 'hospital_name'],
     sample: { doctor_name: 'Arun Srinivasan', availability: 'Unavailable', hospital_name: 'Sunrise General Hospital' },
     title: 'Doctor Availability Updated', body: 'Dr. {{doctor_name}} is now {{availability}}.' },
+  DOCTOR_LEAVE_CHANGED: { name: 'Doctor Leave Changed', audience: 'Receptionist', variables: ['doctor_name', 'leave_change', 'leave_dates', 'booked_summary'],
+    sample: { doctor_name: 'Arun Srinivasan', leave_change: 'leave added', leave_dates: '14 Oct – 16 Oct 2026', booked_summary: '3 booked appointments need to be moved or cancelled.' },
+    title: 'Doctor Leave', body: 'Dr. {{doctor_name}}: {{leave_change}} ({{leave_dates}}). {{booked_summary}}' },
   TOKEN_GENERATED: { name: 'Token Generated', audience: 'Doctor', variables: ['token_number', 'patient_name', 'doctor_name', 'appointment_id', 'appointment_date'],
     sample: { token_number: 'T004', patient_name: 'Rahul Kumar', doctor_name: 'Arun Srinivasan', appointment_id: 'APT10555', appointment_date: '2026-10-05' },
     title: 'Token Generated', body: 'Token {{token_number}} was issued to {{patient_name}} for appointment {{appointment_id}}.' },
@@ -53,6 +56,10 @@ const EVENTS = {
     sample: { support_ticket_id: 'SUP-1051', ticket_subject: 'QR code not scanning' },
     title: 'Support Ticket Resolved', body: 'Your ticket {{support_ticket_id}} ({{ticket_subject}}) has been resolved.' },
 };
+
+// Messages people rely on: turning one off means patients or staff stop being told something that matters.
+const CRITICAL = new Set(['APPOINTMENT_CONFIRMED', 'APPOINTMENT_CANCELLED', 'APPOINTMENT_RESCHEDULED', 'PAYMENT_SUCCESS', 'PAYMENT_FAILED', 'REFUND_REQUESTED', 'REFUND_APPROVED', 'REFUND_REJECTED']);
+const isCritical = (eventKey) => CRITICAL.has(eventKey);
 
 const CHANNELS = {
   IN_APP: { label: 'In-App', available: true },
@@ -80,4 +87,4 @@ function render(text, data) {
   return String(text || '').replace(VAR_RE, (_, name) => (data && data[name] != null && data[name] !== '' ? String(data[name]) : '—'));
 }
 
-module.exports = { EVENTS, CHANNELS, variablesIn, invalidVariables, render };
+module.exports = { EVENTS, CHANNELS, isCritical, variablesIn, invalidVariables, render };

@@ -41,13 +41,10 @@ export default function Sidebar() {
 
         <nav className="nav">{NAV.map(renderLink)}</nav>
 
-        <p className="sidebar__tagline">Gmedic Doctor Portal</p>
-
         <nav className="nav nav--footer" aria-label="Account">
           <Link href="/doctor/support" className={`nav__link${isActive('/doctor/support') ? ' is-active' : ''}`} aria-current={isActive('/doctor/support') ? 'page' : undefined}>
             <Icon name="life-buoy" /><span className="nav__text">Help &amp; Support</span>
           </Link>
-          <button type="button" className="nav__link" data-logout><Icon name="log-out" /><span className="nav__text">Logout</span></button>
         </nav>
 
         <div className="sidebar__resizer" role="separator" aria-orientation="vertical" aria-label="Resize sidebar (arrow keys to resize, Enter to collapse)" tabIndex={0} title="Drag to resize · double-click to collapse" data-sidebar-resizer></div>

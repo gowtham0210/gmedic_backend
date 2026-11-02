@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Icon from '../Icon';
-import AvailabilityToggle from './AvailabilityToggle';
+import DoctorAvatar from '../DoctorAvatar';
 import { formatDate } from '../../lib/format';
 
 const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
@@ -58,7 +58,7 @@ export default function DashboardView() {
 
       <article className="card" style={{ marginBottom: 24 }}>
         <div className="profile-hero">
-          <span className="avatar avatar--teal avatar--xl">{doctor.name.replace(/^Dr\.?\s+/i, '').split(/\s+/).slice(0, 2).map((p) => p[0].toUpperCase()).join('')}</span>
+          <DoctorAvatar name={doctor.name} photoUrl={doctor.photoUrl} size="xl" />
           <div className="profile-hero__main">
             <h2>{doctor.name}</h2>
             <div className="profile-hero__meta">
@@ -67,7 +67,6 @@ export default function DashboardView() {
               <span>{money(doctor.fee)} per visit</span>
             </div>
           </div>
-          <AvailabilityToggle initial={doctor.availability} />
         </div>
       </article>
 

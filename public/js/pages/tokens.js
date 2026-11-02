@@ -43,7 +43,11 @@
 
   function quickAction(t) {
     if (t.status === 'waiting') return `<button type="button" class="action-btn" data-quick="called" data-id="${esc(t.id)}">${icon('megaphone')}Call</button>`;
-    if (t.status === 'called') return `<button type="button" class="action-btn" data-quick="completed" data-id="${esc(t.id)}">${icon('check')}Complete</button>`;
+    // Completing needs the consultation step first (models/tokenModel.js TRANSITIONS).
+    if (t.status === 'called') return `<button type="button" class="action-btn" data-quick="in_consultation" data-id="${esc(t.id)}">${icon('stethoscope')}Send in</button>`;
+    if (t.status === 'in_consultation') return `<button type="button" class="action-btn" data-quick="completed" data-id="${esc(t.id)}">${icon('check')}Complete</button>`;
+    // A skipped patient who turns up later goes straight back to the doctor.
+    if (t.status === 'skipped') return `<button type="button" class="action-btn" data-quick="called" data-id="${esc(t.id)}">${icon('megaphone')}Recall</button>`;
     return '';
   }
 
@@ -59,13 +63,13 @@
       const filtered = state.q || state.doctorId || state.status;
       tbody.innerHTML = filtered
         ? G.emptyRow(7, 'No tokens found', 'Try another doctor, status or search.', 'ticket')
-        : G.emptyRow(7, 'No tokens for this date', 'Use “Generate Token” to issue a token for a patient’s appointment.', 'ticket');
+        : G.emptyRow(7, 'No tokens for this date', 'Tokens appear here as soon as appointments are booked for this date.', 'ticket');
       $('[data-token-count]').textContent = '';
       return;
     }
     tbody.innerHTML = tokens.map((t) => `
       <tr class="is-clickable${t.id === highlightId ? ' is-highlight' : ''}" data-token="${esc(t.id)}" tabindex="0">
-        <td data-label="Token"><span class="token-pill${pillClass(t)}">${esc(t.code)}</span></td>
+        <td data-label="Token"><span class="token-pill${pillClass(t)}">${esc(t.code)}</span>${t.emergency ? ` ${G.badge('emergency', 'Emergency')}` : ''}</td>
         <td class="cell-primary" data-label="Patient"><div class="person">${G.avatar(t.patientName, 'sm')}<span><span class="person__name">${esc(t.patientName)}</span><small>${esc(t.appointmentId)}</small></span></div></td>
         <td data-label="Doctor">${esc(t.doctorName)}</td>
         <td data-label="Specialist" class="text-muted">${esc(t.specialization)}</td>
@@ -148,6 +152,7 @@
   const statusSelect = $('[data-token-status]');
   const saveBtn = $('[data-token-save]');
   const cancelBtn = $('[data-token-cancel]');
+  const printBtn = $('[data-token-print]');
   let current = null;
   let cancelArmed = null;
 
@@ -163,7 +168,7 @@
         <span class="token-pill token-pill--lg${pillClass(t)}">${esc(t.code)}</span>
         <div>
           <div class="person__name" style="font-size:17px">${esc(t.patientName)}</div>
-          <div style="margin-top:6px">${G.badge(t.status)}</div>
+          <div style="margin-top:6px">${G.badge(t.status)}${t.emergency ? ` ${G.badge('emergency', 'Emergency')}` : ''}</div>
         </div>
       </div>
       <dl class="kv">
@@ -183,9 +188,14 @@
       </dl>
       ${cancelled ? `<p class="note">${icon('info')}<span>This token was cancelled. Generate a new token if the patient still needs to be seen.</span></p>` : ''}`;
     $('[data-token-sub]').textContent = `Token ${t.code} · ${G.relativeDay(t.date)}`;
-    statusSelect.value = cancelled ? 'waiting' : t.status;
-    statusSelect.disabled = cancelled;
+    // Current status plus the moves the server allows; cancelling has its own button.
+    const next = (t.nextStatuses || []).filter((s) => s !== 'cancelled');
+    statusSelect.innerHTML = [t.status, ...next].map((s) => `<option value="${esc(s)}">${esc(G.label(s))}</option>`).join('');
+    statusSelect.value = t.status;
+    statusSelect.disabled = cancelled || !next.length;
+    // A finished or cancelled token has nothing left to change; only a live one gets a slip.
     $('#token-detail-modal .modal__foot').hidden = cancelled;
+    printBtn.hidden = cancelled || t.status === 'completed';
     saveBtn.disabled = true;
     disarmCancel();
   }
@@ -247,6 +257,30 @@
   });
   $('#token-detail-modal').addEventListener('modal:close', disarmCancel);
 
+  // A token slip for the patient (new token, or a reprint when the slip is lost), in its own window
+  // so printing doesn't carry the portal around it.
+  function printSlip(t) {
+    const hospital = (window.GMEDIC && window.GMEDIC.hospital) || {};
+    const w = window.open('', '_blank', 'width=380,height=560');
+    if (!w) return G.toast('Allow pop-ups to print the token slip.', 'error');
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Token ${esc(t.code)}</title>
+      <style>body{font:14px/1.45 system-ui,sans-serif;margin:24px;color:#111;text-align:center}h1{font-size:16px;margin:0}h2{font-size:12px;font-weight:600;color:#555;margin:2px 0 16px;text-transform:uppercase;letter-spacing:.06em}
+      .code{font-size:56px;font-weight:800;letter-spacing:.04em;margin:4px 0 16px}table{width:100%;border-collapse:collapse;text-align:left}td{padding:5px 0;border-bottom:1px solid #ddd;vertical-align:top}td:first-child{color:#555;width:40%}
+      .foot{margin-top:18px;color:#777;font-size:12px}</style></head><body>
+      <h1>${esc(hospital.name || '')}</h1><h2>Queue token</h2>
+      <div class="code">${esc(t.code)}</div>
+      <table>
+        <tr><td>Patient</td><td>${esc(t.patientName)}</td></tr>
+        <tr><td>Doctor</td><td>${esc(t.doctorName)}${t.specialization ? ` (${esc(t.specialization)})` : ''}</td></tr>
+        <tr><td>Date</td><td>${esc(G.date(t.date, { weekday: true }))}</td></tr>
+        <tr><td>Appointment</td><td>${esc(G.time(t.time))} · ${esc(t.appointmentId)}</td></tr>
+      </table>
+      <p class="foot">Please wait until your token is called.${t.createdAt ? ` Issued ${esc(stamp(t.createdAt))}.` : ''}</p>
+      <script>window.onload=function(){window.print();}<\/script></body></html>`);
+    w.document.close();
+  }
+  printBtn.addEventListener('click', () => { if (current) printSlip(current); });
+
   /* ---------- Generate token ---------- */
   const genForm = $('#token-generate-form');
   const eligibleList = $('[data-eligible-list]');
@@ -264,7 +298,7 @@
     if (genForm.elements.q.value.trim()) qs.set('q', genForm.elements.q.value.trim());
     try {
       const data = await api(`/api/tokens/eligible?${qs}`, { signal: eligibleCtl.signal });
-      $('[data-next-code]').textContent = data.nextCode;
+      $('[data-next-code]').textContent = data.nextCode || '—';
       $('[data-generate-submit]').disabled = !data.canIssue || !data.items.length;
       if (!data.canIssue) {
         eligibleList.innerHTML = `<p class="note">${icon('info')}<span>Tokens can only be assigned for today or upcoming appointments.</span></p>`;
@@ -276,16 +310,25 @@
       }
       eligibleList.innerHTML = data.items.map((a, i) => `
         <label class="elig-row">
-          <input type="radio" name="appointmentId" value="${esc(a.appointmentId)}" ${i === 0 ? 'checked' : ''}>
+          <input type="radio" name="appointmentId" value="${esc(a.appointmentId)}" data-token-code="${esc(a.tokenCode || '')}" ${i === 0 ? 'checked' : ''}>
           <div class="person">${G.avatar(a.patientName, 'sm')}<span><span class="person__name">${esc(a.patientName)}</span><small>${esc(a.doctorName)} · ${esc(a.specialization)}</small></span></div>
           ${G.badge(a.status)}
-          <div class="elig-row__time">${G.time(a.time)}<small>${esc(a.appointmentId)}</small></div>
+          <div class="elig-row__time">${G.time(a.time)}<small>${a.tokenCode ? `${esc(a.tokenCode)} · ` : ''}${esc(a.appointmentId)}</small></div>
         </label>`).join('');
+      showPickedToken();
     } catch (err) {
       if (err.name === 'AbortError') return;
       eligibleList.innerHTML = `<div class="alert alert--error">${icon('alert')}<span>${esc(err.message)}</span></div>`;
     }
   }
+
+  // The token is the one the appointment was booked with (shared with the Gmedic app); an older
+  // appointment without one gets the doctor's next number when it is checked in.
+  function showPickedToken() {
+    const picked = eligibleList.querySelector('input[name="appointmentId"]:checked');
+    $('[data-next-code]').textContent = picked ? (picked.dataset.tokenCode || 'Next for doctor') : '—';
+  }
+  eligibleList.addEventListener('change', showPickedToken);
 
   function openGenerate() {
     const today = G.todayISO();
@@ -316,6 +359,8 @@
       highlightId = res.token.id;
       Object.assign(state, { date: res.token.date, status: '', q: '' });
       load();
+      // Straight to the new token, where the slip can be printed for the patient.
+      openDetail(res.token.id);
     } catch (err) {
       await loadEligible();
       G.showErrors(genForm, err.fields || {}, err.message);

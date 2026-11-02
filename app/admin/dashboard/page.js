@@ -30,11 +30,11 @@ const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 function AttentionBanner({ cards }) {
   const items = [
     { n: cards.suspendedHospitals, text: (n) => `${plural(n, 'hospital', 'hospitals')} suspended`, href: '/admin/hospitals?status=SUSPENDED', severity: 'red' },
-    { n: cards.failedPayments, text: (n) => `${plural(n, 'payment', 'payments')} failed`, href: '/admin/payments', severity: 'red' },
+    { n: cards.failedPayments, text: (n) => `${plural(n, 'payment', 'payments')} failed`, href: '/admin/payments?status=failed', severity: 'red' },
     { n: cards.pendingKyc, text: (n) => `${plural(n, 'hospital', 'hospitals')} pending KYC`, href: '/admin/hospitals?kycStatus=PENDING', severity: 'amber' },
     { n: cards.pendingRefunds, text: (n) => `${plural(n, 'refund requires', 'refunds require')} review`, href: '/admin/refunds?status=PENDING', severity: 'amber' },
-    { n: cards.pendingDoctorVerification, text: (n) => `${plural(n, 'doctor', 'doctors')} pending verification`, href: '/admin/doctors', severity: 'amber' },
-    { n: cards.openSupportTickets, text: (n) => plural(n, 'open support ticket', 'open support tickets'), href: '/admin/support', severity: 'amber' },
+    { n: cards.pendingDoctorVerification, text: (n) => `${plural(n, 'doctor', 'doctors')} pending verification`, href: '/admin/doctors?verificationStatus=PENDING', severity: 'amber' },
+    { n: cards.openSupportTickets, text: (n) => plural(n, 'open support ticket', 'open support tickets'), href: '/admin/support?status=OPEN', severity: 'amber' },
   ].filter((i) => i.n > 0);
   const total = items.reduce((t, i) => t + i.n, 0);
 
@@ -94,7 +94,7 @@ export default async function AdminDashboardPage() {
     );
   }
 
-  const { cards, bookingTrend, revenueTrend, recentHospitals, recentAppointments } = data;
+  const { cards, bookingTrend, revenueTrend, sourceTrend, recentHospitals, recentAppointments } = data;
 
   return (
     <>
@@ -119,14 +119,14 @@ export default async function AdminDashboardPage() {
         <h2 className="kpi-group__title" id="kpi-today">Today&apos;s activity</h2>
         <div className="stats stats--3">
           <StatCard icon="calendar" tone="tone-neutral" label="Appointments" value={cards.todayAppointments} href="/admin/appointments" />
-          <StatCard icon="wallet" tone="tone-neutral" label="Revenue" value={money(cards.todayRevenue)} href="/admin/payments" />
+          <StatCard icon="wallet" tone="tone-neutral" label="Booking tokens today" value={money(cards.todayRevenue)} href="/admin/payments" />
           <StatCard icon="user" tone="tone-neutral" label="Total Patients" value={cards.totalPatients} href="/admin/patients" />
         </div>
       </section>
 
       <AttentionBanner cards={cards} />
 
-      <DashboardCharts bookingTrend={bookingTrend} revenueTrend={revenueTrend} />
+      <DashboardCharts bookingTrend={bookingTrend} revenueTrend={revenueTrend} sourceTrend={sourceTrend} />
 
       <section className="dash-stack">
         <article className="card card--flush">

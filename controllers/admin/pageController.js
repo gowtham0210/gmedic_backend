@@ -15,7 +15,6 @@ exports.appointments = render('appointments', 'Appointments', 'appointments', ['
 exports.patients = render('patients', 'Patient Lookup', 'patients', ['admin/patients']);
 exports.payments = render('payments', 'Payments', 'payments', ['admin/payments']);
 exports.refunds = render('refunds', 'Refunds', 'refunds', ['admin/refunds']);
-exports.settlements = render('settlements', 'Settlements', 'settlements', ['admin/settlements']);
 exports.support = render('support', 'Support', 'support', ['admin/support']);
 exports.disputes = render('disputes', 'Disputes', 'disputes', ['admin/disputes']);
 exports.communications = render('communications', 'Communications', 'communications', ['admin/communications']);

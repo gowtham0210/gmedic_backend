@@ -14,8 +14,16 @@ async function unreadCount(userId) {
   return Number(row.n);
 }
 
+// Marks one of the user's own notifications read ("n-12" or 12). False when it isn't theirs.
+async function markRead(userId, id) {
+  const n = Number(String(id).replace(/^n-/, ''));
+  if (!Number.isInteger(n) || n <= 0) return false;
+  const res = await db.query('UPDATE notifications SET read_at = COALESCE(read_at, CURRENT_TIMESTAMP) WHERE id = ? AND user_id = ?', [n, userId]);
+  return res.affectedRows > 0;
+}
+
 async function markAllRead(userId) {
   await db.query('UPDATE notifications SET read_at = CURRENT_TIMESTAMP WHERE user_id = ? AND read_at IS NULL', [userId]);
 }
 
-module.exports = { listForUser, unreadCount, markAllRead };
+module.exports = { listForUser, unreadCount, markRead, markAllRead };

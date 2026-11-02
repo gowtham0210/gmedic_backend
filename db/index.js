@@ -63,7 +63,18 @@ async function one(sql, params = []) {
 // node:sqlite is synchronous and single-connection, so this just wraps
 // BEGIN IMMEDIATE (which takes the write lock up front, serialising writers)
 // / COMMIT / ROLLBACK around the callback.
-async function tx(fn) {
+//
+// The one connection holds one transaction at a time, and fn awaits between statements, so two
+// requests could otherwise reach BEGIN while the other's transaction is open ("cannot start a
+// transaction within a transaction"). Transactions therefore queue here and run one after another.
+let txQueue = Promise.resolve();
+function tx(fn) {
+  const run = txQueue.then(() => runTx(fn));
+  txQueue = run.catch(() => {});
+  return run;
+}
+
+async function runTx(fn) {
   database.exec('BEGIN IMMEDIATE');
   const conn = {
     query: async (sql, params = []) => run(sql, params),

@@ -2,23 +2,100 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Icon from '../../../components/Icon';
+import useHospitalOptions from '../../../components/admin/useHospitalOptions';
+import usePermissions from '../../../components/admin/usePermissions';
 import { formatDate, formatDateTime, formatTime, maskMobile } from '../../../lib/format';
 
 const STATUS_TONE = { confirmed: 'confirmed', pending: 'pending', completed: 'completed', cancelled: 'cancelled' };
 const toast = (msg, type = 'success') => { if (typeof window !== 'undefined' && window.G) window.G.toast(msg, type); };
 
-async function api(url) {
-  const res = await fetch(url, { credentials: 'same-origin' });
+async function api(url, opts = {}) {
+  const res = await fetch(url, {
+    method: opts.method || 'GET',
+    headers: opts.body ? { 'Content-Type': 'application/json' } : undefined,
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+    credentials: 'same-origin',
+  });
   const data = await res.json().catch(() => ({}));
   if (res.status === 401) { window.location.href = '/login?expired=1&role=SUPER_ADMIN'; throw new Error('Session expired'); }
-  if (!res.ok) throw new Error(data.error || 'Something went wrong.');
+  if (!res.ok) { const err = new Error(data.error || 'Something went wrong.'); err.fields = data.fields; throw err; }
   return data;
 }
 
 const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
 
-function DetailDrawer({ appointment: a, onClose }) {
+const HISTORY_LABEL = { confirmed: 'Confirmed', pending: 'Pending', completed: 'Completed', cancelled: 'Cancelled' };
+
+// Escalation for an appointment nobody else can handle (hospital offboarded, doctor rejected). Uses the same
+// cancel path as the patient app and the front desk, so the refund, queue token and notices are handled.
+function CancelModal({ appointment: a, onClose, onDone }) {
+  const [quote, setQuote] = useState(null);
+  const [reason, setReason] = useState('');
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    if (!a) return;
+    setQuote(null); setReason(''); setError('');
+    api(`/api/admin/appointments/${a.id}/cancel`).then((d) => setQuote(d.quote)).catch((err) => setError(err.message));
+  }, [a]);
   if (!a) return null;
+  const inr = (paise) => money((paise || 0) / 100);
+
+  async function submit(e) {
+    e.preventDefault();
+    setSaving(true);
+    setError('');
+    try {
+      const res = await api(`/api/admin/appointments/${a.id}/cancel`, { method: 'POST', body: { reason } });
+      toast(res.message, 'success');
+      onDone(res.appointment);
+      onClose();
+    } catch (err) {
+      setError((err.fields && err.fields.reason) || err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="modal" role="dialog" aria-modal="true" aria-labelledby="admin-cancel-title">
+      <div className="modal__backdrop" onClick={onClose}></div>
+      <div className="modal__panel modal__panel--sm">
+        <form onSubmit={submit}>
+          <div className="modal__head">
+            <div className="modal__icon tone-red"><Icon name="ban" /></div>
+            <div><h2 id="admin-cancel-title">Cancel appointment {a.id}?</h2><p>{a.patientName} · {a.hospitalName} · {formatDate(a.date)}, {formatTime(a.time)}. The patient, doctor and front desk are told.</p></div>
+          </div>
+          <div className="modal__body">
+            {!quote && !error && <div className="skeleton skeleton--row"></div>}
+            {quote && quote.blocker && <div className="alert alert--error"><Icon name="alert-triangle" /><span>{quote.blocker}</span></div>}
+            {quote && !quote.blocker && (
+              <>
+                <p className="note" style={{ marginTop: 0, marginBottom: 14 }}><Icon name="info" />
+                  <span>{quote.paidPaise > 0 ? `The ${inr(quote.paidPaise)} booking token is not refunded.` : 'Nothing was paid online.'}{quote.note && quote.note.includes('hospital returns') ? ' The consultation fee was paid at the hospital, so the hospital returns it.' : ''}</span>
+                </p>
+                <div className={`field${error ? ' has-error' : ''}`}>
+                  <label>Reason *</label>
+                  <textarea className="textarea" rows={3} maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Enter the reason for cancelling this appointment…" required />
+                  {error && <p className="field__error">{error}</p>}
+                </div>
+              </>
+            )}
+            {error && !quote && <div className="alert alert--error"><Icon name="alert-triangle" /><span>{error}</span></div>}
+          </div>
+          <div className="modal__foot">
+            <button type="button" className="btn btn--ghost" onClick={onClose}>Back</button>
+            <button type="submit" className={`btn btn--danger${saving ? ' is-loading' : ''}`} disabled={saving || !quote || !!quote.blocker}>Cancel Appointment</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function DetailDrawer({ appointment: a, onClose, canCancel, onCancel }) {
+  if (!a) return null;
+  const cancellable = canCancel && (a.status === 'confirmed' || a.status === 'pending');
   return (
     <div className="modal modal--drawer" role="dialog" aria-modal="true">
       <div className="modal__backdrop" onClick={onClose}></div>
@@ -29,7 +106,7 @@ function DetailDrawer({ appointment: a, onClose }) {
           <button type="button" className="icon-btn" onClick={onClose} aria-label="Close"><Icon name="x" /></button>
         </div>
         <div className="modal__body" style={{ flex: 1 }}>
-          <div className="alert alert--info" style={{ marginBottom: 16 }}><Icon name="info" /><span>View only. Appointments are changed by the patient, doctor or hospital — not by Super Admin.</span></div>
+          <div className="alert alert--info" style={{ marginBottom: 16 }}><Icon name="info" /><span>View only. Appointments are changed by the patient, doctor or hospital. Super Admin can only cancel one that nobody else can handle.</span></div>
           <dl className="kv">
             <div><dt>Patient</dt><dd>{a.patientName}</dd></div>
             <div><dt>Patient mobile</dt><dd className="mono">{maskMobile(a.patientMobile)}</dd></div>
@@ -48,20 +125,41 @@ function DetailDrawer({ appointment: a, onClose }) {
             <div><dt>Created</dt><dd>{formatDateTime(a.createdAt)}</dd></div>
             {a.cancelReason && <div className="kv--full"><dt>Cancellation reason</dt><dd>{a.cancelReason}</dd></div>}
           </dl>
+          {a.refunds && a.refunds.length > 0 && (
+            <>
+              <h3 style={{ fontSize: 14, margin: '20px 0 8px' }}>Refunds</h3>
+              <dl className="kv">
+                {a.refunds.map((r) => <div key={r.id}><dt>{r.id} · {formatDate(r.createdAt)}</dt><dd>{money(r.amount)} · {r.status.toLowerCase()}{r.reason ? ` · ${r.reason}` : ''}</dd></div>)}
+              </dl>
+            </>
+          )}
+          {a.history && a.history.length > 0 && (
+            <>
+              <h3 style={{ fontSize: 14, margin: '20px 0 8px' }}>Status history</h3>
+              <ol className="drawer__timeline">
+                {a.history.map((h, i) => <li key={i} className="is-done"><strong>{HISTORY_LABEL[h.to] || h.to}</strong>{h.from ? <span className="text-muted"> (from {HISTORY_LABEL[h.from] || h.from})</span> : null}<span className="cell-sub">{formatDateTime(h.at)}</span></li>)}
+              </ol>
+            </>
+          )}
         </div>
-        <div className="modal__foot"><button type="button" className="btn btn--ghost" onClick={onClose}>Close</button></div>
+        <div className="modal__foot">
+          {cancellable && <button type="button" className="btn btn--ghost" style={{ color: 'var(--red-600)', marginRight: 'auto' }} onClick={() => onCancel(a)}><Icon name="ban" />Cancel appointment</button>}
+          <button type="button" className="btn btn--ghost" onClick={onClose}>Close</button>
+        </div>
       </div>
     </div>
   );
 }
 
 export default function AppointmentsPage() {
+  const can = usePermissions();
+  const [cancelTarget, setCancelTarget] = useState(null);
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
   const [pages, setPages] = useState(1);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
-  const [hospitals, setHospitals] = useState([]);
+  const hospitals = useHospitalOptions();
   const [doctors, setDoctors] = useState([]);
   const [f, setF] = useState({ id: '', hospitalId: '', doctorId: '', status: '', paymentStatus: '', from: '', to: '' });
   const [selected, setSelected] = useState(null);
@@ -92,7 +190,6 @@ export default function AppointmentsPage() {
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
-    api('/api/admin/hospitals?pageSize=100').then((d) => setHospitals(d.items)).catch(() => {});
     api('/api/admin/doctors?pageSize=100').then((d) => setDoctors(d.items)).catch(() => {});
   }, []);
 
@@ -103,7 +200,7 @@ export default function AppointmentsPage() {
       <div className="page-head">
         <div>
           <h1>Appointments</h1>
-          <p>Monitor all appointments across the Gmedic platform. This section is view-only.</p>
+          <p>Monitor all appointments across the Gmedic platform. View-only, except cancelling an appointment nobody else can handle.</p>
         </div>
       </div>
 
@@ -177,7 +274,8 @@ export default function AppointmentsPage() {
         </div>
       </article>
 
-      <DetailDrawer appointment={selected} onClose={() => setSelected(null)} />
+      <DetailDrawer appointment={selected} onClose={() => setSelected(null)} canCancel={can('appointments.cancel')} onCancel={setCancelTarget} />
+      <CancelModal appointment={cancelTarget} onClose={() => setCancelTarget(null)} onDone={(fresh) => { load(); if (fresh) openDetail(fresh); }} />
     </>
   );
 }

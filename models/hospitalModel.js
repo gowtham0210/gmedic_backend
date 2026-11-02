@@ -14,7 +14,10 @@ function fromRow(row) {
     email: row.email,
     address: { line1: row.address_line1, city: row.city, state: row.state, pincode: row.pincode },
     status: row.status,
+    statusReason: row.status_reason || null,
     kycStatus: row.kyc_status,
+    logoUrl: row.logo_url || null,
+    about: row.about || null,
     createdAt: db.iso(row.created_at),
     updatedAt: db.iso(row.updated_at),
   };
@@ -38,11 +41,12 @@ function formatAddress(address = {}) {
   return [address.line1, cityLine, address.state].filter(Boolean).join(', ');
 }
 
-// The link encoded in the hospital's active QR code (scanned by the patient app).
+// The link encoded in the hospital's active QR code (scanned by the patient app), or null when
+// every code was revoked: a link with an empty key would print a code the app can't resolve.
 async function qrPayload(hospital) {
   const qr = await db.one("SELECT qr_key FROM qr_codes WHERE hospital_id = ? AND status = 'ACTIVE' ORDER BY created_at DESC LIMIT 1", [hospital.id]);
-  const key = qr ? qr.qr_key : '';
-  return `${config.qrBaseUrl}/${encodeURIComponent(hospital.id)}?k=${encodeURIComponent(key)}`;
+  if (!qr || !qr.qr_key) return null;
+  return `${config.qrBaseUrl}/${encodeURIComponent(hospital.id)}?k=${encodeURIComponent(qr.qr_key)}`;
 }
 
 async function toPublic(hospital) {
@@ -54,6 +58,10 @@ async function toPublic(hospital) {
     email: hospital.email,
     address: hospital.address,
     addressText: formatAddress(hospital.address),
+    status: hospital.status,
+    statusReason: hospital.statusReason,
+    logoUrl: hospital.logoUrl,
+    about: hospital.about,
     qrLink: await qrPayload(hospital),
     updatedAt: hospital.updatedAt,
   };

@@ -1,14 +1,18 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Icon from '../Icon';
 import { formatDateTime } from '../../lib/format';
 
 const toast = (msg, type = 'success') => { if (typeof window !== 'undefined' && window.G) window.G.toast(msg, type); };
 
 export default function AvailabilityStatus({ initial, updatedAt }) {
+  const router = useRouter();
   const [availability, setAvailability] = useState(initial);
   const [saving, setSaving] = useState(false);
+  // Follow server updates, e.g. after the top-bar switch changes the status.
+  useEffect(() => { setAvailability(initial); }, [initial]);
   // Formatted client-side only (after mount): the time depends on the viewer's
   // time zone, which can differ between the Node server and the browser, so
   // rendering it during SSR could cause a hydration mismatch.
@@ -29,6 +33,7 @@ export default function AvailabilityStatus({ initial, updatedAt }) {
       if (!res.ok) throw new Error(data.error || 'Could not update availability.');
       setAvailability(next);
       toast(data.message, 'success');
+      router.refresh(); // the top bar's switch takes the server-rendered status
     } catch (err) {
       toast(err.message, 'error');
     } finally {
@@ -56,7 +61,7 @@ export default function AvailabilityStatus({ initial, updatedAt }) {
         </button>
       </div>
       <p className="text-muted" style={{ fontSize: 12.5, marginTop: 20, textAlign: 'center' }}>
-        Marking yourself Unavailable hides you from new bookings in the patient app but does not cancel existing appointments.
+        Unavailable applies to today only: patients and the front desk can&apos;t book you for the rest of today, and it resets tomorrow. Existing appointments are not cancelled. For several days away, add a leave under Schedule.
       </p>
     </article>
   );

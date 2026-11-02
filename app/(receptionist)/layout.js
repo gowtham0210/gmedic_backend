@@ -1,4 +1,5 @@
 import Script from 'next/script';
+import { scriptJson } from '../../lib/scriptJson';
 import { requireReceptionist } from '../../lib/rbac';
 import userModel from '../../models/userModel';
 import hospitalModel from '../../models/hospitalModel';
@@ -28,7 +29,7 @@ export default async function ReceptionistLayout({ children }) {
 
       <script
         // eslint-disable-next-line react/no-danger
-        dangerouslySetInnerHTML={{ __html: `window.GMEDIC = ${JSON.stringify({ user: publicUser, hospital })};` }}
+        dangerouslySetInnerHTML={{ __html: `window.GMEDIC = ${scriptJson({ user: publicUser, hospital })};` }}
       />
       <Script src="/js/layout.js" strategy="afterInteractive" />
     </div>

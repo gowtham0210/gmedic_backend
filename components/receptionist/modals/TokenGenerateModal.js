@@ -9,8 +9,8 @@ export default function TokenGenerateModal() {
           <div className="modal__head">
             <div className="modal__icon tone-teal"><Icon name="ticket" /></div>
             <div>
-              <h2 id="tg-title">Generate Token</h2>
-              <p>Assign the next queue token to a patient&apos;s appointment.</p>
+              <h2 id="tg-title">Re-issue Token</h2>
+              <p>Tokens are issued automatically when an appointment is booked. Use this only when a patient&apos;s token was cancelled: they get their own slot number back.</p>
             </div>
             <button type="button" className="icon-btn" data-modal-close aria-label="Close"><Icon name="x" /></button>
           </div>
@@ -42,10 +42,10 @@ export default function TokenGenerateModal() {
           </div>
 
           <div className="modal__foot modal__foot--split">
-            <span className="token-preview">Next token: <span className="token-pill" data-next-code>–</span></span>
+            <span className="token-preview">Token: <span className="token-pill" data-next-code>–</span></span>
             <div style={{ display: 'flex', gap: 10 }}>
               <button type="button" className="btn btn--ghost" data-modal-close>Cancel</button>
-              <button type="submit" className="btn btn--primary" data-generate-submit><Icon name="check" /><span>Assign Token</span></button>
+              <button type="submit" className="btn btn--primary" data-generate-submit><Icon name="check" /><span>Re-issue Token</span></button>
             </div>
           </div>
         </form>

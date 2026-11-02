@@ -2,16 +2,20 @@ const doctorModel = require('../models/doctorModel');
 const appointmentModel = require('../models/appointmentModel');
 const hospitalModel = require('../models/hospitalModel');
 const tokenModel = require('../models/tokenModel');
-const { todayISO, toISODate, addDays, startOfToday, nowTimeHHmm } = require('../utils/dates');
+const db = require('../db');
+const { toISODate, addDays, parseISODate, timeInZone } = require('../utils/dates');
 
 const pct = (part, whole) => (whole ? Math.round((part / whole) * 100) : 0);
 
 exports.summary = async (req, res) => {
   const hid = req.hospitalId;
-  const today = todayISO();
-  const yesterday = toISODate(addDays(startOfToday(), -1));
+  // The hospital's today (not the server's) and the time there now.
+  const tz = ((await db.one('SELECT timezone FROM hospitals WHERE id = ?', [hid])) || {}).timezone;
+  const today = await appointmentModel.hospitalToday(hid);
+  const yesterday = toISODate(addDays(parseISODate(today), -1));
 
-  const doctors = await doctorModel.all(hid);
+  // Deactivated doctors (left the hospital) aren't counted as present or absent.
+  const doctors = (await doctorModel.all(hid)).filter((d) => d.status !== 'INACTIVE');
   const present = doctors.filter((d) => d.availability === 'present').length;
   const absent = doctors.length - present;
   const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
@@ -34,7 +38,7 @@ exports.summary = async (req, res) => {
   }
 
   // Show today's schedule from the next upcoming appointment onwards.
-  const now = nowTimeHHmm();
+  const now = timeInZone(tz);
   const lastWindow = Math.max(0, todays.length - 6);
   const next = todays.findIndex((a) => a.time >= now && a.status !== 'cancelled');
   const start = next === -1 ? lastWindow : Math.min(next, lastWindow);

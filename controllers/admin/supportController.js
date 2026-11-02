@@ -78,6 +78,7 @@ exports.reply = async (req, res) => {
 
 exports.assign = async (req, res) => {
   const ticket = await load(req.params.id);
+  if (ticket.status === 'CLOSED') throw badRequest('This ticket is closed, so it can\'t be reassigned.');
   const { assignedTo } = req.body || {};
   let assignee = null;
   if (assignedTo) {
@@ -116,4 +117,23 @@ exports.setStatus = async (req, res) => {
   const data = { support_ticket_id: ticket.ticketNumber, ticket_subject: ticket.subject, ticket_status: STATUS_LABEL[status], update_summary: `Status changed to ${STATUS_LABEL[status]}` };
   await notifications.trigger(status === 'RESOLVED' ? 'SUPPORT_TICKET_RESOLVED' : 'SUPPORT_TICKET_UPDATED', ticket.createdBy, data, { link: ownerLink(ticket) });
   res.json({ ok: true, message: `Ticket ${STATUS_LABEL[status].toLowerCase()}.` });
+};
+
+// Staff-only notes on a ticket (table internal_notes). They live apart from the conversation, which is the
+// only thing the doctor or receptionist who raised the ticket can read.
+// GET /api/admin/support/:id/notes
+exports.listNotes = async (req, res) => {
+  const ticket = await load(req.params.id);
+  const rows = await db.query("SELECT * FROM internal_notes WHERE entity_type = 'TICKET' AND entity_id = ? ORDER BY id", [ticket.id]);
+  res.json({ notes: rows.map((n) => ({ id: n.id, userName: n.user_name, note: n.note, createdAt: db.iso(n.created_at) })) });
+};
+
+// POST /api/admin/support/:id/notes { note }
+exports.addNote = async (req, res) => {
+  const ticket = await load(req.params.id);
+  const note = String((req.body && req.body.note) || '').trim();
+  if (note.length < 2 || note.length > 1000) throw badRequest('Write an internal note (2 to 1000 characters).', { note: 'Enter a note.' });
+  await db.query("INSERT INTO internal_notes (entity_type, entity_id, user_id, user_name, note) VALUES ('TICKET', ?, ?, ?, ?)", [ticket.id, req.user.id, req.user.name, note]);
+  await auditLog.record({ req, action: 'SUPPORT_NOTE_ADDED', entityType: 'SUPPORT_TICKET', entityId: ticket.id, summary: `Internal note added to ${ticket.ticketNumber}` });
+  res.status(201).json({ ok: true, message: 'Note added.' });
 };

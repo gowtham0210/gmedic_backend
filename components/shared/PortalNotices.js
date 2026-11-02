@@ -1,9 +1,12 @@
-import Link from 'next/link';
 import db from '../../db';
 import Icon from '../Icon';
+import DismissibleNotice from './DismissibleNotice';
 
 // Published announcements and active banners (managed under Super Admin ->
 // Communications), shown at the top of the Doctor and Receptionist portals.
+// A banner's button may only go inside the portal ("/doctor/schedule") or to a full https:// address.
+const safeLink = (url) => (/^\/(?![/\\])[^\s\\]*$/.test(url || '') || /^https:\/\//i.test(url || ''));
+
 export default async function PortalNotices({ hospitalId }) {
   const [announcements, banners] = await Promise.all([
     db.query(
@@ -26,17 +29,12 @@ export default async function PortalNotices({ hospitalId }) {
         <div key={b.id} className="alert alert--info" style={{ alignItems: 'center' }}>
           <Icon name="sparkles" />
           <span style={{ flex: 1 }}><strong>{b.title}</strong> — {b.message}</span>
-          {b.cta_label && b.cta_url && (/^https?:/.test(b.cta_url)
+          {b.cta_label && b.cta_url && safeLink(b.cta_url) && (/^https?:/.test(b.cta_url)
             ? <a className="btn btn--outline btn--sm" href={b.cta_url} target="_blank" rel="noopener noreferrer">{b.cta_label}</a>
-            : <Link className="btn btn--outline btn--sm" href={b.cta_url}>{b.cta_label}</Link>)}
+            : <a className="btn btn--outline btn--sm" href={b.cta_url}>{b.cta_label}</a>)}
         </div>
       ))}
-      {announcements.map((a) => (
-        <div key={a.id} className="alert alert--info" style={{ background: 'var(--amber-50)', borderColor: 'var(--amber-700)', color: 'var(--amber-700)' }}>
-          <Icon name="megaphone" />
-          <span><strong>{a.title}</strong> — {a.message}</span>
-        </div>
-      ))}
+      {announcements.map((a) => <DismissibleNotice key={a.id} id={a.id} title={a.title} message={a.message} />)}
     </div>
   );
 }

@@ -3,7 +3,8 @@ const doctorModel = require('../models/doctorModel');
 const appointmentModel = require('../models/appointmentModel');
 const { validate } = require('../utils/validate');
 const { badRequest, notFound } = require('../utils/http');
-const { todayISO } = require('../utils/dates');
+const db = require('../db');
+const auditLog = require('../services/auditLog');
 
 const schema = () => ({
   name: {
@@ -20,7 +21,7 @@ const schema = () => ({
 });
 
 async function withStats(hospitalId, doctor) {
-  const today = todayISO();
+  const today = await appointmentModel.hospitalToday(hospitalId);
   const mine = await appointmentModel.query(hospitalId, { doctorId: doctor.id });
   const todays = mine.filter((a) => a.date === today && a.status !== 'cancelled');
   return {
@@ -36,8 +37,8 @@ async function withStats(hospitalId, doctor) {
 exports.list = async (req, res) => {
   const { q, specialization, availability } = req.query;
   const doctors = await doctorModel.list(req.hospitalId, { q, specialization, availability });
-  const everyone = await doctorModel.all(req.hospitalId);
-  const today = todayISO();
+  const everyone = (await doctorModel.all(req.hospitalId)).filter((d) => d.status !== 'INACTIVE');
+  const today = await appointmentModel.hospitalToday(req.hospitalId);
   const counts = new Map();
   const todaysAppts = await appointmentModel.query(req.hospitalId, { date: today });
   for (const a of todaysAppts) {
@@ -57,10 +58,19 @@ exports.list = async (req, res) => {
 exports.get = async (req, res) => {
   const doctor = await doctorModel.findById(req.hospitalId, req.params.id);
   if (!doctor) throw notFound('Doctor not found.');
-  const today = todayISO();
+  const today = await appointmentModel.hospitalToday(req.hospitalId);
   const rows = await appointmentModel.query(req.hospitalId, { doctorId: doctor.id, from: today });
   const schedule = appointmentModel.sortRows(rows, 'date_asc').slice(0, 8);
-  res.json({ doctor: await withStats(req.hospitalId, doctor), schedule });
+  // Leaves still to come (or running), with how many appointments are booked inside each, so the desk can see them.
+  const leaveRows = await db.query('SELECT id, start_date, end_date, reason FROM doctor_leaves WHERE doctor_id = ? AND cancelled_at IS NULL AND end_date >= ? ORDER BY start_date', [doctor.id, today]);
+  const leaves = [];
+  for (const l of leaveRows) {
+    const booked = await db.one("SELECT COUNT(*) AS n FROM appointments WHERE doctor_id = ? AND appt_date BETWEEN ? AND ? AND status IN ('confirmed', 'pending')", [doctor.id, l.start_date, l.end_date]);
+    leaves.push({ id: l.id, startDate: l.start_date, endDate: l.end_date, reason: l.reason, bookedAppointments: Number(booked.n) });
+  }
+  const login = await doctorLogin.of(doctor.id);
+  const portalLogin = login && { status: login.status, email: login.email, lastLoginAt: login.lastLoginAt, mustChangePassword: login.mustChangePassword };
+  res.json({ doctor: { ...(await withStats(req.hospitalId, doctor)), portalLogin }, schedule, leaves });
 };
 
 exports.create = async (req, res) => {
@@ -102,3 +112,69 @@ exports.setAvailabilityBulk = async (req, res) => {
     updated: updated.map((d) => d.id),
   });
 };
+
+// ---- Deactivate / reactivate (doctor left the hospital) ------------------------------------
+const doctorStatus = require('../services/doctorStatus');
+
+// GET /api/doctors/:id/status — upcoming appointments that deactivating would leave behind.
+exports.statusImpact = async (req, res) => {
+  const doctor = await doctorModel.findById(req.hospitalId, req.params.id);
+  if (!doctor) throw notFound('Doctor not found.');
+  res.json(await doctorStatus.impact(doctor.id));
+};
+
+// PATCH /api/doctors/:id/status { status, reason }
+exports.setStatus = async (req, res) => {
+  const doctor = await doctorModel.findById(req.hospitalId, req.params.id);
+  if (!doctor) throw notFound('Doctor not found.');
+  const { changed, impact } = await doctorStatus.setStatus(req, doctor, req.body && req.body.status, req.body && req.body.reason);
+  const after = await doctorModel.findById(req.hospitalId, doctor.id);
+  const message = !changed ? 'No changes to save.' : after.status === 'INACTIVE'
+    ? `${after.name} is deactivated and no longer bookable.${impact.upcomingAppointments ? ` ${impact.upcomingAppointments} upcoming appointment(s) still need to be moved or cancelled.` : ''}`
+    : `${after.name} is active again.`;
+  res.json({ ok: true, message, doctor: await withStats(req.hospitalId, after) });
+};
+
+// ---- Doctor portal login (the front desk invites its own doctors; see services/doctorLogin) ----
+const doctorLogin = require('../services/doctorLogin');
+
+// POST /api/doctors/:id/login { email, phone? } -> credentials { login, tempPassword } shown once
+exports.inviteLogin = async (req, res) => {
+  const doctor = await doctorModel.findById(req.hospitalId, req.params.id);
+  if (!doctor) throw notFound('Doctor not found.');
+  const credentials = await doctorLogin.invite(req, { ...doctor, hospitalId: req.hospitalId }, req.body);
+  res.status(201).json({ ok: true, message: `${doctor.name} can now sign in to the doctor portal.`, credentials });
+};
+
+// POST /api/doctors/:id/login/reset-password: re-issues an invitation the doctor has not used yet
+// (403 once they have signed in; Super Admin resets those).
+exports.resetLoginPassword = async (req, res) => {
+  const doctor = await doctorModel.findById(req.hospitalId, req.params.id);
+  if (!doctor) throw notFound('Doctor not found.');
+  const credentials = await doctorLogin.resetPassword(req, doctor, { unusedOnly: true });
+  res.json({ ok: true, message: `New invitation password issued for ${doctor.name}.`, credentials });
+};
+
+// ---- Working hours (the front desk sets up a doctor's weekly hours: a new doctor can't take bookings without them) --
+const scheduleController = require('./doctor/scheduleController');
+
+// Runs a doctor-portal schedule handler for one of this hospital's doctors, then records who changed the hours.
+// (The doctor portal's own schedule screen uses the same handlers.)
+function forDoctor(handler, { block = false, audit = null } = {}) {
+  return async (req, res) => {
+    const doctor = await doctorModel.findById(req.hospitalId, req.params.id);
+    if (!doctor) throw notFound('Doctor not found.');
+    const derived = Object.create(req);
+    derived.doctorId = doctor.id;
+    derived.params = block ? { id: req.params.blockId } : req.params;
+    await handler(derived, res);
+    if (audit) await auditLog.record({ req, action: 'DOCTOR_SCHEDULE_CHANGED', entityType: 'DOCTOR', entityId: doctor.id, summary: `${audit} for ${doctor.name}` });
+  };
+}
+
+// GET /api/doctors/:id/schedule, POST (add hours), PATCH /api/doctors/:id/schedule/:blockId { capacityPerSlot }, DELETE
+exports.scheduleList = forDoctor(scheduleController.list);
+exports.scheduleCreate = forDoctor(scheduleController.create, { audit: 'Added working hours' });
+exports.scheduleUpdate = forDoctor(scheduleController.update, { block: true, audit: 'Changed patients per slot' });
+exports.scheduleRemove = forDoctor(scheduleController.remove, { block: true, audit: 'Removed working hours' });
+exports.scheduleImpact = forDoctor(scheduleController.impact, { block: true });

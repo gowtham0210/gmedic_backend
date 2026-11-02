@@ -2,6 +2,7 @@
 
 const db = require('../../db');
 const config = require('../../config');
+const bookingCore = require('../bookingCore');
 const {
   fail, notFound, policy, RULES, nowIn, isoAt, instant, addDays, weekdayOf, minutesOf, hhmm, isDate,
   hospitalJson, feeBreakdown, hoursOf, GENDER_OUT, paise,
@@ -118,12 +119,12 @@ async function hospital(me, id) {
 // ------------------------------------------------------------------ departments and doctors
 async function departments(me, hospitalId) {
   await requireLinked(me, hospitalId);
-  const rows = await db.query('SELECT * FROM departments WHERE hospital_id = ? ORDER BY name', [hospitalId]);
+  const rows = await db.query('SELECT * FROM departments WHERE hospital_id = ? AND archived_at IS NULL ORDER BY name', [hospitalId]);
   return rows.map((d) => ({ id: String(d.id), hospitalId: d.hospital_id, name: d.name, icon: d.icon || 'stethoscope' }));
 }
 
 async function leaveOn(doctor, date) {
-  return db.one('SELECT reason FROM doctor_leaves WHERE doctor_id = ? AND start_date <= ? AND end_date >= ? ORDER BY id LIMIT 1', [doctor.id, date, date]);
+  return db.one('SELECT reason FROM doctor_leaves WHERE doctor_id = ? AND cancelled_at IS NULL AND start_date <= ? AND end_date >= ? ORDER BY id LIMIT 1', [doctor.id, date, date]);
 }
 
 async function doctorJson(d, hospital) {
@@ -136,7 +137,7 @@ async function doctorJson(d, hospital) {
     ),
     leaveOn(d, today),
   ]);
-  const away = d.availability === 'absent' || !!leave;
+  const away = bookingCore.absentOn(d, today, hospital.timezone) || !!leave;
   return {
     id: d.id,
     hospitalId: d.hospital_id,
@@ -149,24 +150,25 @@ async function doctorJson(d, hospital) {
     feePaise: paise(d.fee),
     gender: GENDER_OUT[d.gender] || 'other',
     about: d.bio || '',
+    photoUrl: d.photo_url || null,
     schedule: sessions.map((s) => ({
       weekday: s.day_of_week === 0 ? 7 : s.day_of_week, startMinute: minutesOf(s.start_time), endMinute: minutesOf(s.end_time),
       slotMinutes: s.slot_minutes, perSlot: s.capacity_per_slot,
     })),
     onLeave: away,
-    leaveNote: leave ? leave.reason || 'On leave' : d.availability === 'absent' ? 'Not available right now' : null,
+    leaveNote: leave ? leave.reason || 'On leave' : away ? 'Not available today' : null,
   };
 }
 
 async function bookableDoctor(id) {
-  const d = await db.one("SELECT * FROM doctors WHERE id = ? AND verification_status = 'VERIFIED'", [id]);
+  const d = await db.one(`SELECT d.* FROM doctors d WHERE d.id = ? AND ${bookingCore.BOOKABLE_DOCTOR}`, [id]);
   if (!d) throw notFound();
   return { d, h: await db.one('SELECT * FROM hospitals WHERE id = ?', [d.hospital_id]) };
 }
 
 async function doctors(me, hospitalId) {
   const h = await requireLinked(me, hospitalId);
-  const rows = await db.query("SELECT * FROM doctors WHERE hospital_id = ? AND verification_status = 'VERIFIED' ORDER BY name", [hospitalId]);
+  const rows = await db.query(`SELECT d.* FROM doctors d WHERE d.hospital_id = ? AND ${bookingCore.BOOKABLE_DOCTOR} ORDER BY d.name`, [hospitalId]);
   const out = [];
   for (const d of rows) {
     const next = await nextAvailableSlot(me, d, h);
@@ -190,24 +192,21 @@ async function buildSlots(me, d, h, date) {
   const now = nowIn(tz);
   const rules = await hoursOf(h.id);
   const windowEnd = addDays(now.date, rules.bookingWindowDays);
-  const away = d.availability === 'absent' || !!(await leaveOn(d, date));
+  const away = bookingCore.absentOn(d, date, tz) || !!(await leaveOn(d, date));
   const sessions = await db.query(
     `SELECT * FROM doctor_schedules WHERE doctor_id = ? AND day_of_week = ? AND (effective_from IS NULL OR effective_from <= ?) AND (effective_to IS NULL OR effective_to >= ?) ORDER BY start_time`,
     [d.id, weekdayOf(date), date, date]
   );
   if (!sessions.length) return [];
-  const booked = new Map((await db.query("SELECT appt_time, COUNT(*) AS n FROM appointments WHERE doctor_id = ? AND appt_date = ? AND status <> 'cancelled' GROUP BY appt_time", [d.id, date])).map((r) => [r.appt_time, Number(r.n)]));
-  const held = new Map((await db.query(
-    `SELECT s.appt_time, COUNT(*) AS n FROM slot_holds s LEFT JOIN patients p ON p.id = s.patient_id
-     WHERE s.doctor_id = ? AND s.appt_date = ? AND s.status = 'HELD' AND s.held_until > datetime('now') AND COALESCE(p.account_user_id, '') <> ? GROUP BY s.appt_time`,
-    [d.id, date, me ? me.user.id : '']
-  )).map((r) => [r.appt_time, Number(r.n)]));
+  // Head counts come from the shared booking core, so the app sees exactly the seats left for
+  // online bookings: the slot's capacity less the seats the receptionist holds back for walk-ins.
+  const load = await bookingCore.slotLoad(db, d.id, date, { ignoreHoldsOfUser: me ? me.user.id : '' });
 
   const out = [];
   for (const s of sessions) {
     for (let m = minutesOf(s.start_time); m + s.slot_minutes <= minutesOf(s.end_time); m += s.slot_minutes) {
       const time = hhmm(m);
-      const left = s.capacity_per_slot - (booked.get(time) || 0) - (held.get(time) || 0);
+      const left = bookingCore.seatsFor(s, load.get(time)).seatsLeft.online;
       let status = 'available';
       if (away || date < now.date || date >= windowEnd || instant(date, time, tz) < Date.now() + RULES.bookingCutoffMinutes * 60000) status = 'unavailable';
       else if (left <= 0) status = 'full';

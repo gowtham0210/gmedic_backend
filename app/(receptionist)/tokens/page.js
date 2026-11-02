@@ -15,10 +15,10 @@ export default async function TokensPage() {
         <div>
           <nav className="breadcrumb" aria-label="Breadcrumb"><a href="/dashboard">Dashboard</a><Icon name="chevron-right" /><span>Tokens</span></nav>
           <h1>Token Management</h1>
-          <p>Issue queue tokens for patient visits and track their status. <span data-date-label></span></p>
+          <p>Every booking gets its queue token automatically, numbered in slot order: each slot owns as many numbers as it has seats (with 6 per slot, the first slot is T001–T006 and the next T007–T012). <span data-date-label></span></p>
         </div>
         <div className="page-head__actions">
-          <button type="button" className="btn btn--primary" data-open-generate><Icon name="plus" />Generate Token</button>
+          <button type="button" className="btn btn--ghost" data-open-generate title="For an appointment whose token was cancelled"><Icon name="refresh" />Re-issue Token</button>
         </div>
       </div>
 
@@ -49,7 +49,9 @@ export default async function TokensPage() {
               <option value="">All</option>
               <option value="waiting">Waiting</option>
               <option value="called">Called</option>
+              <option value="in_consultation">In Consultation</option>
               <option value="completed">Completed</option>
+              <option value="skipped">Skipped</option>
               <option value="cancelled">Cancelled</option>
             </select>
           </div>
@@ -60,7 +62,9 @@ export default async function TokensPage() {
           <button type="button" role="tab" className="tab is-active" data-status="">All <span className="tab__count" data-count="total">–</span></button>
           <button type="button" role="tab" className="tab" data-status="waiting">Waiting <span className="tab__count" data-count="waiting">–</span></button>
           <button type="button" role="tab" className="tab" data-status="called">Called <span className="tab__count" data-count="called">–</span></button>
+          <button type="button" role="tab" className="tab" data-status="in_consultation">In Consultation <span className="tab__count" data-count="in_consultation">–</span></button>
           <button type="button" role="tab" className="tab" data-status="completed">Completed <span className="tab__count" data-count="completed">–</span></button>
+          <button type="button" role="tab" className="tab" data-status="skipped">Skipped <span className="tab__count" data-count="skipped">–</span></button>
           <button type="button" role="tab" className="tab" data-status="cancelled">Cancelled <span className="tab__count" data-count="cancelled">–</span></button>
         </div>
 

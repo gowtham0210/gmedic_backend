@@ -6,10 +6,10 @@ const db = require('../db');
 
 const GROUPS = [
   ['Hospitals, staff and QR', ['hospitals', 'hospital_rate_history', 'hospital_policies', 'hospital_branches', 'hospital_documents', 'feature_flags', 'departments', 'users', 'doctors', 'doctor_languages', 'doctor_schedules', 'doctor_leaves', 'qr_codes', 'qr_scans']],
-  ['Patients and appointments', ['patients', 'patient_hospital_links', 'appointments', 'appointment_status_history', 'slot_holds', 'tokens']],
+  ['Patients and appointments', ['patients', 'patient_hospital_links', 'otp_codes', 'appointments', 'appointment_status_history', 'consultation_notes', 'slot_holds', 'tokens', 'token_counters']],
   ['Payments and settlements', ['payments', 'payment_webhooks', 'refunds', 'disputes', 'settlements', 'settlement_items', 'settlement_adjustments']],
   ['Support', ['support_tickets', 'support_messages']],
-  ['Communications and compliance', ['notification_templates', 'notifications', 'notification_logs', 'device_tokens', 'consent_records', 'announcements', 'announcement_hospitals', 'banners']],
+  ['Communications and compliance', ['notification_templates', 'notifications', 'notification_logs', 'user_notification_prefs', 'device_tokens', 'consent_records', 'announcements', 'announcement_hospitals', 'banners']],
   ['Platform', ['audit_logs', 'internal_notes', 'platform_settings', 'app_versions', 'sessions', 'meta']],
 ];
 
@@ -20,8 +20,10 @@ const GROUPS = [
   const missing = [...tables.keys()].filter((n) => !listed.has(n));
   if (missing.length) GROUPS.push(['Other', missing]);
 
+  const applied = JSON.parse(((await db.one("SELECT meta_value FROM meta WHERE meta_key = 'migrations_applied'")) || {}).meta_value || '[]');
+  const last = applied.length ? applied[applied.length - 1].replace(/\.sql$/, '') : 'none';
   const out = [
-    '-- Gmedic database schema (SQLite). Generated from the live database after migrations 001-010.',
+    `-- Gmedic database schema (SQLite). Generated from the live database; last migration applied: ${last}.`,
     '-- Load into an empty database:  sqlite3 gmedic.sqlite < database/schema.sql',
     '-- The application itself builds the same schema from database/migrations (npm run db:setup).',
     '',

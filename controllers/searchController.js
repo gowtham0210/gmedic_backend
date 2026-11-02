@@ -1,7 +1,9 @@
+const db = require('../db');
 const doctorModel = require('../models/doctorModel');
-const appointmentModel = require('../models/appointmentModel');
+const { contains } = require('../utils/like');
 
-// Header search: doctors and patients (from appointments) of this hospital.
+// Header search: doctors and patients of this hospital. Patients are matched by name, patient ID
+// or mobile number and kept apart by patient ID, so two people with the same name are two results.
 exports.search = async (req, res) => {
   const q = String(req.query.q || '').trim().slice(0, 60);
   if (q.length < 2) return res.json({ doctors: [], patients: [] });
@@ -10,17 +12,21 @@ exports.search = async (req, res) => {
   const doctors = doctorRows.slice(0, 5)
     .map((d) => ({ id: d.id, name: d.name, specialization: d.specialization, availability: d.availability }));
 
-  const needle = q.toLowerCase();
-  const seen = new Map();
-  const all = await appointmentModel.query(req.hospitalId, {});
-  const matches = all
-    .filter((a) => a.patientName.toLowerCase().includes(needle))
-    .sort((a, b) => `${b.date}${b.time}`.localeCompare(`${a.date}${a.time}`));
-  for (const a of matches) {
-    const entry = seen.get(a.patientName);
-    if (entry) { entry.visits += 1; continue; }
-    seen.set(a.patientName, { name: a.patientName, visits: 1, lastDate: a.date, lastTime: a.time, doctorName: a.doctorName });
-  }
+  const digits = q.replace(/\D/g, '');
+  const isNumber = digits.length >= 4 && digits.length === q.replace(/[\s+()-]/g, '').length;
+  const rows = await db.query(
+    `SELECT p.id, p.name, p.mobile, COUNT(*) AS visits, MAX(a.appt_date || ' ' || a.appt_time) AS last_at,
+            (SELECT d.name FROM appointments a2 JOIN doctors d ON d.id = a2.doctor_id WHERE a2.patient_id = p.id AND a2.hospital_id = ?
+              ORDER BY a2.appt_date DESC, a2.appt_time DESC LIMIT 1) AS doctor_name
+       FROM appointments a JOIN patients p ON p.id = a.patient_id
+      WHERE a.hospital_id = ? AND (p.name LIKE ? ESCAPE '\\' OR p.id = ?${isNumber ? ' OR p.mobile LIKE ?' : ''})
+      GROUP BY p.id ORDER BY last_at DESC LIMIT 6`,
+    [req.hospitalId, req.hospitalId, contains(q), q.toUpperCase(), ...(isNumber ? [`%${digits.slice(-10)}%`] : [])]
+  );
+  const patients = rows.map((r) => {
+    const [lastDate, lastTime] = String(r.last_at || '').split(' ');
+    return { id: r.id, name: r.name, mobile: r.mobile || null, visits: Number(r.visits), lastDate, lastTime, doctorName: r.doctor_name };
+  });
 
-  res.json({ doctors, patients: [...seen.values()].slice(0, 5) });
+  res.json({ doctors, patients });
 };

@@ -17,14 +17,14 @@ export default function TokenDetailModal() {
           <div className="skeleton skeleton--row"></div><div className="skeleton skeleton--row"></div>
         </div>
         <div className="modal__foot modal__foot--split">
-          <button type="button" className="btn btn--ghost" style={{ color: 'var(--red-600)' }} data-token-cancel><Icon name="x" /><span>Cancel token</span></button>
+          <div className="action-group">
+            <button type="button" className="btn btn--ghost" style={{ color: 'var(--red-600)' }} data-token-cancel><Icon name="x" /><span>Cancel token</span></button>
+            <button type="button" className="btn btn--ghost" data-token-print><Icon name="printer" /><span>Print slip</span></button>
+          </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
             <label htmlFor="td-status" className="field__label nowrap">Status</label>
-            <select className="select" id="td-status" style={{ height: 40, minWidth: 150 }} data-token-status>
-              <option value="waiting">Waiting</option>
-              <option value="called">Called</option>
-              <option value="completed">Completed</option>
-            </select>
+            {/* Options come from the token's allowed transitions (public/js/pages/tokens.js renderDetail). */}
+            <select className="select" id="td-status" style={{ height: 40, minWidth: 150 }} data-token-status></select>
             <button type="button" className="btn btn--primary" data-token-save disabled><Icon name="check" /><span>Update</span></button>
           </div>
         </div>

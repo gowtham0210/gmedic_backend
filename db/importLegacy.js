@@ -95,19 +95,33 @@ async function importLegacy() {
     }
 
     // ---- appointments + payments ------------------------------------------
+    // Booking-token model (migration 031): an app booking that was paid gets the booking token paid online
+    // (Gmedic's, platform setting booking_token_amount); one that was also completed had its consultation fee
+    // collected at the hospital, which is what makes the appointment "paid" (trg_payment_sets_appt_ins).
+    const token = Number(((await conn.one("SELECT value FROM platform_settings WHERE setting_key = 'booking_token_amount'")) || {}).value || 5);
     let paymentSeq = 1;
+    const nextPayId = () => `PAY${String(20000 + paymentSeq++).padStart(5, '0')}`;
     for (const a of json.appointments) {
       await conn.query(
         `INSERT INTO appointments (id, hospital_id, doctor_id, patient_id, appt_date, appt_time, fee, status, payment_status, source, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [a.id, a.hospitalId, a.doctorId, patientIdByName.get(a.patientName), a.date, a.time, a.fee, a.status, a.paymentStatus, a.source, db.toSql(a.createdAt), db.toSql(a.updatedAt)]
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`,
+        [a.id, a.hospitalId, a.doctorId, patientIdByName.get(a.patientName), a.date, a.time, a.fee, a.status, a.source, db.toSql(a.createdAt), db.toSql(a.updatedAt)]
       );
-      if (a.payment) {
-        const payId = `PAY${String(20000 + paymentSeq++).padStart(5, '0')}`;
+      if (!a.payment) continue;
+      const paidAt = db.toSql(a.payment.paidAt);
+      if (a.source === 'Gmedic App') {
         await conn.query(
-          `INSERT INTO payments (id, appointment_id, amount, method, gateway, transaction_id, status, paid_at, created_at, updated_at)
-           VALUES (?, ?, ?, ?, 'SIMULATED', ?, 'PAID', ?, ?, ?)`,
-          [payId, a.id, a.fee, a.payment.method, a.payment.transactionId, db.toSql(a.payment.paidAt), db.toSql(a.payment.paidAt), db.toSql(a.payment.paidAt)]
+          `INSERT INTO payments (id, appointment_id, purpose, amount, method, gateway, transaction_id, status, paid_at, created_at, updated_at)
+           VALUES (?, ?, 'TOKEN', ?, ?, 'SIMULATED', ?, 'PAID', ?, ?, ?)`,
+          [nextPayId(), a.id, token, a.payment.method, a.payment.transactionId, paidAt, paidAt, paidAt]
+        );
+      }
+      if (a.source !== 'Gmedic App' || a.status === 'completed') {
+        // The consultation fee, taken at the hospital's front desk.
+        await conn.query(
+          `INSERT INTO payments (id, appointment_id, purpose, consultation_amount, amount, method, gateway, transaction_id, status, paid_at, created_at, updated_at)
+           VALUES (?, ?, 'CONSULTATION', ?, ?, 'Cash', 'FRONT_DESK', ?, 'PAID', ?, ?, ?)`,
+          [nextPayId(), a.id, a.fee, a.fee, `FD${a.id.replace(/\D/g, '').padStart(10, '0')}`, paidAt, paidAt, paidAt]
         );
       }
     }

@@ -104,7 +104,7 @@ No glow, no gradient, no pill.
 | Icon–label gap | `14px` |
 | Sub-items | indented `14px` under their section label |
 | Section labels | quiet, always visible, not clickable (§2 typography); `rgba(198,212,225,.6)` ≈ `#7a8d9d`, 4.72:1 contrast |
-| Footer (Settings, Audit Logs, Logout) | anchored to the bottom, separated by a hairline |
+| Footer (Admin: Admin Team, Settings, Audit Logs · Doctor: Help & Support · Receptionist: Settings) | anchored to the bottom, separated by a hairline; hidden when the user can see none of its items. No Logout in any sidebar — logout lives only in the top-bar profile menu. No tagline in the Super Admin or Doctor sidebars |
 
 **Super Admin sections:** Overview · Hospital Network · Operations · Finance ·
 Communications. Every item belongs to a section.
@@ -122,6 +122,15 @@ the sidebar).
 
 **Mobile/tablet (<1024px):** off-canvas overlay drawer with full labels and section
 headings, regardless of the desktop collapsed setting.
+
+### Top bar
+
+- **Doctor portal:** today's availability is a live switch (`.switch--topbar`,
+  "Available" / "Unavailable") before the notification bell, not a read-only badge.
+  It's the only switch for it; the dashboard doesn't repeat it. The label keeps a
+  fixed width so the bar doesn't shift on toggle, and is visually hidden below 768px
+  (switch only). The full Available/Unavailable controls stay on the Availability page;
+  both stay in sync.
 
 ---
 
@@ -283,6 +292,12 @@ Shared config in [`components/admin/DashboardCharts.js`](../components/admin/Das
   bar the reader can't see.
 - Time series always cover the full window (zero-filled), with readable labels
   (`Jul`, not `2026-07`) and whole-number ticks for counts.
+- **Booking Sources** (Super Admin Dashboard only): a full-width card under Booking and Revenue
+  Overview, grouped bars per day for the last 14 days (zero-filled, cancelled excluded), `Gmedic App`
+  teal vs `Walk-in` navy. `Phone` bookings get a third slate series only when there are any. Period
+  totals sit in `.chart-totals` (`Gmedic App 146 · Walk-in 0`), so a zero is stated, never an
+  invisible bar. No bookings at all shows `.chart-empty`. Data: `sourceTrend` from
+  `lib/admin/getDashboardData.js`, from `appointments.source`.
 - Funnels are HTML (`.funnel`), not bar charts: each stage is a subset of the
   previous (same unit at every stage), with `↓ N%` step conversion and an overall
   rate in the header.
@@ -327,6 +342,180 @@ Shared config in [`components/admin/DashboardCharts.js`](../components/admin/Das
   "Enter the reason for suspending this hospital…").
 - Selection controls (filter chips, pagination, role picker) are **not**
   navigation and may look different from §3.
+- **Slot picker** (`.slot-grid` / `.slot`, front-desk booking): one 4px-radius
+  tile per slot with the time and the seats as text (`3 of 5 left`, `Full`,
+  `Closed`). A slot with no seat left is greyed out (`--surface-2`, muted text)
+  and `disabled`. Never signal full by colour alone. The selected slot uses the
+  teal border + `--teal-50` fill. Seat counts come from the server and stay
+  **live** while the picker is open: the grid listens to
+  `GET /api/doctors/:id/slots/stream` (Server-Sent Events), so a seat taken at
+  another counter or in the patient app greys out within about a second. If the
+  stream can't be opened it falls back to polling `GET /api/doctors/:id/slots`
+  every 20 s. The legend says which one is running, in words (`Live`,
+  `Reconnecting…`, `Updates every 20 s`).
+- **Emergency walk-in tiles.** A full slot that can still take an emergency
+  walk-in (today only, the doctor's per-block emergency seats, 0–3) stays
+  pickable. It gets a dashed `--red-500` border, a `--red-50` fill and the
+  words `Full · 2 emergency left`. Picking it turns the border solid and shows a
+  red `alert--error` note under the grid saying the slot is full, how many
+  emergency seats are left, and that the patient goes to the front of the
+  doctor's queue. The submit button then reads `Book Emergency Walk-in` and the
+  "How did they book?" select is locked to walk-in (an emergency is never a
+  phone booking). If the last regular seat goes while a regular booking is being
+  made, the pick is cleared with a toast. The slot is never silently turned
+  into an emergency.
+- **Emergency badge.** Wherever a token or appointment is listed (appointments
+  table and detail, Tokens page, doctor's queue), an emergency shows
+  `badge--emergency` reading `Emergency` next to its `E01` code. Never colour
+  alone.
+- **Status pickers and row actions only offer moves the server accepts.** Build
+  the options from the record's allowed transitions (e.g. a token's
+  `nextStatuses`, from `TRANSITIONS` in `models/tokenModel.js`), never from a
+  fixed list, so no choice is guaranteed to fail. Tokens follow Call →
+  Send in → Complete; cancelling keeps its own confirm-twice button.
+- **Cancelling is never a dropdown status.** An action with side effects
+  (refund, queue token, notices) gets its own red ghost button that opens a
+  `modal__panel--sm` dialog: what will happen (e.g. the refund), a required
+  reason, and `Back | Cancel Appointment` (`btn--danger`).
+- **A blank field never removes a verified identifier.** In the hospital KYC
+  form a blank GSTIN / registration number keeps the stored one (with a hint
+  saying so); removing it is a separate `Remove <field>` ghost button in red
+  that needs a second click. Changing or removing either on Verified KYC shows
+  an amber `field__hint is-warning` first and sends KYC back to Under review.
+- **Completed and cancelled are final** for both an appointment and its queue
+  token, which always move together (migration `015_token_appointment_sync.sql`).
+  Their detail views hide the status controls instead of offering a dead end.
+- **Actions that lock someone out confirm first.** Resetting a password and
+  deactivating an account (admin Receptionists, Admin team) open a
+  `modal__panel--sm` dialog that says what happens to their sessions, with
+  `Cancel | Reset Password` (primary) or `Cancel | Deactivate Account`
+  (`btn--danger`). Activating again stays one click.
+- **One-time credentials look the same everywhere.** New and reset accounts
+  both show `components/admin/CredentialsModal`: "Sign in with" is the email
+  address (never a generated username) plus a random 12-character temporary
+  password the person must change at first sign-in.
+- **Cancel dialogs show the money.** The admin appointment cancel offers the
+  refund as `.radio-row` choices that each carry the amount ("₹400: everything
+  they paid", "₹250: the hospital's policy"), a required reason, and
+  `Back | Cancel Appointment` (`btn--danger`). The appointment drawer lists
+  refunds and the status history (`.drawer__timeline`).
+- **Irreversible actions need the record's ID typed.** Erasing a patient's
+  personal data (admin Patients) opens a `modal__panel--sm` dialog that says what
+  is removed and what hospitals keep, lists side effects (upcoming appointments
+  cancelled), and keeps `Erase Personal Data` (`btn--danger`) disabled until the
+  patient ID is typed. Blocking asks for a reason; unblocking asks to confirm.
+- **Holding or voiding money records needs a reason and says what it does.** On
+  Settlements, `Hold` (primary) and `Void` (`btn--danger`) open a `modal__panel--sm`
+  dialog with a required reason; Void states that the record is kept, what it
+  releases and that a paid one can't be voided. Lists that don't create records
+  say when something is waiting ("1 weekly statement is waiting to be generated")
+  with an explicit button, instead of writing on page load.
+- **Profile photo row** (admin doctor edit): a 64px rounded-square image, or the
+  initials avatar when there is none, then `Upload photo` / `Change photo` and a
+  red ghost `Remove`, with the hint "PNG, JPEG or WebP, up to 3 MB". Upload and
+  remove save immediately (their own toast); the rest of the form saves with Save.
+- **A doctor's photo replaces their initials everywhere.** Any doctor avatar (doctor
+  top bar and dashboard, profile, reception doctors list / detail / availability
+  dialog) shows the uploaded photo when there is one (`components/DoctorAvatar` in
+  React, `G.avatar(name, size, photoUrl)` in the vanilla pages), cropped with
+  `object-fit: cover` at the same avatar size; initials otherwise.
+- **Hospital logo row** (admin hospital detail): a 56px contained image or "No
+  logo", then `Upload logo` / `Replace` and `Remove`, hint "PNG or JPEG, up to
+  3 MB". Saves immediately, like the profile photo row.
+- **Status the front desk can't change is still shown, with why.** Receptionist
+  pages render the hospital's real status (`HospitalStatusBadge`); when it isn't
+  Active, an `.alert--warning` under the page head says what is blocked and who to
+  contact (`HospitalStatusNotice`). Never a hard-coded "Active" badge. Things owned
+  by Gmedic (name, ID, logo, About) carry a lock icon and a note saying so.
+- **Nothing to show is said, never faked.** With no active QR code, the QR card
+  and dashboard panel are replaced by an `.alert--warning` ("No active QR code …
+  contact Gmedic support") instead of a code built from an empty key.
+- **Alerts:** `.alert--error` (failed), `.alert--success`, `.alert--info` (teal,
+  neutral facts) and `.alert--warning` (amber: something is blocked or missing and
+  needs someone outside this screen).
+- **Front desk invites its doctors.** The reception doctor page has a "Doctor
+  portal login" card: `Invite to Portal` (email + optional mobile) or, once
+  invited, email, status badge (`Invited · not signed in yet` / `Active` /
+  `Locked`), last sign-in and `Reset password` (confirm first). Credentials show
+  once in the same layout as `CredentialsModal`.
+- **Closing your own ticket confirms in place.** In the support drawer the reply
+  box has a ghost `Close ticket (problem solved or raised by mistake)`; it swaps the
+  footer for a short confirm (what closing means, optional reason, `Back | Close
+  Ticket` in `btn--danger`). Shared lists (the hospital's front desk) say so in the
+  page subtitle and offer a `Raised by: Anyone at the desk / Me` filter.
+- **Finishing a consultation confirms, then offers undo.** "Mark Completed" swaps the
+  drawer footer for a one-line confirm (`Back | Mark Completed`); it is disabled with a
+  hint ("Can be completed from <date>") before the appointment day. After completing,
+  the queue shows an `.alert--success` "T001 completed … Undo" and the drawer a
+  `Reopen` footer for 10 minutes (server-enforced).
+- **Read-only days say so.** The doctor's queue for any day but today shows an
+  `.alert--info` "Past and future queues are read-only" with `Back to today`, and no
+  action buttons. One action per row state: `Call` for waiting, `Recall` for skipped;
+  `Skip` only while a patient is called (never during a consultation).
+- **Clinical notes are versioned, never overwritten.** Diagnosis / Notes /
+  Prescription; Save adds a version (hint says so), the drawer shows the latest with
+  "Version N · author · date" and a toggle for earlier versions.
+- **Cancel dialogs preview the refund before asking for the reason** (doctor and
+  front desk alike); if it can't be cancelled, the dialog shows why and the action
+  stays disabled.
+- **Changes that hit booked days ask first, with the list.** Adding or extending
+  leave over booked days returns the bookings; the dialog shows them (ID, date,
+  time, patient, paid) with two `.radio-row` choices, "Keep them" (front desk moves
+  them) or "Cancel them now" (refunded and told), and the submit button names the
+  choice (`Save and Keep Bookings` / `Save and Cancel N` in `btn--danger`).
+  Withdrawing leave confirms; leave that has started can only change its end date.
+- **Announcements can be closed.** The amber announcement banner at the top of the Doctor and
+  Receptionist portals (`components/shared/DismissibleNotice`) has a close (x) button with the
+  label "Dismiss announcement: <title>". Closing is remembered on this device only, per
+  announcement (`localStorage` key `gmedic.dismissedAnnouncements`), so a new announcement still
+  shows and clearing browser data brings old ones back. Banners (teal, scheduled) are not
+  dismissible.
+- **Doctor Schedule is a week grid first.** Page head: ghost `Add Leave` + primary
+  `Add Working Hours`. Under it a compact summary strip (Working days · Weekly hours ·
+  Appointment slots · Next leave / On leave now; only the leave tile is amber, and only
+  while on leave). The "Weekly Hours" card has `Week` / `List` tabs (phones open on
+  List) and a legend. **Week** = Monday→Sunday of the current week on a time axis
+  (`.wk`): working hours are teal blocks (`.wk__block`, 3px teal left edge) with time
+  and `15 min · 1 per slot`; today's header is a teal date tile; leave days are
+  hatched grey and say `Leave` in the header (never colour alone); empty days say
+  `Day off`. The axis fits the hours plus an hour either side (min 8 h). Click a block
+  to edit, click an empty spot to add hours pre-filled with that day and time. **List** =
+  one row per day with Edit / Remove actions. With no hours at all the card shows the
+  empty state with `Add Working Hours`.
+- **Schedule blocks edit in place.** Edit opens the working-hours dialog; its footer
+  carries a red ghost `Remove Hours` on the left (the list view also has a Remove
+  action). Remove confirms with how many upcoming bookings sit in those hours. Blocks
+  ending today show `Ends today` and can't be opened; new versions are dashed and show
+  `Starts <date>`. Leave dates read `14 Oct 2026` (§9), never raw ISO.
+- **Tokens come with the booking.** There is no "Generate Token" step: the Tokens page explains that tokens are
+  issued automatically and numbered in slot order, and its only action is a ghost `Re-issue Token` (for a token
+  cancelled by mistake). The dashboard quick action is "Today's Tokens".
+- **Two kinds of money, always labelled.** A Gmedic app booking pays only the **booking token** online; the
+  **consultation fee** is paid at the hospital. Screens never call the token "paid" for the appointment: the reception
+  appointment dialog shows "Consultation fee" status (paid only once collected at the desk) and a separate "Booking
+  token ₹5 paid in the Gmedic app (non-refundable, not part of the fee)" row; admin Payments has a Type column/filter
+  (Booking token / Consultation fee). Cancel dialogs say the booking token is not refunded instead of offering refund
+  choices; there is no "Issue refund" action. The admin hospital page shows a read-only "Booking payment" card linking to
+  Platform Settings, where the token amount is set once for every hospital.
+- **Notification switches save to the account.** Doctor Settings > Preferences has a
+  "Notifications" card: one `.switch` per kind of notice (label + one-line help), each
+  saving on its own with a toast, and the notices that can't be muted listed below with
+  a lock "Always on" badge. There is no separate Notifications tab.
+- **Device-only preferences say so.** Doctor Settings > Preferences notes "Saved on
+  this device only" and every preference is used somewhere; switches that wouldn't do
+  anything are removed rather than shown.
+- **Token slips.** The token detail dialog has `Print slip` (live tokens only),
+  and opens straight after Generate Token. The slip prints from its own window:
+  hospital, large token code, patient, doctor, date, time and appointment ID.
+
+**Patients from another hospital are shown masked.** A patient record is shared by
+every hospital, so a front desk only sees details of patients who already have an
+appointment or link with its own hospital. For anyone else the number lookup shows a
+masked name (`A****** M*****`) and says they are "registered on Gmedic"; it does not
+prefill the form and shows no id, birth date or relatives. When the typed name differs
+from the one on a number, the "Same person / Different person" choice uses the masked
+name too. Patient details that other hospitals also use are not editable from a
+front-desk appointment dialog (the dialog says so instead of showing the fields as editable).
 
 ---
 

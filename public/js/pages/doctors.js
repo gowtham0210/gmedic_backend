@@ -20,12 +20,24 @@
     return qs.toString();
   }
 
+  // Why a doctor can't be booked yet, so the desk doesn't have to guess.
+  function statusBadges(d) {
+    const out = [];
+    if (d.status === 'INACTIVE') out.push('<span class="badge badge--cancelled">Inactive</span>');
+    if (d.verificationStatus === 'REJECTED') out.push('<span class="badge badge--cancelled" title="Gmedic did not verify this doctor, so they can\'t be booked.">Not verified</span>');
+    else if (d.verificationStatus !== 'VERIFIED') out.push('<span class="badge badge--pending" title="Gmedic verifies a new doctor before patients and the front desk can book them.">Pending verification</span>');
+    if (!d.workingBlocks) out.push('<span class="badge badge--pending" title="Open the doctor and add working hours to start taking bookings.">No working hours</span>');
+    return out.join(' ');
+  }
+
+  // Absent means absent today only; a leave (several days) is set by the doctor and shows here, not as a toggle.
   function availabilityCell(d) {
+    if (d.onLeave) return `<span class="badge badge--absent">On leave</span><span class="cell-sub">${esc(d.leaveNote)}</span>`;
     const on = d.availability === 'present';
-    return `<label class="switch" title="Toggle availability">
+    return `<label class="switch" title="Absent applies to today only; the doctor is back tomorrow">
       <input type="checkbox" data-toggle-avail="${esc(d.id)}" ${on ? 'checked' : ''} aria-label="${esc(d.name)} present today">
       <span class="switch__track"></span>
-      <span class="switch__label ${on ? 'is-present' : 'is-absent'}">${on ? 'Present' : 'Absent / On Leave'}</span>
+      <span class="switch__label ${on ? 'is-present' : 'is-absent'}">${on ? 'Present' : 'Absent today'}</span>
     </label>`;
   }
 
@@ -41,8 +53,9 @@
     tbody.innerHTML = doctors.map((d) => `
       <tr>
         <td class="cell-primary" data-label="Doctor">
-          <a class="person" href="/doctors/${encodeURIComponent(d.id)}">${G.avatar(d.name)}
+          <a class="person" href="/doctors/${encodeURIComponent(d.id)}">${G.avatar(d.name, '', d.photoUrl)}
             <span><span class="person__name">${esc(d.name)}</span><small>${esc(d.id)}</small></span></a>
+          <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">${statusBadges(d)}</div>
         </td>
         <td data-label="Specialist"><span class="nowrap">${esc(d.specialization)}</span></td>
         <td data-label="Appointment Fee" class="num fee">${G.money(d.fee)}</td>
@@ -102,7 +115,7 @@
       const res = await api(`/api/doctors/${encodeURIComponent(d.id)}/availability`, { method: 'PATCH', body: { availability: next } });
       d.availability = res.doctor.availability;
       label.className = `switch__label ${next === 'present' ? 'is-present' : 'is-absent'}`;
-      label.textContent = next === 'present' ? 'Present' : 'Absent / On Leave';
+      label.textContent = next === 'present' ? 'Present' : 'Absent today';
       G.toast(res.message, 'success');
       const s = await api('/api/doctors');
       renderSummary(s.summary);

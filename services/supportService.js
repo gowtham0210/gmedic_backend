@@ -23,7 +23,7 @@ const SELECT = `
 function ticketFromRow(r) {
   return {
     id: r.id, ticketNumber: r.ticket_number, createdBy: r.created_by, createdByName: r.creator_name, createdByRole: r.created_by_role,
-    hospitalId: r.hospital_id, hospitalName: r.hospital_name, category: r.category, subject: r.subject, description: r.description,
+    hospitalId: r.hospital_id, hospitalName: r.hospital_name, appointmentId: r.appointment_id || null, category: r.category, subject: r.subject, description: r.description,
     priority: r.priority, status: r.status, assignedTo: r.assigned_to, assigneeName: r.assignee_name,
     slaDueAt: db.iso(r.sla_due_at), createdAt: db.iso(r.created_at), updatedAt: db.iso(r.updated_at),
     resolvedAt: db.iso(r.resolved_at), closedAt: db.iso(r.closed_at),
@@ -47,15 +47,15 @@ async function findById(id) {
   return row ? ticketFromRow(row) : null;
 }
 
-async function createTicket(user, { category, subject, description, priority }) {
+async function createTicket(user, { category, subject, description, priority, appointmentId = null, patientId = null }) {
   const id = await db.nextId('support_tickets', 'TKT', 1);
   const number = `SUP-${1000 + Number(id.slice(3))}`;
   const role = user.role === 'DOCTOR' || user.role === 'RECEPTIONIST' ? user.role : 'ADMIN';
   await db.tx(async (conn) => {
     await conn.query(
-      `INSERT INTO support_tickets (id, ticket_number, created_by, created_by_role, hospital_id, category, subject, description, priority, status, sla_due_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN', datetime('now', '+' || ? || ' hours'))`,
-      [id, number, user.id, role, user.hospitalId || null, category, subject, description, priority, SLA_HOURS[priority]]
+      `INSERT INTO support_tickets (id, ticket_number, created_by, created_by_role, hospital_id, appointment_id, patient_id, category, subject, description, priority, status, sla_due_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN', datetime('now', '+' || ? || ' hours'))`,
+      [id, number, user.id, role, user.hospitalId || null, appointmentId, patientId, category, subject, description, priority, SLA_HOURS[priority]]
     );
     await conn.query('INSERT INTO support_messages (ticket_id, sender_id, sender_name, message) VALUES (?, ?, ?, ?)', [id, user.id, user.name, description]);
   });

@@ -28,8 +28,8 @@ export default function Topbar({ user }) {
               <span className="avatar avatar--teal" data-user-initials>{initials(user.name)}</span>
               <div><strong data-user-name>{user.name}</strong><small>{user.email}</small></div>
             </div>
-            <Link className="dropdown__item" role="menuitem" href="/admin/settings"><Icon name="user" />My profile</Link>
-            <Link className="dropdown__item" role="menuitem" href="/admin/settings#password"><Icon name="lock" />Change password</Link>
+            <Link className="dropdown__item" role="menuitem" href="/admin/profile"><Icon name="user" />My profile</Link>
+            <Link className="dropdown__item" role="menuitem" href="/admin/profile#password"><Icon name="lock" />Change password</Link>
             <div className="dropdown__sep"></div>
             <button type="button" className="dropdown__item dropdown__item--danger" role="menuitem" data-logout><Icon name="log-out" />Logout</button>
           </div>

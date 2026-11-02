@@ -19,8 +19,8 @@ exports.summary = async (req, res) => {
     db.one("SELECT COUNT(*) AS n FROM users WHERE role = 'RECEPTIONIST'"),
     db.one('SELECT COUNT(*) AS n FROM patients'),
     db.one("SELECT COUNT(*) AS n FROM appointments WHERE appt_date = date('now') AND status <> 'cancelled'"),
-    db.one("SELECT COALESCE(SUM(amount),0) AS n FROM payments WHERE status='PAID' AND DATE(paid_at) = date('now')"),
-    db.one("SELECT SUM(status='PAID') AS paid, SUM(status IN ('PAID','FAILED')) AS attempted FROM payments WHERE created_at >= datetime('now', '-30 days')"),
+    db.one("SELECT COALESCE(SUM(amount),0) AS n FROM payments WHERE status='PAID' AND purpose='TOKEN' AND DATE(paid_at) = date('now')"),
+    db.one("SELECT SUM(status='PAID') AS paid, SUM(status IN ('PAID','FAILED')) AS attempted FROM payments WHERE purpose='TOKEN' AND created_at >= datetime('now', '-30 days')"),
     db.one("SELECT COUNT(*) AS n FROM hospitals WHERE kyc_status IN ('PENDING','UNDER_REVIEW')"),
     db.one("SELECT COUNT(*) AS n FROM refunds WHERE status = 'PENDING'"),
     db.one("SELECT COUNT(*) AS n FROM qr_scans WHERE DATE(scanned_at) = date('now')"),
@@ -30,7 +30,7 @@ exports.summary = async (req, res) => {
     db.query(`SELECT DATE(pay.created_at) AS d,
                  SUM(CASE WHEN pay.status='PAID' THEN pay.amount ELSE 0 END) AS gross,
                  (SELECT COALESCE(SUM(amount),0) FROM refunds r WHERE r.status='COMPLETED' AND DATE(r.completed_at) = DATE(pay.created_at)) AS refunded
-               FROM payments pay WHERE pay.created_at >= datetime('now', '-13 days')
+               FROM payments pay WHERE pay.purpose = 'TOKEN' AND pay.created_at >= datetime('now', '-13 days')
                GROUP BY DATE(pay.created_at) ORDER BY d`),
     db.one(`SELECT COUNT(*) AS scans, SUM(result IN ('LINKED','ALREADY_LINKED')) AS linked,
                  (SELECT COUNT(*) FROM appointments WHERE created_at >= datetime('now', '-30 days')) AS bookings,

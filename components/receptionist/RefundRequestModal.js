@@ -52,6 +52,7 @@ export default function RefundRequestModal() {
       const res = await api('/api/refunds', { method: 'POST', body: { appointmentId: target.appointmentId, amount, reason } });
       toast(res.message, 'success');
       close();
+      if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('refund:requested'));
     } catch (err) {
       setErrors(err.fields || {});
       if (!err.fields) toast(err.message, 'error');

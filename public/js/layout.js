@@ -187,20 +187,12 @@
       notifList.innerHTML = `<div class="empty" style="padding:28px 16px"><div class="empty__icon">${icon('bell')}</div><p>You're all caught up.</p></div>`;
       return;
     }
+    const ICON = { NEW_APPOINTMENT: ['calendar-check', 'tone-blue'], APPOINTMENT_CANCELLED: ['calendar-x', 'tone-red'], PAYMENT_SUCCESS: ['wallet', 'tone-green'] };
     notifList.innerHTML = items.map((n) => {
-      if (n.type === 'system') {
-        return `<a class="notif__item${n.unread ? ' is-unread' : ''}" href="${esc(n.link || '#')}">
-          <span class="notif__icon tone-teal">${icon('bell')}</span>
-          <span><p><strong>${esc(n.title)}</strong> — ${esc(n.body)}</p><small>${esc(G.timeAgo(n.at))}</small></span>
-        </a>`;
-      }
-      const isPay = n.type === 'payment';
-      const text = isPay
-        ? `Payment of <strong>${G.money(n.amount)}</strong> received from <strong>${esc(n.patientName)}</strong> via ${esc(n.method)}`
-        : `New appointment: <strong>${esc(n.patientName)}</strong> with ${esc(n.doctorName)} · ${esc(G.relativeDay(n.date))}, ${G.time(n.time)}`;
-      return `<a class="notif__item${n.unread ? ' is-unread' : ''}" href="${isPay ? '/payments' : '/appointments?q=' + encodeURIComponent(n.patientName)}">
-        <span class="notif__icon ${isPay ? 'tone-green' : 'tone-blue'}">${icon(isPay ? 'wallet' : 'calendar-check')}</span>
-        <span><p>${text}</p><small>${esc(G.timeAgo(n.at))}</small></span>
+      const [name, tone] = ICON[n.eventKey] || ['bell', 'tone-teal'];
+      return `<a class="notif__item${n.unread ? ' is-unread' : ''}" href="${esc(n.link || '#')}" data-notif-id="${esc(n.id)}">
+        <span class="notif__icon ${tone}">${icon(name)}</span>
+        <span><p><strong>${esc(n.title)}</strong> — ${esc(n.body)}</p><small>${esc(G.timeAgo(n.at))}</small></span>
       </a>`;
     }).join('');
   }
@@ -217,6 +209,15 @@
   if (notifToggle) {
     loadNotifications();
     notifToggle.closest('[data-dropdown]').addEventListener('dropdown:open', loadNotifications);
+    // Opening one marks just that one read (the link still navigates).
+    notifList.addEventListener('click', (e) => {
+      const item = e.target.closest('[data-notif-id]');
+      if (!item || !item.classList.contains('is-unread')) return;
+      item.classList.remove('is-unread');
+      // keepalive: the request survives the page navigating to the notification's link.
+      fetch(`/api/notifications/${encodeURIComponent(item.dataset.notifId)}/read`, { method: 'POST', keepalive: true, credentials: 'same-origin' })
+        .then((r) => r.json()).then((d) => setCount(d.unread)).catch(() => {});
+    });
     $('[data-notif-read]').addEventListener('click', async () => {
       try {
         await api('/api/notifications/read', { method: 'POST' });
@@ -257,8 +258,8 @@
         }
         if (data.patients.length) {
           html += '<div class="search-results__group">Patients</div>' + data.patients.map((p) => `
-            <a class="search-results__item" href="/appointments?q=${encodeURIComponent(p.name)}">${G.avatar(p.name, 'sm')}
-              <span style="flex:1;min-width:0">${esc(p.name)}<small>${p.visits} appointment${p.visits === 1 ? '' : 's'} · Last: ${esc(G.date(p.lastDate))} with ${esc(p.doctorName)}</small></span></a>`).join('');
+            <a class="search-results__item" href="/appointments?q=${encodeURIComponent(p.id)}">${G.avatar(p.name, 'sm')}
+              <span style="flex:1;min-width:0">${esc(p.name)}<small>${esc(p.id)}${p.mobile ? ` · ${esc(p.mobile)}` : ''} · ${p.visits} appointment${p.visits === 1 ? '' : 's'} · Last: ${esc(G.date(p.lastDate))} with ${esc(p.doctorName)}</small></span></a>`).join('');
         }
         results.innerHTML = html || `<div class="search-results__empty">No doctors or patients match “${esc(q)}”.</div>`;
         results.hidden = false;

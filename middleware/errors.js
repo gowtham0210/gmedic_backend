@@ -1,10 +1,13 @@
+const { uniqueConflict } = require('../utils/dbErrors');
+
 function notFound(req, res) {
   if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'Not found.' });
   res.status(404).render('error', { title: 'Page not found', status: 404, message: "The page you're looking for doesn't exist or has moved." });
 }
 
 // eslint-disable-next-line no-unused-vars
-function errorHandler(err, req, res, next) {
+function errorHandler(caught, req, res, next) {
+  const err = uniqueConflict(caught) || caught;
   const status = err.status || err.statusCode || 500;
   if (status >= 500) console.error(err);
 

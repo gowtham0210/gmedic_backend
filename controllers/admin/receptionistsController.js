@@ -3,10 +3,7 @@ const userModel = require('../../models/userModel');
 const { validate } = require('../../utils/validate');
 const { badRequest, notFound } = require('../../utils/http');
 const auditLog = require('../../services/auditLog');
-
-function slugUsername(name) {
-  return String(name).toLowerCase().replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '').slice(0, 40);
-}
+const staff = require('../../services/staffAccounts');
 
 exports.list = async (req, res) => {
   const { hospitalId, status, q, page = 1, pageSize = 20 } = req.query;
@@ -37,17 +34,55 @@ exports.create = async (req, res) => {
     hospitalId: { label: 'Hospital', required: true },
   });
   if (!ok) throw badRequest('Please correct the highlighted fields.', errors);
-  const hospital = await db.one('SELECT id, name FROM hospitals WHERE id = ?', [value.hospitalId]);
+  const hospital = await db.one('SELECT id, name, status FROM hospitals WHERE id = ?', [value.hospitalId]);
   if (!hospital) throw badRequest('Choose a valid hospital.', { hospitalId: 'Choose a hospital.' });
+  if (hospital.status === 'OFFBOARDED') throw badRequest(`${hospital.name} has been offboarded and can't take staff.`, { hospitalId: 'Choose a hospital that is not offboarded.' });
+  await staff.assertContactFree(value);
 
-  const tempPassword = `Gmedic@${Math.floor(1000 + Math.random() * 9000)}`;
-  let username = slugUsername(value.name) || `user${Date.now()}`;
-  if (await db.one('SELECT id FROM users WHERE username = ?', [username])) username = `${username}${Math.floor(Math.random() * 900 + 100)}`;
-
+  const tempPassword = staff.tempPassword();
+  const username = await staff.uniqueUsername(value.name);
   const user = await userModel.create({ role: 'RECEPTIONIST', hospitalId: value.hospitalId, name: value.name, username, email: value.email, phone: value.phone, password: tempPassword, status: 'ACTIVE', approvedBy: req.user.id });
   await db.query('UPDATE users SET must_change_password = 1 WHERE id = ?', [user.id]);
   await auditLog.record({ req, action: 'RECEPTIONIST_CREATED', entityType: 'USER', entityId: user.id, summary: `Created receptionist ${value.name} for ${hospital.name}` });
-  res.status(201).json({ ok: true, message: `${value.name} has been added to ${hospital.name}.`, receptionist: { id: user.id, username, tempPassword } });
+  // `credentials.login` is what the person types to sign in; `receptionist.username` is kept for older clients.
+  res.status(201).json({ ok: true, message: `${value.name} has been added to ${hospital.name}.`, receptionist: { id: user.id, username, tempPassword }, credentials: { login: value.email, tempPassword } });
+};
+
+// PUT /api/admin/receptionists/:id { name, email, phone, hospitalId }
+// Fixes a typo or moves the person to another hospital. A move signs them out, since everything they
+// can see (appointments, doctors, tokens) belongs to the hospital they were in.
+exports.update = async (req, res) => {
+  const target = await userModel.findById(req.params.id);
+  if (!target || target.role !== 'RECEPTIONIST') throw notFound('Receptionist not found.');
+  const { value, errors, ok } = validate(req.body, {
+    name: { label: 'Full name', required: true, minLength: 3, maxLength: 60 },
+    email: { label: 'Email', type: 'email', required: true },
+    phone: { label: 'Phone', type: 'phone', required: true },
+    hospitalId: { label: 'Hospital', required: true },
+  });
+  if (!ok) throw badRequest('Please correct the highlighted fields.', errors);
+  const hospital = await db.one('SELECT id, name, status FROM hospitals WHERE id = ?', [value.hospitalId]);
+  if (!hospital) throw badRequest('Choose a valid hospital.', { hospitalId: 'Choose a hospital.' });
+  const moving = value.hospitalId !== target.hospitalId;
+  if (moving && hospital.status === 'OFFBOARDED') throw badRequest(`${hospital.name} has been offboarded and can't take staff.`, { hospitalId: 'Choose a hospital that is not offboarded.' });
+  await staff.assertContactFree(value, target.id);
+
+  const unchanged = value.name === target.name && value.email === String(target.email).toLowerCase() && value.phone === target.phone && !moving;
+  if (unchanged) return res.json({ ok: true, message: 'No changes to save.' });
+
+  const before = await db.one('SELECT h.name AS hospital_name FROM hospitals h WHERE h.id = ?', [target.hospitalId]);
+  await db.query(
+    `UPDATE users SET name = ?, email = ?, phone = ?, hospital_id = ?${moving ? ', session_version = session_version + 1' : ''} WHERE id = ?`,
+    [value.name, value.email, value.phone, value.hospitalId, target.id]
+  );
+  await auditLog.record({
+    req, action: moving ? 'RECEPTIONIST_TRANSFERRED' : 'RECEPTIONIST_UPDATED', entityType: 'USER', entityId: target.id,
+    summary: moving ? `${value.name}: ${before ? before.hospital_name : target.hospitalId} → ${hospital.name}` : `Updated details for ${value.name}`,
+    previousValue: { name: target.name, email: target.email, phone: target.phone, hospitalId: target.hospitalId },
+    newValue: { name: value.name, email: value.email, phone: value.phone, hospitalId: value.hospitalId },
+  });
+  const message = moving ? `${value.name} now works at ${hospital.name} and has been signed out.` : `${value.name}'s details were saved.`;
+  res.json({ ok: true, message, receptionist: { id: target.id, name: value.name, email: value.email, phone: value.phone, hospitalId: value.hospitalId, hospitalName: hospital.name } });
 };
 
 exports.setStatus = async (req, res) => {
@@ -63,8 +98,8 @@ exports.setStatus = async (req, res) => {
 exports.resetPassword = async (req, res) => {
   const target = await userModel.findById(req.params.id);
   if (!target || target.role !== 'RECEPTIONIST') throw notFound('Receptionist not found.');
-  const tempPassword = `Gmedic@${Math.floor(1000 + Math.random() * 9000)}`;
+  const tempPassword = staff.tempPassword();
   await userModel.setPassword(req.params.id, tempPassword, { mustChange: true });
   await auditLog.record({ req, action: 'RECEPTIONIST_PASSWORD_RESET', entityType: 'USER', entityId: req.params.id, summary: `Reset credentials for ${target.name}` });
-  res.json({ ok: true, message: `Temporary password issued for ${target.name}.`, tempPassword });
+  res.json({ ok: true, message: `Temporary password issued for ${target.name}. Their sessions have ended.`, tempPassword, credentials: { login: target.email, tempPassword } });
 };

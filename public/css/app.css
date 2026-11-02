@@ -799,6 +799,7 @@ a.stat:hover { box-shadow: var(--shadow-hover); border-color: var(--border-2); }
 .avatar--lg { width: 64px; height: 64px; font-size: 20px; border-radius: 8px; }
 .avatar--xl { width: 76px; height: 76px; font-size: 24px; border-radius: 8px; }
 .avatar--teal { background: linear-gradient(135deg, #12aaa5, #0a8f8c); color: #fff; }
+img.avatar { object-fit: cover; background: var(--border-2); }
 .av-0 { background: #e0f4f3; color: #0a7f7c; }
 .av-1 { background: #e6edfb; color: #2f5bd3; }
 .av-2 { background: #efe8fc; color: #6d3fd0; }
@@ -826,7 +827,11 @@ a.stat:hover { box-shadow: var(--shadow-hover); border-color: var(--border-2); }
 .badge--pending { background: var(--amber-50); color: var(--amber-700); }
 .badge--completed { background: var(--blue-50); color: var(--blue-700); }
 .badge--cancelled, .badge--absent { background: var(--red-50); color: var(--red-700); }
+/* An emergency walk-in (over a full slot, seen first). Always says "Emergency" in words. */
+.badge--emergency { background: var(--red-50); color: var(--red-700); }
 .badge--neutral { background: var(--surface-2); color: var(--ink-2); }
+/* A table row that needs someone to act (e.g. a cancelled appointment whose payment is still unrefunded). */
+.table tr.is-attention td { background: var(--amber-50); }
 .badge--waiting { background: var(--amber-50); color: var(--amber-700); }
 .badge--called { background: var(--violet-50); color: var(--violet-600); }
 .badge--in_consultation { background: var(--teal-50); color: var(--teal-700); }
@@ -1049,6 +1054,12 @@ a.stat:hover { box-shadow: var(--shadow-hover); border-color: var(--border-2); }
 .switch__label { font-size: 12.5px; font-weight: 600; min-width: 108px; }
 .switch__label.is-present { color: var(--green-700); }
 .switch__label.is-absent { color: var(--red-700); }
+/* Doctor top bar: label sized for "Unavailable" so the bar doesn't shift on toggle; phones show the switch only. */
+.switch--topbar { gap: 8px; }
+.switch--topbar .switch__label { min-width: 76px; }
+@media (max-width: 767px) {
+  .switch--topbar .switch__label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; min-width: 0; }
+}
 
 .alert {
   display: flex;
@@ -1063,6 +1074,7 @@ a.stat:hover { box-shadow: var(--shadow-hover); border-color: var(--border-2); }
 .alert--error { background: var(--red-50); color: var(--red-700); border: 1px solid #f7d4d4; }
 .alert--success { background: var(--green-50); color: var(--green-700); border: 1px solid #cdebdc; }
 .alert--info { background: var(--teal-50); color: var(--teal-800); border: 1px solid var(--teal-100); }
+.alert--warning { background: var(--amber-50); color: var(--amber-700); border: 1px solid #f3dfb2; }
 
 /* ---------- Toolbar / filters ---------- */
 .toolbar {
@@ -1115,6 +1127,45 @@ a.stat:hover { box-shadow: var(--shadow-hover); border-color: var(--border-2); }
 }
 .chip:hover { border-color: var(--teal-500); color: var(--teal-700); }
 .chip.is-active { background: var(--ink); border-color: var(--ink); color: #fff; }
+
+/* Slot picker (front-desk booking). A slot with no seat left is greyed out and disabled;
+   the seat count is text, never colour alone. See docs/design-system.md §10. */
+.slot-picker { border: 0; margin: 18px 0 0; padding: 0; min-width: 0; }
+.slot-picker__meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 4px 0 10px; font-size: 13px; }
+.slot-legend { display: inline-flex; gap: 14px; color: var(--muted); font-size: 12.5px; }
+.slot-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.slot-legend__swatch { width: 12px; height: 12px; border: 1px solid var(--input-border); border-radius: 3px; background: #fff; }
+.slot-legend__swatch--full { border-color: var(--border); background: var(--surface-2); }
+.slot-legend__swatch--emergency { border-color: var(--red-500); background: var(--red-50); }
+.slot-live { color: var(--muted); }
+.slot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 8px; max-height: 260px; overflow-y: auto; padding: 2px; }
+.slot {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--input-border);
+  border-radius: 4px;
+  background: #fff;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.slot:hover:not(:disabled) { border-color: var(--teal-500); }
+.slot:focus-visible { outline: none; box-shadow: var(--ring); }
+.slot__time { font-size: 13.5px; font-weight: 700; }
+.slot__seats { font-size: 12px; color: var(--muted); }
+.slot__walkin { font-size: 11px; color: var(--muted); }
+.slot.is-selected { border-color: var(--teal-600); background: var(--teal-50); box-shadow: inset 0 0 0 1px var(--teal-600); }
+.slot.is-selected .slot__seats { color: var(--teal-700); }
+.slot.is-full, .slot:disabled { border-color: var(--border); background: var(--surface-2); color: var(--muted-2); cursor: not-allowed; }
+.slot.is-full .slot__seats, .slot:disabled .slot__seats { color: var(--muted); }
+/* A full slot that can still take an emergency walk-in: pickable, red border, and it says so in words. */
+.slot.is-emergency { border-color: var(--red-500); border-style: dashed; background: var(--red-50); color: var(--ink); cursor: pointer; }
+.slot.is-emergency .slot__seats { color: var(--red-700); }
+.slot.is-emergency:hover { border-color: var(--red-600); }
+.slot.is-emergency.is-selected { border-style: solid; border-color: var(--red-600); box-shadow: inset 0 0 0 1px var(--red-600); }
 
 .pager {
   display: flex;
@@ -1359,6 +1410,11 @@ a.stat:hover { box-shadow: var(--shadow-hover); border-color: var(--border-2); }
 .drawer__timeline li:last-child::after { display: none; }
 .drawer__timeline li.is-done { color: var(--ink); font-weight: 600; }
 .drawer__timeline li.is-done::before { background: var(--teal-500); }
+
+/* A choice with a sentence of explanation (e.g. refund options in a cancel dialog). */
+.radio-row { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; margin-bottom: 8px; border: 1px solid var(--border-2); border-radius: var(--radius); font-size: 13.5px; cursor: pointer; }
+.radio-row input { margin-top: 3px; accent-color: var(--teal-600); }
+.radio-row:has(input:checked) { border-color: var(--teal-600); background: var(--teal-50); }
 .modal__panel > form { display: flex; flex-direction: column; min-height: 0; }
 .modal__head { display: flex; align-items: flex-start; gap: 14px; padding: 22px 24px 18px; border-bottom: 1px solid var(--border-2); }
 .modal__head h2 { font-size: 18px; font-weight: 800; }
@@ -1778,3 +1834,65 @@ a.stat:hover { box-shadow: var(--shadow-hover); border-color: var(--border-2); }
   .qr-card__actions, .qr-panel__actions { grid-template-columns: 1fr; }
   .segmented { grid-template-columns: 1fr; }
 }
+
+/* Doctor schedule: week grid + list. Working hours are teal blocks on a time axis; leave days are
+   hatched grey with the word "Leave" (never colour alone). See docs/design-system.md §10. */
+.sched-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 14px 22px 0; }
+.sched-bar .tabs { padding: 0; box-shadow: none; }
+.sched-legend { display: inline-flex; gap: 16px; flex-wrap: wrap; color: var(--muted); font-size: 12.5px; }
+.sched-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sched-legend__swatch { width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--teal-600); background: var(--teal-50); }
+.sched-legend__swatch--leave { border-color: var(--input-border); background: repeating-linear-gradient(135deg, var(--surface-2) 0 3px, #e8eef2 3px 6px); }
+.sched-legend__swatch--later { border-style: dashed; background: #fff; }
+
+.wk-scroll { overflow-x: auto; padding: 14px 22px 22px; }
+.wk { --wk-hour: 52px; display: grid; grid-template-columns: 52px repeat(7, minmax(104px, 1fr)); min-width: 820px; }
+.wk__corner, .wk__head { position: sticky; top: 0; z-index: 3; background: var(--surface); border-bottom: 1px solid var(--border); }
+.wk__head { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px 10px; border-left: 1px solid var(--border-2); }
+.wk__dow { font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+.wk__date { display: inline-grid; place-items: center; min-width: 30px; height: 30px; padding: 0 6px; border-radius: 4px; font-size: 16px; font-weight: 700; color: var(--ink); }
+.wk__head.is-today .wk__dow { color: var(--teal-700); }
+.wk__head.is-today .wk__date { background: var(--teal-600); color: #fff; }
+.wk__tag { min-height: 18px; font-size: 11.5px; font-weight: 600; color: var(--muted); }
+.wk__tag--leave { color: var(--amber-700); }
+.wk__gutter { position: relative; height: calc(var(--wk-hours) * var(--wk-hour)); }
+.wk__hour { position: absolute; right: 8px; transform: translateY(-50%); font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.wk__hour:first-child { transform: none; }
+.wk__col { position: relative; height: calc(var(--wk-hours) * var(--wk-hour)); border-left: 1px solid var(--border-2); background-image: linear-gradient(var(--border-2) 1px, transparent 1px); background-size: 100% var(--wk-hour); }
+.wk__col.is-today { background-color: rgba(10, 143, 140, 0.035); }
+.wk__col.is-leave::after { content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 1; background: repeating-linear-gradient(135deg, rgba(100, 116, 139, 0.07) 0 6px, rgba(100, 116, 139, 0.13) 6px 12px); }
+.wk__cell { display: block; width: 100%; height: var(--wk-hour); padding: 0; border: 0; background: transparent; color: transparent; cursor: pointer; }
+.wk__cell:hover { background: var(--teal-50); color: var(--teal-700); }
+.wk__cell .icon { width: 14px; height: 14px; margin: auto; }
+.wk__off { position: absolute; inset: 10px 0 auto; text-align: center; font-size: 12px; color: var(--muted); pointer-events: none; }
+.wk__block {
+  position: absolute; left: 4px; right: 4px; z-index: 2;
+  display: flex; flex-direction: column; gap: 1px; overflow: hidden;
+  padding: 5px 8px; text-align: left;
+  border: 1px solid var(--teal-100); border-left: 3px solid var(--teal-600); border-radius: 4px;
+  background: var(--teal-50); color: var(--ink); box-shadow: var(--shadow);
+}
+.wk__block:hover { border-color: var(--teal-500); background: #e2f4f2; }
+.wk__block:focus-visible { outline: 2px solid var(--teal-500); outline-offset: 1px; }
+.wk__block-time { font-size: 12.5px; font-weight: 700; line-height: 1.25; }
+.wk__block-meta { font-size: 11.5px; line-height: 1.3; color: var(--ink-2); }
+.wk__block.is-ending { border-left-color: var(--muted-2); background: var(--surface-2); color: var(--muted); }
+.wk__block.is-later { border-style: dashed; border-left-style: solid; background: #fff; }
+
+.sched-list { padding: 8px 22px 14px; }
+.sched-day { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--border-2); }
+.sched-day:last-child { border-bottom: 0; }
+.sched-day__name { font-weight: 700; color: var(--ink); }
+.sched-day__date { font-size: 12.5px; color: var(--muted); }
+.sched-day__blocks { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.sched-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 8px 12px; border: 1px solid var(--border); border-left: 3px solid var(--teal-600); border-radius: 4px; background: #fff; }
+.sched-row.is-ending { border-left-color: var(--muted-2); color: var(--muted); }
+.sched-row__main { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-weight: 600; }
+.sched-row__main small { font-weight: 500; color: var(--muted); font-size: 12.5px; }
+.sched-off { color: var(--muted); font-size: 13.5px; padding: 8px 0; }
+
+@media (max-width: 768px) {
+  .sched-bar, .wk-scroll, .sched-list { padding-left: 16px; padding-right: 16px; }
+  .sched-day { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+}
+@media (prefers-reduced-motion: reduce) { .wk__block, .wk__cell { transition: none; } }

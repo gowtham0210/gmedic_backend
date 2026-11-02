@@ -1,6 +1,7 @@
 import Script from 'next/script';
 import Icon from '../../../components/Icon';
 import QrModal from '../../../components/receptionist/modals/QrModal';
+import { HospitalStatusBadge, HospitalStatusNotice, NoActiveQr } from '../../../components/receptionist/HospitalStatusBadge';
 import { requireReceptionist } from '../../../lib/rbac';
 import hospitalModel from '../../../models/hospitalModel';
 
@@ -23,16 +24,18 @@ export default async function HospitalPage() {
         </div>
       </div>
 
+      <HospitalStatusNotice hospital={hospital} style={{ marginBottom: 16 }} />
+
       <div className="two-col">
         <div>
           <article className="card" data-hospital-view>
             <div className="info-hero">
-              <div className="info-hero__img"><img src="/images/hospital-illustration.svg" alt="" /></div>
+              <div className="info-hero__img"><img src={hospital.logoUrl || '/images/hospital-illustration.svg'} alt={hospital.logoUrl ? `${hospital.name} logo` : ''} /></div>
               <div>
                 <h2 data-h-name>{hospital.name}</h2>
                 <div className="info-hero__meta">
                   <span className="badge badge--teal badge--plain"><Icon name="hash" className="icon--xs" />Hospital ID: {hospital.id}</span>
-                  <span className="badge badge--confirmed">Active on Gmedic</span>
+                  <HospitalStatusBadge hospital={hospital} />
                 </div>
               </div>
             </div>
@@ -60,7 +63,14 @@ export default async function HospitalPage() {
               </div>
             </div>
 
-            <p className="note"><Icon name="info" /><span>The hospital name and ID are managed by the Gmedic administrator. You can update the contact number, email and address.</span></p>
+            {hospital.about && (
+              <div className="detail detail--full" style={{ borderBottom: 0, paddingTop: 0 }}>
+                <span className="detail__icon"><Icon name="info" /></span>
+                <div><div className="detail__label">About <Icon name="lock" /></div><div className="detail__value" style={{ fontWeight: 400, whiteSpace: 'pre-line' }}>{hospital.about}</div></div>
+              </div>
+            )}
+
+            <p className="note"><Icon name="info" /><span>The hospital name, ID, logo and “About” text patients see in the app are managed by Gmedic. Contact Gmedic support to change them. You can update the contact number, email and address.</span></p>
           </article>
 
           <article className="card" data-hospital-edit hidden>
@@ -125,6 +135,7 @@ export default async function HospitalPage() {
             <div className="card__head" style={{ justifyContent: 'center' }}>
               <h2 className="card__title"><Icon name="qr-code" />Unique Hospital QR Code</h2>
             </div>
+            {!hospital.qrLink ? <NoActiveQr /> : (<>
             <button type="button" className="qr-card__poster" data-open-qr aria-label="View QR poster full size" style={{ display: 'block', width: 'min(340px,100%)', margin: '0 auto', padding: 0, border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', background: '#fff', cursor: 'zoom-in' }}>
               <img src="/api/hospital/qr-poster.svg" alt={`Gmedic QR poster for ${hospital.name}`} width="1060" height="1500" style={{ width: '100%', height: 'auto' }} />
             </button>
@@ -142,6 +153,7 @@ export default async function HospitalPage() {
               <code title={hospital.qrLink}>{hospital.qrLink}</code>
               <button type="button" className="icon-btn icon-btn--sm" aria-label="Copy QR link" data-copy={hospital.qrLink}><Icon name="copy" /></button>
             </div>
+            </>)}
 
             <ol className="steps">
               <li><span className="steps__num">1</span><div><strong>Display at reception</strong><span>Print or show this QR code at your front desk.</span></div></li>

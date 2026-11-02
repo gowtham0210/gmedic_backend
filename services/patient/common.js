@@ -2,6 +2,7 @@
 // (they mirror the models in the Flutter patient app, so the app can swap its fake API for this one).
 
 const db = require('../../db');
+const { SETTINGS } = require('../../config/platformSettings');
 
 class ApiError extends Error {
   constructor(status, code, message) {
@@ -20,7 +21,6 @@ const RULES = {
   bookingCutoffMinutes: 30,
   rescheduleWindowHours: 2,
   gstRate: 0.18,
-  holdMinutesDefault: 10,
 };
 
 // ---- time: appointments are stored as the hospital's local date + time
@@ -45,7 +45,8 @@ const addDays = (date, n) => {
 const weekdayOf = (date) => new Date(`${date}T00:00:00Z`).getUTCDay(); // 0 = Sunday, like doctor_schedules
 const minutesOf = (hhmm) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
 const hhmm = (minutes) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
-const isDate = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) && !Number.isNaN(Date.parse(`${v}T00:00:00Z`));
+// A real calendar day (2026-11-31 is refused, not rolled over to 1 December).
+const isDate = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) && !Number.isNaN(Date.parse(`${v}T00:00:00Z`)) && new Date(`${v}T00:00:00Z`).toISOString().slice(0, 10) === String(v);
 
 // ---- money (the database stores rupees, the app works in paise)
 const paise = (rupees) => Math.round(Number(rupees || 0) * 100);
@@ -72,8 +73,10 @@ function patientJson(row, user) {
   };
 }
 
+// Every hospital is on the booking-token model (migration 031): the app charges the token online
+// (hospitals.booking_fee mirrors the platform setting) and the consultation fee is paid at the hospital.
 function hospitalJson(h) {
-  const model = FEE_MODEL_OUT[h.booking_model] || 'fullPrepay';
+  const model = 'tokenFee';
   const fee = paise(h.booking_fee);
   const address = [h.address_line1, h.city].filter(Boolean).join(', ') + (h.pincode ? ` ${h.pincode}` : '');
   return {
@@ -87,50 +90,63 @@ function hospitalJson(h) {
     lat: h.lat == null ? 0 : Number(h.lat),
     lng: h.lng == null ? 0 : Number(h.lng),
     feeModel: model,
-    bookingFeePaise: model === 'bookingFee' ? fee : 0,
-    tokenFeePaise: model === 'tokenFee' ? fee : 0,
-    convenienceFeePaise: paise(h.convenience_fee),
+    bookingFeePaise: 0,
+    tokenFeePaise: fee,
+    convenienceFeePaise: 0,
     status: h.status === 'ACTIVE' ? 'active' : 'suspended',
     brandColor: h.brand_color == null ? 0xff0b8a7e : Number(h.brand_color),
     initials: h.initials || String(h.name || '').slice(0, 2).toUpperCase(),
     gstin: h.gstin || '',
     about: h.about || '',
+    // Relative to the API host (/api/hospital-logos/<file>), like a doctor's photoUrl.
+    logoUrl: h.logo_url || null,
   };
 }
 
-async function feeBreakdown(doctor, hospital) {
+// What a booking costs: only the platform booking token now (no convenience fee or GST on top); the
+// whole consultation fee is paid at the hospital.
+async function feeBreakdown(doctor) {
   const consultation = paise(doctor.fee);
-  const model = FEE_MODEL_OUT[hospital.booking_model] || 'fullPrepay';
-  const base = model === 'fullPrepay' ? consultation : model === 'bookingFee' ? Math.min(paise(hospital.booking_fee), consultation) : paise(hospital.booking_fee);
-  const convenience = paise(hospital.convenience_fee);
-  const gst = Math.round(convenience * RULES.gstRate);
-  const total = base + convenience + gst;
+  const token = paise(await platformSetting('booking_token_amount'));
   return {
-    model,
+    model: 'tokenFee',
     consultationPaise: consultation,
-    payNowBasePaise: base,
-    convenienceFeePaise: convenience,
-    gstPaise: gst,
-    totalNowPaise: total,
-    payAtHospitalPaise: model === 'fullPrepay' ? 0 : model === 'bookingFee' ? Math.max(0, consultation - base) : consultation,
-    payNowLabel: model === 'fullPrepay' ? 'Consultation fee' : model === 'bookingFee' ? 'Booking fee' : 'Token fee',
+    payNowBasePaise: token,
+    convenienceFeePaise: 0,
+    gstPaise: 0,
+    totalNowPaise: token,
+    payAtHospitalPaise: consultation,
+    payNowLabel: 'Booking token',
   };
 }
 
+// The booking policy the patient app applies for a hospital: its own row, else the platform defaults
+// (Super Admin > Platform Settings: booking window and cancellation cutoff).
 async function hoursOf(hospitalId) {
   const row = await db.one('SELECT * FROM hospital_policies WHERE hospital_id = ?', [hospitalId]);
-  return { cancellationWindowHours: row ? row.cancellation_window_hours : 4, refundPercent: row ? row.refund_percent : 100, bookingWindowDays: row ? row.booking_window_days : 7 };
+  if (!row) return { ...(await policyDefaults()), custom: false };
+  return { cancellationWindowHours: row.cancellation_window_hours, refundPercent: row.refund_percent, bookingWindowDays: row.booking_window_days, custom: true, updatedAt: db.iso(row.updated_at) };
+}
+
+async function platformSetting(key) {
+  const def = SETTINGS[key];
+  const row = await db.one('SELECT value FROM platform_settings WHERE setting_key = ?', [key]);
+  const n = row ? Number(JSON.parse(row.value)) : def.default;
+  return Number.isInteger(n) && n >= def.min && n <= def.max ? n : def.default;
+}
+
+async function policyDefaults() {
+  return { cancellationWindowHours: await platformSetting('cancellation_cutoff_hours'), refundPercent: 100, bookingWindowDays: await platformSetting('booking_window_days') };
 }
 
 async function holdMinutes() {
-  const row = await db.one("SELECT value FROM platform_settings WHERE setting_key = 'appointment_hold_minutes'");
-  const n = row ? Number(JSON.parse(row.value)) : RULES.holdMinutesDefault;
-  return Number.isFinite(n) && n > 0 ? n : RULES.holdMinutesDefault;
+  return platformSetting('appointment_hold_minutes');
 }
 
 module.exports = {
+  platformSetting,
   ApiError, fail, notFound, policy, RULES,
   nowIn, offsetFor, isoAt, instant, addDays, weekdayOf, minutesOf, hhmm, isDate,
   paise, rupees, GENDER_OUT, GENDER_IN, RELATION_OUT, RELATION_IN, FEE_MODEL_OUT, METHOD_IN, METHOD_OUT,
-  patientJson, hospitalJson, feeBreakdown, hoursOf, holdMinutes,
+  patientJson, hospitalJson, feeBreakdown, hoursOf, policyDefaults, holdMinutes,
 };

@@ -1,6 +1,6 @@
 const db = require('../../db');
 const { roleHas } = require('../../config/permissions');
-const { EVENTS, CHANNELS, invalidVariables } = require('../../config/notificationEvents');
+const { EVENTS, CHANNELS, isCritical, invalidVariables } = require('../../config/notificationEvents');
 const { validate } = require('../../utils/validate');
 const { badRequest, notFound, forbidden } = require('../../utils/http');
 const auditLog = require('../../services/auditLog');
@@ -14,7 +14,7 @@ function templateFromRow(r) {
   return {
     id: r.id, eventKey: r.event_key, name: r.name, title: r.title, body: r.body,
     channels: JSON.parse(r.channels || '[]'), status: r.status, updatedAt: db.iso(r.updated_at), updatedByName: r.updated_by_name || null,
-    variables: event ? event.variables : [], audience: event ? event.audience : null, sample: event ? event.sample : {},
+    variables: event ? event.variables : [], audience: event ? event.audience : null, sample: event ? event.sample : {}, critical: isCritical(r.event_key),
   };
 }
 
@@ -108,23 +108,89 @@ exports.notificationLogs = async (req, res) => {
 
 // ---- Announcements ------------------------------------------------------------
 
+// How many people an announcement reaches: the active doctors and receptionists of the hospitals it targets.
+async function audienceOf(target, hospitalIds) {
+  const scoped = target === 'SELECTED';
+  const where = scoped ? `AND hospital_id IN (${hospitalIds.map(() => '?').join(',') || "''"})` : '';
+  const rows = await db.query(`SELECT role, COUNT(*) AS n FROM users WHERE status = 'ACTIVE' AND role IN ('DOCTOR', 'RECEPTIONIST') ${where} GROUP BY role`, scoped ? hospitalIds : []);
+  const n = (role) => Number((rows.find((r) => r.role === role) || {}).n) || 0;
+  const hospitals = scoped ? hospitalIds.length : Number((await db.one("SELECT COUNT(*) AS n FROM hospitals WHERE status <> 'OFFBOARDED'")).n);
+  return { doctors: n('DOCTOR'), receptionists: n('RECEPTIONIST'), hospitals };
+}
+
+async function announcementJson(r) {
+  const hospitals = r.target === 'SELECTED'
+    ? await db.query('SELECT h.id, h.name FROM announcement_hospitals a JOIN hospitals h ON h.id = a.hospital_id WHERE a.announcement_id = ? ORDER BY h.name', [r.id])
+    : [];
+  return {
+    id: r.id, title: r.title, message: r.message, target: r.target, status: r.status, publishedAt: db.iso(r.published_at), createdAt: db.iso(r.created_at),
+    hospitals: hospitals.map((h) => ({ id: h.id, name: h.name })), audience: await audienceOf(r.target, hospitals.map((h) => h.id)),
+  };
+}
+
 exports.listAnnouncements = async (req, res) => {
   const rows = await db.query('SELECT * FROM announcements ORDER BY created_at DESC');
-  res.json({
-    announcements: rows.map((r) => ({ id: r.id, title: r.title, message: r.message, target: r.target, status: r.status, publishedAt: db.iso(r.published_at), createdAt: db.iso(r.created_at) })),
-  });
+  res.json({ announcements: await Promise.all(rows.map(announcementJson)) });
 };
 
-exports.createAnnouncement = async (req, res) => {
-  const { value, errors, ok } = validate(req.body, {
+// Title, message and who it reaches: every hospital, or a chosen set (target SELECTED + hospitalIds).
+async function checkAnnouncement(body) {
+  const { value, errors, ok } = validate(body, {
     title: { label: 'Title', required: true, minLength: 3, maxLength: 160 },
     message: { label: 'Message', required: true, minLength: 5, maxLength: 1000 },
   });
-  if (!ok) throw badRequest('Please correct the highlighted fields.', errors);
+  const target = (body && body.target) === 'SELECTED' ? 'SELECTED' : 'ALL';
+  let hospitalIds = [];
+  if (target === 'SELECTED') {
+    hospitalIds = [...new Set(Array.isArray(body.hospitalIds) ? body.hospitalIds.map(String) : [])];
+    if (!hospitalIds.length) errors.hospitalIds = 'Choose at least one hospital.';
+    else {
+      const found = await db.query(`SELECT id FROM hospitals WHERE id IN (${hospitalIds.map(() => '?').join(',')})`, hospitalIds);
+      if (found.length !== hospitalIds.length) errors.hospitalIds = 'One of the chosen hospitals does not exist.';
+    }
+  }
+  if (!ok || Object.keys(errors).length) throw badRequest('Please correct the highlighted fields.', errors);
+  return { ...value, target, hospitalIds };
+}
+
+async function saveTargets(conn, id, target, hospitalIds) {
+  await conn.query('DELETE FROM announcement_hospitals WHERE announcement_id = ?', [id]);
+  if (target === 'SELECTED') for (const hid of hospitalIds) await conn.query('INSERT INTO announcement_hospitals (announcement_id, hospital_id) VALUES (?, ?)', [id, hid]);
+}
+
+exports.createAnnouncement = async (req, res) => {
+  const v = await checkAnnouncement(req.body);
   const id = await db.nextId('announcements', 'ANN', 1);
-  await db.query("INSERT INTO announcements (id, title, message, target, status, created_by) VALUES (?, ?, ?, 'ALL', 'DRAFT', ?)", [id, value.title, value.message, req.user.id]);
-  await auditLog.record({ req, action: 'ANNOUNCEMENT_CREATED', entityType: 'ANNOUNCEMENT', entityId: id, summary: `Drafted announcement: ${value.title}` });
+  await db.tx(async (conn) => {
+    await conn.query("INSERT INTO announcements (id, title, message, target, status, created_by) VALUES (?, ?, ?, ?, 'DRAFT', ?)", [id, v.title, v.message, v.target, req.user.id]);
+    await saveTargets(conn, id, v.target, v.hospitalIds);
+  });
+  await auditLog.record({ req, action: 'ANNOUNCEMENT_CREATED', entityType: 'ANNOUNCEMENT', entityId: id, summary: `Drafted announcement: ${v.title}${v.target === 'SELECTED' ? ` (${v.hospitalIds.length} hospital${v.hospitalIds.length === 1 ? '' : 's'})` : ''}` });
   res.status(201).json({ ok: true, message: 'Announcement saved as draft.', id });
+};
+
+// PATCH /api/admin/communications/announcements/:id: a draft can be corrected; a published one can't (people have read it).
+exports.updateAnnouncement = async (req, res) => {
+  const ann = await db.one('SELECT * FROM announcements WHERE id = ?', [req.params.id]);
+  if (!ann) throw notFound('Announcement not found.');
+  if (ann.status !== 'DRAFT') throw badRequest('Only a draft can be edited. Published and archived announcements are a record of what was shown.');
+  const v = await checkAnnouncement(req.body);
+  await db.tx(async (conn) => {
+    await conn.query("UPDATE announcements SET title = ?, message = ?, target = ? WHERE id = ? AND status = 'DRAFT'", [v.title, v.message, v.target, ann.id]);
+    await saveTargets(conn, ann.id, v.target, v.hospitalIds);
+  });
+  await auditLog.record({ req, action: 'ANNOUNCEMENT_UPDATED', entityType: 'ANNOUNCEMENT', entityId: ann.id, summary: `Edited draft: ${v.title}`, previousValue: { title: ann.title, message: ann.message, target: ann.target }, newValue: { title: v.title, message: v.message, target: v.target, hospitalIds: v.hospitalIds } });
+  res.json({ ok: true, message: 'Draft updated.' });
+};
+
+// DELETE /api/admin/communications/announcements/:id: discards a draft that was never published (nobody has seen it).
+exports.discardAnnouncement = async (req, res) => {
+  const ann = await db.one('SELECT * FROM announcements WHERE id = ?', [req.params.id]);
+  if (!ann) throw notFound('Announcement not found.');
+  if (ann.status !== 'DRAFT' || ann.published_at) throw badRequest('Only a draft that was never published can be discarded. Archive a published one instead.');
+  await db.query("DELETE FROM announcements WHERE id = ? AND status = 'DRAFT' AND published_at IS NULL", [ann.id]);
+  await auditLog.record({ req, action: 'ANNOUNCEMENT_DISCARDED', entityType: 'ANNOUNCEMENT', entityId: ann.id, summary: `Discarded draft: ${ann.title}`, previousValue: { title: ann.title, message: ann.message } });
+  res.json({ ok: true, message: 'Draft discarded.' });
 };
 
 exports.setAnnouncementStatus = async (req, res) => {
@@ -144,8 +210,19 @@ exports.setAnnouncementStatus = async (req, res) => {
 // ---- Banners --------------------------------------------------------------------
 
 function bannerFromRow(r) {
-  return { id: r.id, title: r.title, message: r.message, ctaLabel: r.cta_label, ctaUrl: r.cta_url, startsAt: r.starts_at, endsAt: r.ends_at, status: r.status, createdAt: db.iso(r.created_at) };
+  const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+  // What a person would see right now: Live, Scheduled (starts later), Ended, or the stored status.
+  let state = r.status === 'ACTIVE' ? 'LIVE' : r.status;
+  if (r.status === 'ACTIVE' && r.starts_at > now) state = 'SCHEDULED';
+  if (r.status === 'ACTIVE' && r.ends_at && r.ends_at < now) state = 'ENDED';
+  return { id: r.id, title: r.title, message: r.message, ctaLabel: r.cta_label, ctaUrl: r.cta_url, startsAt: db.iso(r.starts_at), endsAt: db.iso(r.ends_at), status: r.status, state, createdAt: db.iso(r.created_at) };
 }
+
+// A banner link must stay inside the portal ("/doctor/schedule") or be a full https:// address. Protocol-relative
+// ("//other-site.com"), plain http:// and anything else could send people to another site.
+const SAFE_PATH = /^\/(?![/\\])[^\s\\]*$/;
+const SAFE_HTTPS = /^https:\/\/[^\s/\\]+(?:[/?#][^\s\\]*)?$/i;
+const sqlTime = (v) => { const d = new Date(v); return Number.isNaN(d.getTime()) ? null : db.toSql(d); };
 
 function checkBanner(body) {
   const { value, errors, ok } = validate(body, {
@@ -154,14 +231,21 @@ function checkBanner(body) {
     ctaLabel: { label: 'Button label', maxLength: 40 },
     ctaUrl: { label: 'Button link', maxLength: 300 },
   });
-  if (value.ctaUrl && !/^(https?:\/\/|\/)/.test(value.ctaUrl)) errors.ctaUrl = 'Use a full https:// link or a path like /doctor/schedule.';
+  if (value.ctaUrl && !SAFE_PATH.test(value.ctaUrl) && !SAFE_HTTPS.test(value.ctaUrl)) errors.ctaUrl = 'Use a full https:// link, or a path inside the portal like /doctor/schedule.';
   if (value.ctaUrl && !value.ctaLabel) errors.ctaLabel = 'Add a button label for the link.';
+  // Schedule: starts now unless a start is given; an end is optional but must come after the start and not be past.
+  const startsAt = body && body.startsAt ? sqlTime(body.startsAt) : null;
+  const endsAt = body && body.endsAt ? sqlTime(body.endsAt) : null;
+  if (body && body.startsAt && !startsAt) errors.startsAt = 'Enter a valid start.';
+  if (body && body.endsAt && !endsAt) errors.endsAt = 'Enter a valid end.';
+  if (startsAt && endsAt && endsAt <= startsAt) errors.endsAt = 'The end must be after the start.';
+  if (endsAt && endsAt <= db.toSql(new Date())) errors.endsAt = 'The end is already in the past.';
   if (!ok || Object.keys(errors).length) throw badRequest('Please correct the highlighted fields.', errors);
-  return value;
+  return { ...value, startsAt, endsAt };
 }
 
 exports.listBanners = async (req, res) => {
-  const rows = await db.query('SELECT * FROM banners ORDER BY created_at DESC');
+  const rows = await db.query("SELECT * FROM banners ORDER BY status = 'ARCHIVED', created_at DESC");
   res.json({ banners: rows.map(bannerFromRow) });
 };
 
@@ -169,8 +253,8 @@ exports.createBanner = async (req, res) => {
   const v = checkBanner(req.body);
   const id = await db.nextId('banners', 'BNR', 1);
   await db.query(
-    `INSERT INTO banners (id, title, message, cta_label, cta_url, starts_at, status, created_by) VALUES (?, ?, ?, ?, ?, datetime('now'), 'INACTIVE', ?)`,
-    [id, v.title, v.message, v.ctaLabel || null, v.ctaUrl || null, req.user.id]
+    `INSERT INTO banners (id, title, message, cta_label, cta_url, starts_at, ends_at, status, created_by) VALUES (?, ?, ?, ?, ?, COALESCE(?, datetime('now')), ?, 'INACTIVE', ?)`,
+    [id, v.title, v.message, v.ctaLabel || null, v.ctaUrl || null, v.startsAt, v.endsAt, req.user.id]
   );
   await auditLog.record({ req, action: 'BANNER_CREATED', entityType: 'BANNER', entityId: id, summary: `Created banner: ${v.title}` });
   res.status(201).json({ ok: true, message: 'Banner created (inactive until you activate it).', id });
@@ -179,9 +263,10 @@ exports.createBanner = async (req, res) => {
 exports.updateBanner = async (req, res) => {
   const banner = await db.one('SELECT * FROM banners WHERE id = ?', [req.params.id]);
   if (!banner) throw notFound('Banner not found.');
+  if (banner.status === 'ARCHIVED') throw badRequest('An archived banner can\'t be edited.');
   const v = checkBanner(req.body);
-  await db.query('UPDATE banners SET title = ?, message = ?, cta_label = ?, cta_url = ? WHERE id = ?', [v.title, v.message, v.ctaLabel || null, v.ctaUrl || null, banner.id]);
-  await auditLog.record({ req, action: 'BANNER_UPDATED', entityType: 'BANNER', entityId: banner.id, summary: `Edited banner: ${v.title}`, previousValue: { title: banner.title, message: banner.message }, newValue: { title: v.title, message: v.message } });
+  await db.query("UPDATE banners SET title = ?, message = ?, cta_label = ?, cta_url = ?, starts_at = COALESCE(?, starts_at), ends_at = ? WHERE id = ?", [v.title, v.message, v.ctaLabel || null, v.ctaUrl || null, v.startsAt, v.endsAt, banner.id]);
+  await auditLog.record({ req, action: 'BANNER_UPDATED', entityType: 'BANNER', entityId: banner.id, summary: `Edited banner: ${v.title}`, previousValue: { title: banner.title, message: banner.message, startsAt: banner.starts_at, endsAt: banner.ends_at }, newValue: { title: v.title, message: v.message, startsAt: v.startsAt, endsAt: v.endsAt } });
   res.json({ ok: true, message: 'Banner updated.' });
 };
 
@@ -189,9 +274,12 @@ exports.setBannerStatus = async (req, res) => {
   const banner = await db.one('SELECT * FROM banners WHERE id = ?', [req.params.id]);
   if (!banner) throw notFound('Banner not found.');
   const { status } = req.body || {};
-  if (!['ACTIVE', 'INACTIVE'].includes(status)) throw badRequest('Choose Active or Inactive.');
+  if (!['ACTIVE', 'INACTIVE', 'ARCHIVED'].includes(status)) throw badRequest('Choose Active, Inactive or Archived.');
   need(req, status === 'ACTIVE' ? 'communications.banners.activate' : 'communications.banners.deactivate');
+  if (banner.status === 'ARCHIVED') throw badRequest('An archived banner can\'t be changed. Create a new one.');
+  if (banner.status === status) throw badRequest(`This banner is already ${status.toLowerCase()}.`);
+  if (status === 'ACTIVE' && banner.ends_at && banner.ends_at <= db.toSql(new Date())) throw badRequest('This banner\'s end date has passed. Edit the dates before activating it.');
   await db.query('UPDATE banners SET status = ? WHERE id = ?', [status, req.params.id]);
-  await auditLog.record({ req, action: 'BANNER_STATUS_CHANGED', entityType: 'BANNER', entityId: req.params.id, summary: `${banner.title}: ${banner.status} → ${status}` });
-  res.json({ ok: true, message: `Banner ${status === 'ACTIVE' ? 'activated' : 'deactivated'}.` });
+  await auditLog.record({ req, action: status === 'ARCHIVED' ? 'BANNER_ARCHIVED' : 'BANNER_STATUS_CHANGED', entityType: 'BANNER', entityId: req.params.id, summary: `${banner.title}: ${banner.status} → ${status}` });
+  res.json({ ok: true, message: status === 'ARCHIVED' ? 'Banner archived.' : `Banner ${status === 'ACTIVE' ? 'activated' : 'deactivated'}.` });
 };

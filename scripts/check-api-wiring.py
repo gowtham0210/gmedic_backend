@@ -6,8 +6,8 @@ ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 d = yaml.safe_load(open(os.path.join(ROOT, "openapispec.yaml"), encoding="utf-8"))
 ops = [(m.upper(), p, o["tags"][0]) for p, v in d["paths"].items() for m, o in v.items() if m in ("get", "post", "put", "patch", "delete")]
 
-CALL = re.compile(r"""(?:api|fetch|call|apiFetch)\(\s*([`'"])(/api/[^`'"?]*?)(?:\?[^`'"]*)?\1""")
-CALL_TPL = re.compile(r"""(?:api|fetch|call|apiFetch)\(\s*`(/api/[^`]*)`""")
+CALL = re.compile(r"""(?:api|fetch|call|apiFetch|EventSource)\(\s*([`'"])(/api/[^`'"?]*?)(?:\?[^`'"]*)?\1""")
+CALL_TPL = re.compile(r"""(?:api|fetch|call|apiFetch|EventSource)\(\s*`(/api/[^`]*)`""")
 METHOD = re.compile(r"""method:\s*['"](\w+)['"]""")
 LINK = re.compile(r"""(?:href|src)=\{?[`'"](/api/[^`'"?]*)""")
 TPL = re.compile(r"\$\{[^}]*\}")

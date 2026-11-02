@@ -1,4 +1,5 @@
 const db = require('../db');
+const { contains } = require('../utils/like');
 
 function fromRow(row) {
   return {
@@ -15,43 +16,53 @@ function fromRow(row) {
     fee: Number(row.amount),
     appointmentStatus: row.appt_status,
     paymentStatus: row.status, // PAID | FAILED | PENDING (uppercase, gateway-facing)
-    payment: row.status === 'PAID' ? { method: row.method, transactionId: row.transaction_id, paidAt: db.iso(row.paid_at) } : null,
+    // TOKEN: the booking token paid in the app (Gmedic's); CONSULTATION: the doctor's fee paid at the hospital.
+    purpose: row.purpose || 'CONSULTATION',
+    payment: row.status === 'PAID' ? { method: row.method, transactionId: row.transaction_id, paidAt: db.iso(row.paid_at), receiptNumber: row.receipt_number || null, gateway: row.gateway || null } : null,
+    // Money already refunded or waiting to be (rejected requests don't count), and the state of the newest request.
+    refunded: Number(row.refunded_amount || 0),
+    refundStatus: row.latest_refund_status || null,
     createdAt: db.iso(row.created_at),
   };
 }
 
 const SELECT = `
-  SELECT pay.*, a.hospital_id, a.patient_id, a.appt_date, a.appt_time, a.status AS appt_status, p.name AS patient_name, d.id AS doctor_id, d.name AS doctor_name, d.specialization, h.name AS hospital_name
+  SELECT pay.*, a.hospital_id, a.patient_id, a.appt_date, a.appt_time, a.status AS appt_status, p.name AS patient_name, d.id AS doctor_id, d.name AS doctor_name, d.specialization, h.name AS hospital_name,
+         (SELECT COALESCE(SUM(r.amount), 0) FROM refunds r WHERE r.payment_id = pay.id AND r.status <> 'REJECTED') AS refunded_amount,
+         (SELECT r.status FROM refunds r WHERE r.payment_id = pay.id ORDER BY r.created_at DESC, r.id DESC LIMIT 1) AS latest_refund_status
   FROM payments pay
   JOIN appointments a ON a.id = pay.appointment_id
   JOIN doctors d ON d.id = a.doctor_id
   JOIN hospitals h ON h.id = a.hospital_id
   LEFT JOIN patients p ON p.id = a.patient_id`;
 
-function buildAdminFilters({ hospitalId, from, to, doctorId, status, q }) {
+function buildAdminFilters({ hospitalId, from, to, doctorId, status, purpose, q }) {
   const clauses = [];
   const params = [];
+  if (purpose === 'TOKEN' || purpose === 'CONSULTATION') { clauses.push('pay.purpose = ?'); params.push(purpose); }
   if (hospitalId) { clauses.push('a.hospital_id = ?'); params.push(hospitalId); }
-  if (from) { clauses.push('a.appt_date >= ?'); params.push(from); }
-  if (to) { clauses.push('a.appt_date <= ?'); params.push(to); }
+  // The admin list is about money movement, so its dates are the payment's date (paid, or created if it never was).
+  if (from) { clauses.push('DATE(COALESCE(pay.paid_at, pay.created_at)) >= ?'); params.push(from); }
+  if (to) { clauses.push('DATE(COALESCE(pay.paid_at, pay.created_at)) <= ?'); params.push(to); }
   if (doctorId) { clauses.push('d.id = ?'); params.push(doctorId); }
   if (status) { clauses.push('pay.status = ?'); params.push(status.toUpperCase()); }
-  if (q) { clauses.push('(p.name LIKE ? OR pay.transaction_id LIKE ? OR d.name LIKE ?)'); params.push(`%${q}%`, `%${q}%`, `%${q}%`); }
+  if (q) { const like = contains(q); clauses.push(`(p.name LIKE ? ESCAPE '\\' OR pay.transaction_id LIKE ? ESCAPE '\\' OR d.name LIKE ? ESCAPE '\\' OR pay.id LIKE ? ESCAPE '\\' OR pay.appointment_id LIKE ? ESCAPE '\\')`); params.push(like, like, like, like, like); }
   return { where: clauses.length ? `WHERE ${clauses.join(' AND ')}` : '', params };
 }
 
-// Receptionist: payments for one hospital. `paymentStatus` is lowercase
-// paid/pending, matching appointments.payment_status. Only paid appointments
-// have a `payments` row; pending ones are derived from the appointment itself.
+// Receptionist: consultation fees for one hospital. `paymentStatus` is lowercase paid/pending, matching
+// appointments.payment_status. Paid ones are the fees collected at the hospital; pending ones (including app
+// bookings, whose booking token is Gmedic's and not listed here) are derived from the appointment itself.
 async function forHospital(hospitalId, { from, to, doctorId, paymentStatus, q } = {}) {
   let paid = [];
   if (paymentStatus !== 'pending') {
-    const clauses = ['a.hospital_id = ?'];
+    // Only payments that went through: a failed or pending attempt is not "paid".
+    const clauses = ['a.hospital_id = ?', "pay.status = 'PAID'", "pay.purpose = 'CONSULTATION'"];
     const params = [hospitalId];
     if (from) { clauses.push('a.appt_date >= ?'); params.push(from); }
     if (to) { clauses.push('a.appt_date <= ?'); params.push(to); }
     if (doctorId) { clauses.push('d.id = ?'); params.push(doctorId); }
-    if (q) { clauses.push('(p.name LIKE ? OR pay.transaction_id LIKE ? OR d.name LIKE ?)'); params.push(`%${q}%`, `%${q}%`, `%${q}%`); }
+    if (q) { const like = contains(q); clauses.push(`(p.name LIKE ? ESCAPE '\\' OR pay.transaction_id LIKE ? ESCAPE '\\' OR d.name LIKE ? ESCAPE '\\' OR pay.appointment_id LIKE ? ESCAPE '\\')`); params.push(like, like, like, like); }
     paid = (await db.query(`${SELECT} WHERE ${clauses.join(' AND ')}`, params)).map(fromRow);
   }
 
@@ -62,7 +73,7 @@ async function forHospital(hospitalId, { from, to, doctorId, paymentStatus, q } 
     if (from) { clauses.push('a.appt_date >= ?'); params.push(from); }
     if (to) { clauses.push('a.appt_date <= ?'); params.push(to); }
     if (doctorId) { clauses.push('a.doctor_id = ?'); params.push(doctorId); }
-    if (q) { clauses.push('(p.name LIKE ? OR d.name LIKE ?)'); params.push(`%${q}%`, `%${q}%`); }
+    if (q) { const like = contains(q); clauses.push(`(p.name LIKE ? ESCAPE '\\' OR d.name LIKE ? ESCAPE '\\' OR a.id LIKE ? ESCAPE '\\')`); params.push(like, like, like); }
     const rows = await db.query(
       `SELECT a.id AS appointment_id, a.hospital_id, a.patient_id, a.appt_date, a.appt_time, a.fee AS amount, a.status AS appt_status, p.name AS patient_name,
               d.id AS doctor_id, d.name AS doctor_name, d.specialization, h.name AS hospital_name,
@@ -106,4 +117,17 @@ async function adminSearch(filters = {}) {
   };
 }
 
-module.exports = { forHospital, adminSearch, fromRow };
+// One payment with the money breakdown, for the admin detail view.
+async function adminFindById(id) {
+  const row = await db.one(`${SELECT} WHERE pay.id = ?`, [id]);
+  if (!row) return null;
+  return {
+    ...fromRow(row), amount: Number(row.amount), consultationAmount: row.consultation_amount == null ? null : Number(row.consultation_amount),
+    convenienceFee: Number(row.convenience_fee), taxAmount: Number(row.tax_amount), currency: row.currency, method: row.method,
+    gateway: row.gateway, gatewayOrderId: row.gateway_order_id, gatewayStatus: row.gateway_status, transactionId: row.transaction_id,
+    receiptNumber: row.receipt_number, failureReason: row.failure_reason, paidAt: db.iso(row.paid_at),
+  };
+}
+
+module.exports = { forHospital, adminSearch, adminFindById, fromRow };
+// (searches escape LIKE wildcards)

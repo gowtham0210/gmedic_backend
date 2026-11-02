@@ -38,7 +38,7 @@ async function fire(eventKey, appointmentId) {
     if (who === 'doctor') recipients.push(...(await notifications.doctorUsers(appt.doctorId)));
     if (who === 'receptionists') recipients.push(...(await notifications.hospitalUsers(appt.hospitalId, 'RECEPTIONIST')));
   }
-  const results = await notifications.trigger(eventKey, recipients, data, { link: '/appointments' });
+  const results = await notifications.trigger(eventKey, recipients, data, { link: { DOCTOR: '/doctor/appointments', default: '/appointments' } });
   return { event: EVENTS[eventKey].name, delivered: results.filter((r) => r.ok).length, results };
 }
 

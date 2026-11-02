@@ -6,6 +6,15 @@
 
 const db = require('../db');
 const { EVENTS, CHANNELS, invalidVariables, render } = require('../config/notificationEvents');
+const { prefKeyFor } = require('../config/notificationPreferences');
+
+// True when the user switched this kind of notification off (Settings > Preferences).
+async function muted(user, eventKey) {
+  const key = prefKeyFor(user.role, eventKey);
+  if (!key) return false;
+  const row = await db.one('SELECT enabled FROM user_notification_prefs WHERE user_id = ? AND pref_key = ?', [user.id, key]);
+  return !!row && !row.enabled;
+}
 
 async function log({ eventKey, userId, role, channel, status, reason, notificationId }) {
   await db.query(
@@ -17,6 +26,13 @@ async function log({ eventKey, userId, role, channel, status, reason, notificati
 
 // recipients: a user id, an array of user ids, or { role: 'PATIENT' } entries
 // for people who have no portal account (logged as unavailable, not faked).
+// link: one path, or { ROLE: path, default: path } when each portal opens a different page.
+function linkFor(link, role) {
+  if (!link) return null;
+  if (typeof link === 'string') return link;
+  return link[role] || link.default || null;
+}
+
 async function trigger(eventKey, recipients, data = {}, { link } = {}) {
   const results = [];
   try {
@@ -53,9 +69,14 @@ async function trigger(eventKey, recipients, data = {}, { link } = {}) {
         results.push({ ok: false, reason: 'recipient unavailable' });
         continue;
       }
+      if (await muted(user, eventKey)) {
+        await log({ eventKey, userId: user.id, role: user.role, channel: 'IN_APP', status: 'SKIPPED', reason: 'Turned off by the recipient in their notification preferences.' });
+        results.push({ ok: false, userId: user.id, reason: 'muted' });
+        continue;
+      }
       for (const channel of channels) {
         if (channel === 'IN_APP') {
-          const res = await db.query('INSERT INTO notifications (user_id, event_key, title, body, link) VALUES (?, ?, ?, ?, ?)', [user.id, eventKey, title, body, link || null]);
+          const res = await db.query('INSERT INTO notifications (user_id, event_key, title, body, link) VALUES (?, ?, ?, ?, ?)', [user.id, eventKey, title, body, linkFor(link, user.role)]);
           await log({ eventKey, userId: user.id, role: user.role, channel, status: 'DELIVERED', notificationId: res.insertId });
           results.push({ ok: true, userId: user.id, notificationId: res.insertId });
         } else {

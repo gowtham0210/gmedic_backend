@@ -105,11 +105,11 @@
   function renderToday(rows, total) {
     const tbody = $('[data-today-rows]');
     if (!rows.length) {
-      tbody.innerHTML = G.emptyRow(6, 'No appointments today', 'New bookings from the Gmedic app will appear here.', 'calendar');
+      tbody.innerHTML = G.emptyRow(6, 'No appointments today', 'New bookings will appear here.', 'calendar');
       return;
     }
     tbody.innerHTML = rows.map((a) => `
-      <tr>
+      <tr class="is-clickable" data-appt="${esc(a.id)}" tabindex="0">
         <td class="cell-primary" data-label="Patient"><div class="person">${G.avatar(a.patientName, 'sm')}<span class="person__name">${esc(a.patientName)}</span></div></td>
         <td data-label="Doctor">${esc(a.doctorName)}</td>
         <td data-label="Specialist" class="text-muted">${esc(a.specialization)}</td>
@@ -124,11 +124,11 @@
   function renderRecent(rows) {
     const tbody = $('[data-recent-rows]');
     if (!rows.length) {
-      tbody.innerHTML = G.emptyRow(8, 'No recent appointments', 'Bookings from the Gmedic app will appear here.', 'calendar');
+      tbody.innerHTML = G.emptyRow(8, 'No recent appointments', 'New bookings will appear here.', 'calendar');
       return;
     }
     tbody.innerHTML = rows.map((a) => `
-      <tr>
+      <tr class="is-clickable" data-appt="${esc(a.id)}" tabindex="0">
         <td data-label="Date" class="nowrap">${esc(G.date(a.date))}</td>
         <td class="cell-primary" data-label="Patient"><div class="person">${G.avatar(a.patientName, 'sm')}<span class="person__name">${esc(a.patientName)}</span></div></td>
         <td data-label="Doctor">${esc(a.doctorName)}</td>
@@ -170,6 +170,15 @@
     }
   }
 
+  // Rows open the appointment details (cancel, reschedule, collect payment) in place.
+  for (const sel of ['[data-today-rows]', '[data-recent-rows]']) {
+    const tbody = $(sel);
+    const open = (row) => row && G.openAppointment && G.openAppointment(row.dataset.appt);
+    tbody.addEventListener('click', (e) => open(e.target.closest('[data-appt]')));
+    tbody.addEventListener('keydown', (e) => { if (e.key === 'Enter') open(e.target.closest('[data-appt]')); });
+  }
+
   load();
   document.addEventListener('doctors:changed', load);
+  document.addEventListener('appointments:changed', load);
 })();

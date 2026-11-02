@@ -9,3 +9,5 @@ data/*.sqlite-wal
 storage/
 *.log
 data/backup/
+.DS_Store
+.claude/

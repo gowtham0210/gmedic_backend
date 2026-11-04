@@ -15,7 +15,7 @@ exports.get = async (req, res) => {
     tokenModel.query(req.hospitalId, { date: today, doctorId: req.doctorId }),
   ]);
   const todays = appointmentModel.sortRows(all.filter((a) => a.date === today), 'date_asc');
-  const waiting = tokens.filter((t) => t.status === 'waiting').sort(bookingCore.queueOrder);
+  const waiting = bookingCore.sortQueue(tokens.filter((t) => t.status === 'waiting'));
   const current = tokens.find((t) => t.status === 'in_consultation' || t.status === 'called') || null;
 
   res.json({

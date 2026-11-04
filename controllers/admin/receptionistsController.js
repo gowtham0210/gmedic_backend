@@ -21,7 +21,7 @@ exports.list = async (req, res) => {
     [...params, size, (cur - 1) * size]
   );
   res.json({
-    items: rows.map((r) => ({ id: r.id, name: r.name, email: r.email, phone: r.phone, hospitalId: r.hospital_id, hospitalName: r.hospital_name, status: r.status, createdAt: db.iso(r.created_at) })),
+    items: rows.map((r) => ({ id: r.id, name: r.name, email: r.email, phone: r.phone, hospitalId: r.hospital_id, hospitalName: r.hospital_name, status: r.status, canBookEmergency: !!r.can_book_emergency, createdAt: db.iso(r.created_at) })),
     total: Number(total), page: cur, pageSize: size, pages: Math.max(1, Math.ceil(total / size)),
   });
 };
@@ -93,6 +93,23 @@ exports.setStatus = async (req, res) => {
   await userModel.setStatus(req.params.id, status);
   await auditLog.record({ req, action: `RECEPTIONIST_${status}`, entityType: 'USER', entityId: req.params.id, summary: `${target.name}: ${target.status} → ${status}` });
   res.json({ ok: true, message: `${target.name} is now ${status.toLowerCase()}.` });
+};
+
+// PATCH /api/admin/receptionists/:id/emergency-booking { allowed: boolean }
+// Grants or revokes the right to book emergency walk-ins over a full slot (enforced in services/receptionBooking.js).
+exports.setEmergencyBooking = async (req, res) => {
+  const target = await userModel.findById(req.params.id);
+  if (!target || target.role !== 'RECEPTIONIST') throw notFound('Receptionist not found.');
+  const allowed = (req.body || {}).allowed;
+  if (typeof allowed !== 'boolean') throw badRequest('Send allowed: true or false.', { allowed: 'true or false.' });
+  if (allowed === target.canBookEmergency) return res.json({ ok: true, message: `${target.name} already ${allowed ? 'can' : 'cannot'} book emergency walk-ins.`, canBookEmergency: allowed });
+  await db.query('UPDATE users SET can_book_emergency = ? WHERE id = ?', [allowed ? 1 : 0, target.id]);
+  await auditLog.record({
+    req, action: allowed ? 'EMERGENCY_BOOKING_GRANTED' : 'EMERGENCY_BOOKING_REVOKED', entityType: 'USER', entityId: target.id,
+    summary: `${allowed ? 'Allowed' : 'Stopped'} ${target.name} ${allowed ? 'to book' : 'from booking'} emergency walk-ins`,
+    previousValue: { canBookEmergency: target.canBookEmergency }, newValue: { canBookEmergency: allowed },
+  });
+  res.json({ ok: true, message: `${target.name} ${allowed ? 'can now' : 'can no longer'} book emergency walk-ins.`, canBookEmergency: allowed });
 };
 
 exports.resetPassword = async (req, res) => {

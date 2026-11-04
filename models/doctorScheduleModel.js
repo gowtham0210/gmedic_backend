@@ -2,11 +2,20 @@
 // lunch break (e.g. 09:00-13:00 and 16:00-19:00) is simply two rows for the
 // same day_of_week — no separate break columns needed.
 //
-// Changes never reach back into days already open for booking: adding, editing or removing a
-// block takes effect from the next working day (tomorrow in the hospital's time zone). An edit
-// closes the version in force today (effective_to = today) and starts a new version tomorrow, so
-// today's slots keep the capacity patients booked against. Appointments are never moved or
-// cancelled by a schedule change; a slot left over its new capacity just takes no new bookings.
+// Changes never reach back into days already open for booking, because patients hold seats against today's slots
+// (their capacity, length and token numbers):
+//   - EDITING or REMOVING a block takes effect from the next working day (tomorrow in the hospital's time zone). An edit
+//     closes the version in force today (effective_to = today) and starts a new version tomorrow, so today's slots keep the
+//     capacity patients booked against.
+//   - EDITING a block that is NOT IN FORCE YET (no patient can have booked into it) is the same as adding it: on today's weekday it
+//     starts today under the same conditions (see pullToday). A block that is already in force, or that replaces a version ending
+//     today, always changes from tomorrow.
+//   - ADDING a block for a weekday that is today starts today when that only ADDS slots and cannot disturb anything booked:
+//     its start time is still ahead, it overlaps no hours in force today, and nobody is booked or holding a seat later today.
+//     (Token numbers follow the slots of the day in order; a block inserted before existing bookings would give new patients
+//     higher numbers than patients already booked later, and the doctor's queue is called in token order.) Otherwise it starts
+//     on the next such weekday, as every added block used to.
+// Appointments are never moved or cancelled by a schedule change; a slot left over its new capacity just takes no new bookings.
 
 const db = require('../db');
 const bookingCore = require('../services/bookingCore');
@@ -37,8 +46,8 @@ function withState(row, today) {
 // Today and the next working day, in the doctor's hospital time zone.
 async function daysFor(doctorId) {
   const h = await db.one('SELECT h.timezone FROM doctors d JOIN hospitals h ON h.id = d.hospital_id WHERE d.id = ?', [doctorId]);
-  const today = nowIn(h ? h.timezone : undefined).date;
-  return { today, tomorrow: addDays(today, 1) };
+  const now = nowIn(h ? h.timezone : undefined);
+  return { today: now.date, tomorrow: addDays(now.date, 1), nowMinutes: now.minutes };
 }
 
 // The first date on or after `from` that falls on the block's weekday.
@@ -79,6 +88,20 @@ async function impact(doctorId, id) {
   return { removedFrom: tomorrow, endsToday: !!(row.effective_to && row.effective_to <= today), bookings: await bookingsIn(row, tomorrow) };
 }
 
+// A block that has not started yet (effective_from after today, so nobody can have booked into it) on today's weekday can start today
+// when it could be added today: its start time is still ahead, it overlaps no other hours of that day, it is not the new version of
+// hours that end today (those change from tomorrow, today keeps what patients booked against), and nobody is booked or holding a
+// seat at or after its start time today.
+async function pullToday(row, next, { today, nowMinutes }) {
+  if (!row.effective_from || row.effective_from <= today || row.day_of_week !== weekdayOf(today)) return false;
+  if (minutesOf(next.start) <= nowMinutes || minutesOf(next.end) - minutesOf(next.start) < next.slot) return false;
+  const predecessor = await db.one('SELECT 1 AS x FROM doctor_schedules WHERE doctor_id = ? AND day_of_week = ? AND id <> ? AND effective_to = ?', [row.doctor_id, row.day_of_week, row.id, today]);
+  if (predecessor) return false;
+  const others = await db.query('SELECT * FROM doctor_schedules WHERE doctor_id = ? AND day_of_week = ? AND id <> ? AND (effective_to IS NULL OR effective_to >= ?)', [row.doctor_id, row.day_of_week, row.id, today]);
+  if (others.some((o) => overlaps(next.start, next.end, o.start_time, o.end_time))) return false;
+  return !(await firstBookedFrom(row.doctor_id, today, next.start));
+}
+
 // Change a block's hours, slot length and/or patients per slot from the next working day on, with the
 // same versioning as changeCapacity (today keeps what patients booked against). Bookings that fall
 // outside the new hours are kept and counted.
@@ -89,6 +112,14 @@ async function edit(doctorId, id, { startTime, endTime, slotMinutes, capacityPer
   if (row.effective_to && row.effective_to < tomorrow) return { error: 'This block ends today, so there is nothing left to change.' };
   const next = { start: startTime || row.start_time, end: endTime || row.end_time, slot: slotMinutes || row.slot_minutes, capacity: capacityPerSlot || row.capacity_per_slot };
   if (next.start >= next.end) return { error: 'End time must be after start time.', field: 'endTime' };
+  if (await pullToday(row, next, await daysFor(doctorId))) {
+    const walkInNow = Math.min(bookingCore.walkInSeatsOf(row), next.capacity);
+    await db.query(
+      'UPDATE doctor_schedules SET start_time = ?, end_time = ?, slot_minutes = ?, capacity_per_slot = ?, online_quota = ?, effective_from = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [next.start, next.end, next.slot, next.capacity, walkInNow === 0 ? null : Math.max(0, next.capacity - walkInNow), today, row.id]
+    );
+    return { schedule: fromRow(await db.one('SELECT * FROM doctor_schedules WHERE id = ?', [row.id])), startsToday: true, effectiveFrom: today, firstDate: today, outside: { count: 0 }, overbooked: [] };
+  }
   if (next.start === row.start_time && next.end === row.end_time && next.slot === row.slot_minutes && next.capacity === row.capacity_per_slot) return { unchanged: true, schedule: fromRow(row) };
   const others = await db.query(
     'SELECT * FROM doctor_schedules WHERE doctor_id = ? AND day_of_week = ? AND id <> ? AND (effective_to IS NULL OR effective_to >= ?)',
@@ -126,21 +157,52 @@ function overlaps(aStart, aEnd, bStart, bEnd) {
   return aStart < bEnd && bStart < aEnd;
 }
 
+const minutesOf = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+const weekdayOf = (date) => new Date(`${date}T00:00:00Z`).getUTCDay(); // 0 = Sunday, like doctor_schedules
+
+// The earliest time today, at or after `from`, that a patient is booked or holding a seat for (an appointment still on, or a live
+// payment hold), or null. Emergency walk-ins take no slot and are not counted.
+async function firstBookedFrom(doctorId, date, from) {
+  const booked = await db.one(
+    "SELECT MIN(appt_time) AS t FROM appointments WHERE doctor_id = ? AND appt_date = ? AND appt_time >= ? AND status <> 'cancelled' AND is_emergency = 0",
+    [doctorId, date, from]
+  );
+  const held = await db.one(
+    "SELECT MIN(appt_time) AS t FROM slot_holds WHERE doctor_id = ? AND appt_date = ? AND appt_time >= ? AND status = 'HELD' AND held_until > datetime('now')",
+    [doctorId, date, from]
+  );
+  return [booked && booked.t, held && held.t].filter(Boolean).sort()[0] || null;
+}
+
+// Add a weekly block. For a weekday that is today it starts today when that is safe (see the header), else on the next such weekday;
+// any other weekday starts tomorrow, which first falls on that weekday.
 async function create(doctorId, { dayOfWeek, startTime, endTime, slotMinutes, capacityPerSlot }) {
-  const { tomorrow } = await daysFor(doctorId);
-  // Only blocks still running from tomorrow on can clash with the new one.
+  const { today, tomorrow, nowMinutes } = await daysFor(doctorId);
+  let from = tomorrow;
+  let startsToday = false;
+  let laterBecause = null;
+  if (dayOfWeek === weekdayOf(today)) {
+    if (minutesOf(startTime) <= nowMinutes) {
+      laterBecause = 'The start time has already passed today';
+    } else {
+      const booked = await firstBookedFrom(doctorId, today, startTime);
+      if (booked) laterBecause = `Patients are already booked from ${booked} today`;
+      else { from = today; startsToday = true; }
+    }
+  }
+  // Only blocks still running on the day the new one starts can clash with it (the database also refuses an overlap).
   const existing = await db.query(
     'SELECT * FROM doctor_schedules WHERE doctor_id = ? AND day_of_week = ? AND (effective_to IS NULL OR effective_to >= ?)',
-    [doctorId, dayOfWeek, tomorrow]
+    [doctorId, dayOfWeek, from]
   );
   if (existing.some((row) => overlaps(startTime, endTime, row.start_time, row.end_time))) {
-    return { error: 'This time block overlaps with an existing one on that day.' };
+    return { error: startsToday ? 'This time block overlaps hours already set for that day (including hours that start tomorrow).' : 'This time block overlaps with an existing one on that day.' };
   }
   const result = await db.query(
     'INSERT INTO doctor_schedules (doctor_id, day_of_week, start_time, end_time, slot_minutes, capacity_per_slot, effective_from) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    [doctorId, dayOfWeek, startTime, endTime, slotMinutes || 15, capacityPerSlot || 1, tomorrow]
+    [doctorId, dayOfWeek, startTime, endTime, slotMinutes || 15, capacityPerSlot || 1, from]
   );
-  return { id: result.insertId, effectiveFrom: tomorrow, firstDate: firstDateOn(dayOfWeek, tomorrow) };
+  return { id: result.insertId, effectiveFrom: from, firstDate: startsToday ? today : firstDateOn(dayOfWeek, from), startsToday, laterBecause };
 }
 
 // Upcoming slots of this block (from `from` on) that already hold more bookings than `capacity`.
@@ -191,7 +253,22 @@ async function changeCapacity(doctorId, id, capacity) {
   };
 }
 
-// Stop a block from the next working day on. A version not in force yet is deleted outright.
+// Anyone booked (or holding a seat) in this block's hours on any date from `from` on?
+async function bookedAnyFrom(row, from) {
+  const booked = await db.one(
+    `SELECT COUNT(*) AS n FROM appointments WHERE doctor_id = ? AND appt_date >= ? AND status <> 'cancelled' AND is_emergency = 0
+       AND CAST(strftime('%w', appt_date) AS INTEGER) = ? AND appt_time >= ? AND appt_time < ?`,
+    [row.doctor_id, from, row.day_of_week, row.start_time, row.end_time]
+  );
+  const held = await db.one(
+    `SELECT COUNT(*) AS n FROM slot_holds WHERE doctor_id = ? AND appt_date >= ? AND status = 'HELD' AND held_until > datetime('now')
+       AND CAST(strftime('%w', appt_date) AS INTEGER) = ? AND appt_time >= ? AND appt_time < ?`,
+    [row.doctor_id, from, row.day_of_week, row.start_time, row.end_time]
+  );
+  return Number(booked.n) + Number(held.n) > 0;
+}
+
+// Stop a block from the next working day on. A version not in force yet, or one added today that nobody has booked into, is deleted outright.
 // Appointments already booked on its upcoming days are kept; the response counts them.
 async function remove(doctorId, id) {
   const row = await db.one('SELECT * FROM doctor_schedules WHERE doctor_id = ? AND id = ?', [doctorId, id]);
@@ -199,7 +276,9 @@ async function remove(doctorId, id) {
   if (!row || (row.effective_to && row.effective_to < today)) return { notFound: true };
   // Already ending today: removing it again would "succeed" without changing anything.
   if (row.effective_to && row.effective_to <= today) return { error: 'These hours already end today. Nothing more to remove.' };
-  if (row.effective_from && row.effective_from >= tomorrow) {
+  const neverUsed = row.effective_from === today && !(await bookedAnyFrom(row, today));
+  if ((row.effective_from && row.effective_from >= tomorrow) || neverUsed) {
+    // Not in force yet, or added today and nothing booked or held in it on any date: nothing depends on it, so it is taken back whole.
     await db.query('DELETE FROM doctor_schedules WHERE id = ?', [row.id]);
   } else if (!row.effective_to || row.effective_to > today) {
     await db.query('UPDATE doctor_schedules SET effective_to = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [today, row.id]);

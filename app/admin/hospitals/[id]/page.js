@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Icon from '../../../../components/Icon';
 import HospitalStatusModal from '../../../../components/admin/HospitalStatusModal';
 import usePermissions from '../../../../components/admin/usePermissions';
+import EmergencyIntakeCard from '../../../../components/admin/EmergencyIntakeCard';
 import { formatDate } from '../../../../lib/format';
 
 const toast = (msg, type = 'success') => { if (typeof window !== 'undefined' && window.G) window.G.toast(msg, type); };
@@ -575,6 +576,8 @@ export default function HospitalDetailPage({ params }) {
               );
             })()}
           </article>
+
+          <EmergencyIntakeCard hospitalId={id} />
 
           <article className="card">
             <div className="card__head"><div><h2 className="card__title"><Icon name="stethoscope" />Departments</h2><p className="card__subtitle">Shown to patients when they pick a doctor. Archived ones are hidden; their doctors keep the label.</p></div></div>

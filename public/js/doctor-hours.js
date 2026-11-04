@@ -1,6 +1,6 @@
 /* Working hours card on the receptionist's doctor page: the weekly blocks patients can book, added and removed
    by the front desk. GET/POST /api/doctors/:id/schedule, PATCH/DELETE /api/doctors/:id/schedule/:blockId.
-   Fires `doctor:hours-changed` so the walk-in seats card follows. Changes apply from tomorrow. */
+   Fires `doctor:hours-changed` so the walk-in seats card follows. Changes to existing hours apply from tomorrow; new hours for today start today when that is safe. */
 (function () {
   'use strict';
   const { $, $$, esc, icon, api } = G;

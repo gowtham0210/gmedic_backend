@@ -2,6 +2,7 @@ import Script from 'next/script';
 import Icon from '../../../components/Icon';
 import AppointmentModal from '../../../components/receptionist/modals/AppointmentModal';
 import BookAppointmentModal from '../../../components/receptionist/modals/BookAppointmentModal';
+import EmergencyWalkInModal from '../../../components/receptionist/modals/EmergencyWalkInModal';
 import CollectPaymentModal from '../../../components/receptionist/modals/CollectPaymentModal';
 import { requireReceptionist } from '../../../lib/rbac';
 
@@ -18,14 +19,17 @@ export default async function AppointmentsPage() {
           <h1>Appointments</h1>
           <p>Appointments booked in the Gmedic app and at the front desk.</p>
         </div>
-        <div className="page-head__actions">
+        <div className="page-head__actions page-head__actions--split">
           <div className="chips" role="group" aria-label="Quick date range" data-date-chips>
             <button type="button" className="chip" data-range="today">Today</button>
             <button type="button" className="chip" data-range="tomorrow">Tomorrow</button>
             <button type="button" className="chip" data-range="week">Next 7 days</button>
             <button type="button" className="chip" data-range="all">All dates</button>
           </div>
-          <button type="button" className="btn btn--primary" data-open-book><Icon name="plus" />Book Appointment</button>
+          <div className="page-head__buttons">
+            <button type="button" className="btn btn--danger" data-open-emergency hidden><Icon name="alert" />Emergency Walk-in</button>
+            <button type="button" className="btn btn--primary" data-open-book><Icon name="plus" />Book Appointment</button>
+          </div>
         </div>
       </div>
 
@@ -82,10 +86,12 @@ export default async function AppointmentsPage() {
 
       <AppointmentModal />
       <BookAppointmentModal />
+      <EmergencyWalkInModal />
       <CollectPaymentModal />
       <Script src="/js/collect-payment.js" strategy="afterInteractive" />
       <Script src="/js/appointment-modal.js" strategy="afterInteractive" />
       <Script src="/js/book-appointment.js" strategy="afterInteractive" />
+      <Script src="/js/emergency-walkin.js" strategy="afterInteractive" />
       <Script src="/js/pages/appointments.js" strategy="afterInteractive" />
     </>
   );

@@ -49,7 +49,7 @@ function statusOf(a, token) {
 
 async function view(me, id) {
   const a = await db.one(
-    `SELECT * FROM appointments WHERE id = ? AND (booked_by_user_id = ? OR patient_id IN (SELECT id FROM patients WHERE account_user_id = ?))`,
+    `SELECT * FROM appointments WHERE id = ? AND emergency_walkin = 0 AND (booked_by_user_id = ? OR patient_id IN (SELECT id FROM patients WHERE account_user_id = ?))`,
     [id, me.user.id, me.user.id]
   );
   if (!a) throw notFound();
@@ -122,7 +122,7 @@ const publicView = ({ appointment, hospital, doctor }) => ({ appointment, hospit
 
 async function appointments(me) {
   const rows = await db.query(
-    `SELECT id FROM appointments WHERE booked_by_user_id = ? OR patient_id IN (SELECT id FROM patients WHERE account_user_id = ?) ORDER BY appt_date DESC, appt_time DESC`,
+    `SELECT id FROM appointments WHERE emergency_walkin = 0 AND (booked_by_user_id = ? OR patient_id IN (SELECT id FROM patients WHERE account_user_id = ?)) ORDER BY appt_date DESC, appt_time DESC`,
     [me.user.id, me.user.id]
   );
   const out = [];

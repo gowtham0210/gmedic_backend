@@ -33,7 +33,7 @@ const SELECT = `
   SELECT a.*, d.name AS doctor_name, d.specialization, (SELECT name FROM departments WHERE id = d.department_id) AS department, h.name AS hospital_name, h.timezone AS hospital_timezone, b.name AS branch_name,
          p.mobile AS patient_mobile, p.name AS patient_name, p.gender AS patient_gender, p.date_of_birth AS patient_dob, p.account_user_id AS patient_account, (SELECT COUNT(*) FROM appointments o WHERE o.patient_id = a.patient_id AND o.hospital_id <> a.hospital_id) AS patient_elsewhere, bu.name AS booked_by_name,
          COALESCE((SELECT t.code FROM tokens t WHERE t.appointment_id = a.id AND t.status <> 'cancelled' ORDER BY t.id DESC LIMIT 1),
-                  CASE WHEN a.emergency_no IS NOT NULL THEN printf('E%02d', a.emergency_no) WHEN a.token_no IS NOT NULL THEN printf('T%03d', a.token_no) END) AS token_code,
+                  CASE WHEN a.emergency_walkin = 1 THEN printf('E%03d', a.emergency_no) WHEN a.emergency_no IS NOT NULL THEN printf('E%02d', a.emergency_no) WHEN a.token_no IS NOT NULL THEN printf('T%03d', a.token_no) END) AS token_code,
          (SELECT pay2.transaction_id FROM payments pay2 WHERE pay2.appointment_id = a.id ORDER BY pay2.created_at DESC LIMIT 1) AS transaction_id
   FROM appointments a
   JOIN doctors d ON d.id = a.doctor_id
@@ -68,8 +68,15 @@ function fromRow(row) {
     noShow: !!row.no_show,
     // An emergency walk-in added over a full slot; seen before everyone else waiting (token E01, E02, ...).
     emergency: !!row.is_emergency,
+    // Why an emergency was booked (null on regular appointments and on emergencies booked before migration 033).
+    emergencyReason: row.emergency_reason || null,
+    // An emergency walk-in (migration 034): registered without a slot; `triage` is set by a doctor (null = awaiting triage).
+    emergencyWalkIn: !!row.emergency_walkin,
+    triage: row.emergency_walkin ? row.triage_priority || null : null,
+    triagedAt: row.triaged_at ? db.iso(row.triaged_at) : null,
     reason: row.reason_for_visit || null,
     bookedBy: row.booked_by_name || null,
+    bookedById: row.booked_by_user_id || null,
     rescheduleCount: Number(row.reschedule_count || 0),
     nextStatuses: nextStatuses(row),
     // A patient who has their own app account owns their details; only a front-desk patient can be corrected here.

@@ -1,4 +1,4 @@
--- Gmedic database schema (SQLite). Generated from the live database; last migration applied: 032_emergency_walk_ins.
+-- Gmedic database schema (SQLite). Generated from the live database; last migration applied: 034_emergency_walkins.
 -- Load into an empty database:  sqlite3 gmedic.sqlite < database/schema.sql
 -- The application itself builds the same schema from database/migrations (npm run db:setup).
 
@@ -32,7 +32,7 @@ CREATE TABLE hospitals (
   activated_at         TEXT,
   created_at           TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at           TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-, timezone TEXT NOT NULL DEFAULT 'Asia/Kolkata', currency TEXT NOT NULL DEFAULT 'INR' CHECK (length(currency) = 3), kind TEXT, area TEXT, lat REAL, lng REAL, brand_color INTEGER, initials TEXT, about TEXT, kyc_reason TEXT, kyc_decided_by TEXT REFERENCES users (id), kyc_decided_at TEXT);
+, timezone TEXT NOT NULL DEFAULT 'Asia/Kolkata', currency TEXT NOT NULL DEFAULT 'INR' CHECK (length(currency) = 3), kind TEXT, area TEXT, lat REAL, lng REAL, brand_color INTEGER, initials TEXT, about TEXT, kyc_reason TEXT, kyc_decided_by TEXT REFERENCES users (id), kyc_decided_at TEXT, emergency_intake TEXT NOT NULL DEFAULT 'OPEN' CHECK (emergency_intake IN ('OPEN', 'PAUSED')), emergency_intake_reason TEXT, emergency_intake_changed_by TEXT REFERENCES users (id), emergency_intake_changed_at TEXT, emergency_referral_note TEXT, emergency_walkin_limit INTEGER CHECK (emergency_walkin_limit IS NULL OR emergency_walkin_limit BETWEEN 1 AND 500));
 
 CREATE UNIQUE INDEX uq_hospitals_gstin ON hospitals (gstin);
 CREATE UNIQUE INDEX uq_hospitals_registration ON hospitals (registration_number);
@@ -191,7 +191,7 @@ CREATE TABLE "users" (
   last_login_at        TEXT,
   password_changed_at  TEXT,
   created_at           TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at           TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at           TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, can_book_emergency INTEGER NOT NULL DEFAULT 0 CHECK (can_book_emergency IN (0, 1)),
   CHECK (doctor_id IS NULL OR hospital_id IS NOT NULL),
   FOREIGN KEY (doctor_id, hospital_id) REFERENCES doctors (id, hospital_id)
 );
@@ -228,7 +228,7 @@ CREATE TABLE "doctors" (
   verified_by             TEXT REFERENCES users (id),
   verified_at             TEXT,
   created_at              TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at              TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, gender TEXT CHECK (gender IS NULL OR gender IN ('MALE','FEMALE','OTHER')), status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','INACTIVE')), status_reason TEXT, status_changed_at TEXT,
+  updated_at              TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, gender TEXT CHECK (gender IS NULL OR gender IN ('MALE','FEMALE','OTHER')), status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','INACTIVE')), status_reason TEXT, status_changed_at TEXT, emergency_on_call INTEGER NOT NULL DEFAULT 0 CHECK (emergency_on_call IN (0, 1)),
   FOREIGN KEY (branch_id, hospital_id) REFERENCES hospital_branches (id, hospital_id)
 );
 
@@ -442,13 +442,12 @@ CREATE TABLE "appointments" (
   rescheduled_from_id   TEXT REFERENCES "appointments" (id),
   reason_for_visit      TEXT,
   created_at            TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at            TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, token_no INTEGER, reschedule_count INTEGER NOT NULL DEFAULT 0 CHECK (reschedule_count >= 0), booked_by_user_id TEXT REFERENCES users (id), reopen_count INTEGER NOT NULL DEFAULT 0, is_emergency INTEGER NOT NULL DEFAULT 0 CHECK (is_emergency IN (0, 1)), emergency_no INTEGER CHECK (emergency_no IS NULL OR emergency_no >= 1),
+  updated_at            TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, token_no INTEGER, reschedule_count INTEGER NOT NULL DEFAULT 0 CHECK (reschedule_count >= 0), booked_by_user_id TEXT REFERENCES users (id), reopen_count INTEGER NOT NULL DEFAULT 0, is_emergency INTEGER NOT NULL DEFAULT 0 CHECK (is_emergency IN (0, 1)), emergency_no INTEGER CHECK (emergency_no IS NULL OR emergency_no >= 1), emergency_reason TEXT, emergency_walkin INTEGER NOT NULL DEFAULT 0 CHECK (emergency_walkin IN (0, 1)), triage_priority TEXT CHECK (triage_priority IS NULL OR triage_priority IN ('CRITICAL', 'URGENT', 'SEMI_URGENT', 'NON_URGENT')), triaged_by_user_id TEXT REFERENCES users (id), triaged_at TEXT,
   FOREIGN KEY (doctor_id, hospital_id) REFERENCES doctors (id, hospital_id),
   FOREIGN KEY (doctor_id, currency) REFERENCES doctors (id, currency),
   FOREIGN KEY (branch_id, hospital_id) REFERENCES hospital_branches (id, hospital_id)
 );
 
-CREATE UNIQUE INDEX uq_appt_seat ON appointments (doctor_id, appt_date, appt_time, seat_no) WHERE status <> 'cancelled';
 CREATE UNIQUE INDEX uq_appt_id_currency ON appointments (id, currency);
 CREATE UNIQUE INDEX uq_appt_token_key ON appointments (id, doctor_id, hospital_id, appt_date);
 CREATE INDEX ix_appts_hospital_date ON appointments (hospital_id, appt_date);
@@ -460,6 +459,7 @@ CREATE INDEX ix_appts_booked_by ON appointments (booked_by_user_id, appt_date);
 CREATE UNIQUE INDEX uq_appt_doctor_token ON appointments (doctor_id, appt_date, token_no)
   WHERE token_no IS NOT NULL AND status <> 'cancelled';
 CREATE UNIQUE INDEX uq_appt_emergency_no ON appointments (doctor_id, appt_date, emergency_no) WHERE emergency_no IS NOT NULL;
+CREATE UNIQUE INDEX uq_appt_seat ON appointments (doctor_id, appt_date, appt_time, seat_no) WHERE status <> 'cancelled' AND emergency_walkin = 0;
 
 CREATE TRIGGER trg_appts_updated AFTER UPDATE ON appointments BEGIN
   UPDATE appointments SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
@@ -538,10 +538,35 @@ WHEN NEW.status <> 'cancelled' AND NEW.is_emergency = 0 AND (NEW.appt_date <> OL
   SELECT RAISE(ABORT, 'slot capacity is full');
 END;
 
+CREATE TRIGGER trg_guard_appt_emergency_upd BEFORE UPDATE OF appt_date, appt_time ON appointments
+WHEN NEW.is_emergency = 1 AND (NEW.appt_date <> OLD.appt_date OR NEW.appt_time <> OLD.appt_time) BEGIN
+  SELECT RAISE(ABORT, 'an emergency appointment cannot be moved');
+END;
+
+CREATE TRIGGER trg_guard_appt_emergency_reason_ins BEFORE INSERT ON appointments
+WHEN NEW.is_emergency = 1 AND (NEW.emergency_reason IS NULL OR length(trim(NEW.emergency_reason)) < 3 OR length(NEW.emergency_reason) > 300) BEGIN
+  SELECT RAISE(ABORT, 'an emergency appointment needs a reason of 3 to 300 characters');
+END;
+
+CREATE TRIGGER trg_guard_appt_walkin_ins BEFORE INSERT ON appointments
+WHEN NEW.emergency_walkin = 1 AND (NEW.is_emergency = 0 OR NEW.emergency_no IS NULL OR NEW.source <> 'Walk-in') BEGIN
+  SELECT RAISE(ABORT, 'an emergency walk-in must be an emergency with an emergency number, booked at the desk');
+END;
+
+CREATE TRIGGER trg_guard_appt_triage_ins BEFORE INSERT ON appointments
+WHEN NEW.triage_priority IS NOT NULL AND NEW.emergency_walkin = 0 BEGIN
+  SELECT RAISE(ABORT, 'only an emergency walk-in has a triage priority');
+END;
+
+CREATE TRIGGER trg_guard_appt_triage_upd BEFORE UPDATE OF triage_priority ON appointments
+WHEN NEW.triage_priority IS NOT NULL AND NEW.emergency_walkin = 0 BEGIN
+  SELECT RAISE(ABORT, 'only an emergency walk-in has a triage priority');
+END;
+
 CREATE TRIGGER trg_guard_appt_emergency_ins BEFORE INSERT ON appointments
-WHEN NEW.status <> 'cancelled' AND NEW.is_emergency = 1
+WHEN NEW.status <> 'cancelled' AND NEW.is_emergency = 1 AND NEW.emergency_walkin = 0
  AND (SELECT COUNT(*) FROM appointments WHERE doctor_id = NEW.doctor_id AND appt_date = NEW.appt_date AND appt_time = NEW.appt_time
-        AND status <> 'cancelled' AND is_emergency = 1)
+        AND status <> 'cancelled' AND is_emergency = 1 AND emergency_walkin = 0)
      >= COALESCE((SELECT MAX(emergency_seats) FROM doctor_schedules
        WHERE doctor_id = NEW.doctor_id AND day_of_week = CAST(strftime('%w', NEW.appt_date) AS INTEGER)
          AND start_time <= NEW.appt_time AND end_time > NEW.appt_time
@@ -549,13 +574,8 @@ WHEN NEW.status <> 'cancelled' AND NEW.is_emergency = 1
   SELECT RAISE(ABORT, 'emergency seats for this slot are full');
 END;
 
-CREATE TRIGGER trg_guard_appt_emergency_upd BEFORE UPDATE OF appt_date, appt_time ON appointments
-WHEN NEW.is_emergency = 1 AND (NEW.appt_date <> OLD.appt_date OR NEW.appt_time <> OLD.appt_time) BEGIN
-  SELECT RAISE(ABORT, 'an emergency appointment cannot be moved');
-END;
-
 CREATE TRIGGER trg_guard_appt_seat_ins BEFORE INSERT ON appointments
-WHEN NEW.seat_no > COALESCE((SELECT MAX(capacity_per_slot + CASE WHEN NEW.is_emergency = 1 THEN emergency_seats ELSE 0 END) FROM doctor_schedules
+WHEN NEW.emergency_walkin = 0 AND NEW.seat_no > COALESCE((SELECT MAX(capacity_per_slot + CASE WHEN NEW.is_emergency = 1 THEN emergency_seats ELSE 0 END) FROM doctor_schedules
        WHERE doctor_id = NEW.doctor_id AND day_of_week = CAST(strftime('%w', NEW.appt_date) AS INTEGER)
          AND start_time <= NEW.appt_time AND end_time > NEW.appt_time
          AND (effective_from IS NULL OR effective_from <= NEW.appt_date) AND (effective_to IS NULL OR effective_to >= NEW.appt_date)), 1) BEGIN
@@ -642,13 +662,14 @@ CREATE TABLE "tokens" (
   cancelled_at   TEXT,
   skipped_at     TEXT,
   created_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, token_kind TEXT NOT NULL DEFAULT 'NORMAL' CHECK (token_kind IN ('NORMAL', 'EMERGENCY')),
   FOREIGN KEY (appointment_id, doctor_id, hospital_id, token_date) REFERENCES appointments (id, doctor_id, hospital_id, appt_date) ON UPDATE CASCADE
 );
 
 CREATE INDEX ix_tokens_appointment ON tokens (appointment_id);
 CREATE INDEX ix_tokens_doctor ON tokens (doctor_id, token_date);
-CREATE UNIQUE INDEX uq_tokens_doctor_day_number ON tokens (doctor_id, token_date, number) WHERE status <> 'cancelled';
+CREATE UNIQUE INDEX uq_tokens_doctor_day_number ON tokens (doctor_id, token_date, token_kind, number) WHERE status <> 'cancelled';
+CREATE UNIQUE INDEX uq_tokens_emergency_number ON tokens (doctor_id, token_date, number) WHERE token_kind = 'EMERGENCY';
 
 CREATE TRIGGER trg_tokens_updated AFTER UPDATE ON tokens BEGIN
   UPDATE tokens SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;

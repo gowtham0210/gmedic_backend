@@ -31,6 +31,7 @@ function fromRow(row, extra = {}) {
     leaveNote: leave ? (leave.reason || 'On leave') : markedAbsent ? 'Marked absent today' : null,
     availabilityUpdatedAt: db.iso(row.availability_updated_at),
     workingBlocks: extra.workingBlocks == null ? null : extra.workingBlocks,
+    scheduledToday: extra.scheduledToday == null ? null : extra.scheduledToday,
     verificationStatus: row.verification_status,
     status: row.status || 'ACTIVE',
     statusReason: row.status_reason || null,
@@ -52,14 +53,17 @@ async function decorate(rows) {
   const zones = new Map((await db.query(`SELECT id, timezone FROM hospitals WHERE id IN (${[...new Set(rows.map((r) => r.hospital_id))].map(() => '?').join(',')})`, [...new Set(rows.map((r) => r.hospital_id))])).map((h) => [h.id, h.timezone]));
   const [leaves, blocks] = await Promise.all([
     db.query(`SELECT doctor_id, start_date, end_date, reason FROM doctor_leaves WHERE doctor_id IN (${marks}) AND cancelled_at IS NULL ORDER BY start_date`, ids),
-    db.query(`SELECT doctor_id, effective_to FROM doctor_schedules WHERE doctor_id IN (${marks})`, ids),
+    db.query(`SELECT doctor_id, day_of_week, effective_from, effective_to FROM doctor_schedules WHERE doctor_id IN (${marks})`, ids),
   ]);
   return rows.map((row) => {
     const timezone = zones.get(row.hospital_id);
     const today = dateInZone(undefined, timezone);
     const leave = leaves.find((l) => l.doctor_id === row.id && l.start_date <= today && l.end_date >= today);
     const workingBlocks = blocks.filter((b) => b.doctor_id === row.id && (!b.effective_to || b.effective_to >= today)).length;
-    return fromRow(row, { today, timezone, leave, workingBlocks });
+    // Scheduled today: a block for today's weekday that is in force today (a block added for today counts at once, even before its start time).
+    const weekday = new Date(`${today}T00:00:00Z`).getUTCDay();
+    const scheduledToday = blocks.some((b) => b.doctor_id === row.id && b.day_of_week === weekday && (!b.effective_from || b.effective_from <= today) && (!b.effective_to || b.effective_to >= today));
+    return fromRow(row, { today, timezone, leave, workingBlocks, scheduledToday });
   });
 }
 

@@ -9,7 +9,10 @@
 //               use the seats held back for walk-ins as well as any online seat still free.
 // A slot's walk-in seats are capacity - online_quota (online_quota NULL means no seats held back).
 //
-// Emergency walk-ins: once every regular seat of a slot is booked, the front desk can add up to the
+// Emergency walk-ins (migration 034, services/emergencyWalkIn.js) are separate from all of this: they are not booked into a
+// slot, take no seat and never count against a slot's capacity. Their queue tokens are E001, E002, ... per doctor per day.
+//
+// Emergency walk-ins over a full slot (migration 032, no longer bookable; kept as history): once every regular seat of a slot is booked, the front desk can add up to the
 // block's emergency_seats (0-3) more patients to that exact slot. They sit on seats above the capacity,
 // never use up a regular seat, and go to the front of the doctor's queue as E01, E02, ...
 
@@ -69,10 +72,11 @@ async function slotLoad(runner, doctorId, date, { ignoreHoldsOfUser = '', ignore
     return load.get(time);
   };
   const appts = await runner.query(
-    "SELECT appt_time, seat_no, source, is_emergency FROM appointments WHERE doctor_id = ? AND appt_date = ? AND status <> 'cancelled' AND id <> ?",
+    "SELECT appt_time, seat_no, source, is_emergency, emergency_walkin FROM appointments WHERE doctor_id = ? AND appt_date = ? AND status <> 'cancelled' AND id <> ?",
     [doctorId, date, ignoreAppointmentId]
   );
   for (const a of appts) {
+    if (a.emergency_walkin) continue; // a walk-in has no slot: it is in no slot's count
     const s = at(a.appt_time);
     if (a.is_emergency) { s.emergencyBooked += 1; s.emergencySeatNos.add(a.seat_no); continue; }
     s.booked += 1;
@@ -190,13 +194,15 @@ async function slotTokenNumber(conn, { doctorId, date, time, seat, ignoreAppoint
 // appointment that are not in use are cleared first (a reschedule or a re-issue).
 async function issueQueueToken(conn, { hospitalId, appointmentId, doctorId, date, number }) {
   await conn.query("DELETE FROM tokens WHERE appointment_id = ? AND status IN ('waiting', 'skipped', 'cancelled')", [appointmentId]);
-  const appt = await conn.one('SELECT emergency_no FROM appointments WHERE id = ?', [appointmentId]);
-  const code = appt && appt.emergency_no ? emergencyCode(appt.emergency_no) : tokenCode(number);
+  const appt = await conn.one('SELECT emergency_no, emergency_walkin FROM appointments WHERE id = ?', [appointmentId]);
+  // A walk-in's token is its own emergency number (E001...), in the emergency sequence; every other token is T### as before.
+  const walkIn = !!(appt && appt.emergency_walkin);
+  const code = walkIn ? walkInCode(appt.emergency_no) : appt && appt.emergency_no ? emergencyCode(appt.emergency_no) : tokenCode(number);
   const id = await db.nextId('tokens', 'TK', 10001, conn);
   await conn.query(
-    `INSERT INTO tokens (id, hospital_id, appointment_id, doctor_id, token_date, number, code, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'waiting')`,
-    [id, hospitalId, appointmentId, doctorId, date, number, code]
+    `INSERT INTO tokens (id, hospital_id, appointment_id, doctor_id, token_date, number, code, status, token_kind)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'waiting', ?)`,
+    [id, hospitalId, appointmentId, doctorId, date, walkIn ? appt.emergency_no : number, code, walkIn ? 'EMERGENCY' : 'NORMAL']
   );
   return id;
 }
@@ -204,9 +210,31 @@ async function issueQueueToken(conn, { hospitalId, appointmentId, doctorId, date
 // The token as every channel shows it: T001, T002, ... per doctor per day.
 const tokenCode = (number) => `T${String(number).padStart(3, '0')}`;
 const emergencyCode = (n) => `E${String(n).padStart(2, '0')}`;
+const walkInCode = (n) => `E${String(n).padStart(3, '0')}`;
 
 // The order the doctor sees patients in: emergencies first (E01, E02, ...), then everyone else by token.
 const queueOrder = (a, b) => (Number(!!b.emergency) - Number(!!a.emergency)) || (a.number - b.number);
+
+// Triage priorities a doctor can give an emergency walk-in, most urgent first. A walk-in nobody has assessed yet
+// has none: it is AWAITING_TRIAGE, shown to the doctor as such and never treated as urgent or as routine.
+const TRIAGE = ['CRITICAL', 'URGENT', 'SEMI_URGENT', 'NON_URGENT'];
+
+// Where a waiting queue token stands (lower is called first), from the token as models/tokenModel.js shapes it:
+//   0 CRITICAL walk-in          1 walk-in awaiting triage (the doctor must assess it)      2 URGENT walk-in, and emergencies of migration 032
+//   3 SEMI_URGENT walk-in       4 normal appointments, and NON_URGENT walk-ins (by time)
+const queueRank = (t) => {
+  if (t.walkIn) return { CRITICAL: 0, URGENT: 2, SEMI_URGENT: 3, NON_URGENT: 4 }[t.triage] ?? 1;
+  return t.emergency ? 2 : 4;
+};
+
+// The waiting patients in the order they should be called. With no emergency walk-in waiting this is exactly the
+// old token order (queueOrder), so a queue of normal appointments (and older emergencies) is called as before.
+// Otherwise by rank, then by `arrivedAt` (a walk-in: when it was registered; a normal appointment: when its slot starts),
+// then by number. It is a suggestion: the doctor can call anyone (that choice is audited, see controllers/doctor/queueController.js).
+function sortQueue(tokens) {
+  if (!tokens.some((t) => t.walkIn)) return tokens.slice().sort(queueOrder);
+  return tokens.slice().sort((a, b) => (queueRank(a) - queueRank(b)) || ((a.arrivedAt || 0) - (b.arrivedAt || 0)) || (a.number - b.number));
+}
 
 // True for the errors the capacity, quota and seat triggers raise.
 const isSlotFullError = (err) => /UNIQUE constraint failed: appointments|seat_no exceeds|quota|slot capacity is full|emergency seats for this slot are full/i.test(String(err && err.message));
@@ -217,5 +245,5 @@ const BOOKABLE_DOCTOR = "d.status = 'ACTIVE' AND d.verification_status = 'VERIFI
 
 module.exports = {
   BOOKABLE_DOCTOR, CHANNEL_SOURCE, absentOn, schedulesOn, slotTimes, blockFor, slotLoad, seatsFor, takeSeat, takeEmergencySeat, nextEmergencyNo,
-  slotTokenNumber, issueQueueToken, tokenCode, emergencyCode, queueOrder, walkInSeatsOf, onlineQuotaOf, emergencySeatsOf, isSlotFullError,
+  slotTokenNumber, issueQueueToken, tokenCode, emergencyCode, walkInCode, queueOrder, queueRank, sortQueue, TRIAGE, walkInSeatsOf, onlineQuotaOf, emergencySeatsOf, isSlotFullError,
 };

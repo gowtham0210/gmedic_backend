@@ -7,6 +7,7 @@ const db = require('../db');
 const { contains } = require('../utils/like');
 const { badRequest } = require('../utils/http');
 const bookingCore = require('../services/bookingCore');
+const { instant } = require('../services/patient/common');
 
 const STATUSES = ['waiting', 'called', 'in_consultation', 'completed', 'cancelled', 'skipped'];
 
@@ -26,9 +27,11 @@ const formatCode = bookingCore.tokenCode;
 
 const SELECT = `
   SELECT t.*, d.name AS doctor_name, d.specialization,
-         a.appt_time AS time, a.status AS appointment_status, a.payment_status, a.fee, a.is_emergency, p.name AS patient_name
+         a.appt_time AS time, a.status AS appointment_status, a.payment_status, a.fee, a.is_emergency, p.name AS patient_name,
+         a.emergency_walkin, a.triage_priority, a.triaged_at, a.emergency_reason, a.created_at AS registered_at, hs.timezone AS hospital_timezone
   FROM tokens t
   JOIN doctors d ON d.id = t.doctor_id
+  JOIN hospitals hs ON hs.id = t.hospital_id
   LEFT JOIN appointments a ON a.id = t.appointment_id
   LEFT JOIN patients p ON p.id = a.patient_id`;
 
@@ -44,8 +47,18 @@ function fromRow(row) {
     date: row.token_date,
     number: row.number,
     code: row.code,
-    // Emergency walk-ins are called before everyone else (bookingCore.queueOrder).
+    // Emergencies over a full slot (migration 032, history) are called before everyone else (bookingCore.queueOrder).
     emergency: !!row.is_emergency,
+    // An emergency walk-in (migration 034): separate E001... token, no slot, called by clinical triage (bookingCore.sortQueue).
+    walkIn: !!row.emergency_walkin,
+    kind: row.token_kind || 'NORMAL',
+    triage: row.emergency_walkin ? row.triage_priority || null : null,
+    awaitingTriage: !!row.emergency_walkin && !row.triage_priority,
+    triagedAt: db.iso(row.triaged_at),
+    emergencyReason: row.emergency_walkin || row.is_emergency ? row.emergency_reason || null : null,
+    registeredAt: row.emergency_walkin ? db.iso(row.registered_at) : null,
+    // When the patient started waiting: a walk-in from registration, a normal appointment from its slot (used to rank and to show the wait).
+    arrivedAt: row.emergency_walkin ? new Date(db.iso(row.registered_at)).getTime() : instant(row.token_date, row.time || '00:00', row.hospital_timezone),
     status: row.status,
     // Lets screens offer only the moves updateStatus() will accept.
     nextStatuses: TRANSITIONS[row.status] || [],

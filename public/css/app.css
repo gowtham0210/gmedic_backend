@@ -504,6 +504,11 @@ html.is-resizing { cursor: col-resize; user-select: none; }
 .page-head h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.01em; }
 .page-head p { margin-top: 6px; color: var(--muted); font-size: 14.5px; }
 .page-head__actions { display: flex; gap: 10px; flex-wrap: wrap; }
+/* Appointments header: the date chips on the left, Emergency Walk-in and Book Appointment together on the right. */
+/* Header actions that stay on the right even when they are too wide for the title row and wrap (doctor detail page). */
+.page-head__actions--end { justify-content: flex-end; margin-left: auto; }
+.page-head__actions--split { flex: 1 1 100%; justify-content: space-between; align-items: center; }
+.page-head__buttons { display: flex; gap: 10px; flex-wrap: wrap; margin-left: auto; }
 .breadcrumb { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; font-size: 13px; color: var(--muted); }
 .breadcrumb a { color: var(--muted); font-weight: 500; }
 .breadcrumb a:hover { color: var(--teal-600); }
@@ -1130,6 +1135,28 @@ img.avatar { object-fit: cover; background: var(--border-2); }
 
 /* Slot picker (front-desk booking). A slot with no seat left is greyed out and disabled;
    the seat count is text, never colour alone. See docs/design-system.md §10. */
+.ew-kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; padding: 0 16px 16px; }
+.ew-kpis .kpi strong { font-size: 24px; }
+@media (max-width: 900px) { .ew-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.ew-doctors { display: flex; flex-direction: column; gap: 8px; max-height: 240px; overflow-y: auto; padding: 2px; }
+.ew-doctor { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--input-border); border-radius: 4px; background: #fff; cursor: pointer; }
+.ew-doctor:hover:not(.is-disabled) { border-color: var(--red-500); }
+.ew-doctor input { flex: none; }
+.ew-doctor__main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.ew-doctor__main small, .ew-doctor__status small { font-size: 12px; color: var(--muted); }
+.ew-doctor__status { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; text-align: right; max-width: 45%; }
+.ew-doctor.is-selected { border-color: var(--red-600); background: var(--red-50); box-shadow: inset 0 0 0 1px var(--red-600); }
+.ew-doctor.is-disabled { background: var(--surface-2); cursor: not-allowed; }
+.ew-doctor.is-disabled strong { color: var(--muted-2); }
+.ew-readonly { display: flex; align-items: center; gap: 6px; min-height: 40px; padding: 8px 12px; background: var(--surface-2); color: var(--ink); cursor: default; }
+.ew-token { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 18px; margin-bottom: 16px; border: 1px dashed var(--red-500); border-radius: 4px; background: var(--red-50); }
+.ew-token small { font-size: 12.5px; color: var(--red-700); text-transform: uppercase; letter-spacing: 0.04em; }
+.ew-token strong { font-size: 44px; line-height: 1; letter-spacing: 0.04em; color: var(--red-700); }
+.ew-details { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; margin: 0; }
+.ew-details > div { min-width: 0; }
+.ew-details dt { font-size: 12px; color: var(--muted); margin-bottom: 2px; }
+.ew-details dd { margin: 0; font-size: 14px; font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
+@media (max-width: 600px) { .ew-details { grid-template-columns: 1fr; } }
 .slot-picker { border: 0; margin: 18px 0 0; padding: 0; min-width: 0; }
 .slot-picker__meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 4px 0 10px; font-size: 13px; }
 .slot-legend { display: inline-flex; gap: 14px; color: var(--muted); font-size: 12.5px; }

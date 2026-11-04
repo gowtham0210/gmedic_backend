@@ -218,6 +218,9 @@
        "status": {
         "type": "string"
        },
+       "canBookEmergency": {
+        "type": "boolean"
+       },
        "createdAt": {
         "type": "string",
         "format": "date-time"
@@ -1742,6 +1745,9 @@
       },
       "role": {
        "type": "string"
+      },
+      "canBookEmergency": {
+       "type": "boolean"
       },
       "name": {
        "type": "string"

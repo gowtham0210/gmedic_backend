@@ -2,6 +2,7 @@ import Script from 'next/script';
 import Icon from '../../../../components/Icon';
 import AppointmentModal from '../../../../components/receptionist/modals/AppointmentModal';
 import BookAppointmentModal from '../../../../components/receptionist/modals/BookAppointmentModal';
+import EmergencyWalkInModal from '../../../../components/receptionist/modals/EmergencyWalkInModal';
 import CollectPaymentModal from '../../../../components/receptionist/modals/CollectPaymentModal';
 import { requireReceptionist } from '../../../../lib/rbac';
 import doctorModel from '../../../../models/doctorModel';
@@ -25,9 +26,10 @@ export default async function DoctorDetailPage({ params }) {
           <nav className="breadcrumb" aria-label="Breadcrumb"><a href="/dashboard">Dashboard</a><Icon name="chevron-right" /><a href="/doctors">Doctors</a><Icon name="chevron-right" /><span data-crumb>{doctor.name}</span></nav>
           <h1>Doctor Details</h1>
         </div>
-        <div className="page-head__actions">
+        <div className="page-head__actions page-head__actions--end">
           <a className="btn btn--ghost" href="/doctors"><Icon name="arrow-left" />Back to doctors</a>
           <button type="button" className="btn btn--ghost" style={{ color: 'var(--red-600)' }} data-doctor-status hidden><Icon name="user-x" /><span>Deactivate doctor</span></button>
+          <button type="button" className="btn btn--danger" data-open-emergency data-doctor-id={doctor.id} hidden><Icon name="alert" />Emergency Walk-in</button>
           <button type="button" className="btn btn--primary" data-open-book data-doctor-id={doctor.id}><Icon name="plus" />Book Appointment</button>
         </div>
       </div>
@@ -179,7 +181,7 @@ export default async function DoctorDetailPage({ params }) {
             <div className="card__head">
               <div>
                 <h2 className="card__title"><Icon name="clock" />Working hours</h2>
-                <p className="card__subtitle" data-hours-note>Weekly hours patients can book. Changes apply from tomorrow.</p>
+                <p className="card__subtitle" data-hours-note>Weekly hours patients can book. New hours for today start today when the start time is still ahead and nobody is booked later; changes to existing hours apply from tomorrow.</p>
               </div>
             </div>
             <div className="table-wrap" style={{ padding: '0 8px' }}>
@@ -210,15 +212,15 @@ export default async function DoctorDetailPage({ params }) {
             <div className="card__head">
               <div>
                 <h2 className="card__title"><Icon name="users" />Walk-in seats</h2>
-                <p className="card__subtitle">Per slot · seats the Gmedic app can&apos;t book, and emergency walk-ins (0–3) a full slot can still take today</p>
+                <p className="card__subtitle">Per slot · seats the Gmedic app can&apos;t book</p>
               </div>
             </div>
             <form data-walkin-form noValidate>
               <div className="alert alert--error" hidden data-form-alert style={{ margin: '0 16px 12px' }}><Icon name="alert" /><span></span></div>
               <div className="table-wrap" style={{ padding: '0 8px 8px' }}>
                 <table className="table table--compact table--stack">
-                  <thead><tr><th>Hours</th><th className="num">Per slot</th><th className="num">Walk-in</th><th className="num">App</th><th className="num">Emergency</th></tr></thead>
-                  <tbody data-walkin-rows><tr><td colSpan={5}><div className="skeleton skeleton--row"></div></td></tr></tbody>
+                  <thead><tr><th>Hours</th><th className="num">Per slot</th><th className="num">Walk-in</th><th className="num">App</th></tr></thead>
+                  <tbody data-walkin-rows><tr><td colSpan={4}><div className="skeleton skeleton--row"></div></td></tr></tbody>
                 </table>
               </div>
               <div className="pager" style={{ justifyContent: 'space-between' }}>
@@ -263,10 +265,12 @@ export default async function DoctorDetailPage({ params }) {
 
       <AppointmentModal />
       <BookAppointmentModal />
+      <EmergencyWalkInModal />
       <CollectPaymentModal />
       <Script src="/js/collect-payment.js" strategy="afterInteractive" />
       <Script src="/js/appointment-modal.js" strategy="afterInteractive" />
       <Script src="/js/book-appointment.js" strategy="afterInteractive" />
+      <Script src="/js/emergency-walkin.js" strategy="afterInteractive" />
       <Script src="/js/doctor-hours.js" strategy="afterInteractive" />
       <Script src="/js/walk-in-seats.js" strategy="afterInteractive" />
       <Script src="/js/pages/doctor-detail.js" strategy="afterInteractive" />

@@ -22,6 +22,10 @@ const SETTINGS = {
     label: 'No-show grace period', unit: 'minutes after the slot starts', min: 0, max: 240, default: 15,
     help: 'A booked patient can be marked a no-show only after this long past the slot start.',
   },
+  emergency_walkin_warning_threshold: {
+    label: 'Emergency walk-in workload warning', unit: 'active walk-ins', min: 1, max: 500, default: 10,
+    help: 'When this many emergency walk-ins are active at a hospital, the front desk sees a workload warning with the hospital\'s escalation instructions. It is only a warning: it never refuses a registration. Nothing needs to be set for emergency walk-ins to work.',
+  },
   refund_maker_checker_threshold: {
     label: 'Refund approval threshold', unit: '₹', min: 0, max: 1000000, default: 2000,
     help: 'Refunds above this amount need approval from two different admins, neither of them the requester.',

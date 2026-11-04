@@ -353,17 +353,9 @@ Shared config in [`components/admin/DashboardCharts.js`](../components/admin/Das
   stream can't be opened it falls back to polling `GET /api/doctors/:id/slots`
   every 20 s. The legend says which one is running, in words (`Live`,
   `Reconnecting…`, `Updates every 20 s`).
-- **Emergency walk-in tiles.** A full slot that can still take an emergency
-  walk-in (today only, the doctor's per-block emergency seats, 0–3) stays
-  pickable. It gets a dashed `--red-500` border, a `--red-50` fill and the
-  words `Full · 2 emergency left`. Picking it turns the border solid and shows a
-  red `alert--error` note under the grid saying the slot is full, how many
-  emergency seats are left, and that the patient goes to the front of the
-  doctor's queue. The submit button then reads `Book Emergency Walk-in` and the
-  "How did they book?" select is locked to walk-in (an emergency is never a
-  phone booking). If the last regular seat goes while a regular booking is being
-  made, the pick is cleared with a toast. The slot is never silently turned
-  into an emergency.
+- **Emergency Walk-in is its own form, not a mode of Book Appointment.** Receptionists an administrator has allowed see a red `btn--danger` `Emergency Walk-in` button next to `Book Appointment` (appointments page, dashboard quick actions, doctor page); everyone else does not see it and the server refuses the request anyway. The modal has no slot picker: hospital (read-only), a department filter, the doctors as a list (name, department, specialization and an `Available now` / `Unavailable` badge with the reason; an unavailable doctor cannot be chosen), the patient (mobile, name, gender), a read-only `Awaiting triage · assessed by the doctor` field (a receptionist never sets clinical priority) and a required emergency reason (3-300 characters). A paused hospital, or no doctor available, shows an `alert--warning` with the hospital's escalation instructions; when 10 or more walk-ins are active (system default) the form shows a workload warning that never disables anything. On success the form is replaced by the emergency token (`.ew-token`, e.g. E001), the patient, doctor, registration time, status and reason, with `Register another`. The normal Book Appointment form has no emergency wording or switch; a slot that cannot be picked says why (`Normal capacity full`, `Slot ended`, `Doctor unavailable`, `Day closed`).
+- **Receptionist emergency panel.** The dashboard shows `Emergency walk-ins today` (`.ew-kpis`): Active, Awaiting triage, Waiting for consultation, Under consultation, Completed today, counted live from the server (each patient is in exactly one group, so the first group is the sum of the next three), a warning banner at the workload level, and the active list (token, patient, doctor, registered time, triage, status).
+- **Doctor queue worklist.** Appointments and emergency walk-ins share one table: Token (with `#position` and a type badge), Patient, Time, Waiting, Triage, Reason, Status, Action. A walk-in nobody has assessed shows `Awaiting triage…` in its select and raises an `alert--error` banner listing them; critical cases get a second banner and a `--red-50` row. Only the doctor can change the triage select. `Call Next Patient` refuses an unassessed walk-in with a message; `Call` on a row calls anyone (audited when it is not the suggested patient). The page reloads every 15 seconds so new walk-ins reach the doctor. There is no separate on-call switch: the doctor's availability and working hours decide whether they can be registered.
 - **Emergency badge.** Wherever a token or appointment is listed (appointments
   table and detail, Tokens page, doctor's queue), an emergency shows
   `badge--emergency` reading `Emergency` next to its `E01` code. Never colour

@@ -46,8 +46,8 @@ async function dayBlocker(d, h, date) {
 
 // Every slot of the doctor's day with what each channel can still book. A slot the front desk can
 // no longer use (it has ended, or the whole day is closed) is `unavailable`; one with no seat left
-// for walk-ins is `full`. `online` shows what the patient app sees for the same slot. `emergency` says
-// whether a full slot can still take an emergency walk-in (only today, see book()).
+// for walk-ins is `full`. `online` shows what the patient app sees for the same slot. `emergency` is history
+// (emergencies over a full slot, migration 032); it is never available any more.
 async function slots(hospitalId, doctorId, date) {
   if (!isDate(date)) throw badRequest('Choose a valid date (YYYY-MM-DD).', { date: 'Use YYYY-MM-DD.' });
   const { d, h } = await hospitalDoctor(hospitalId, doctorId);
@@ -79,8 +79,8 @@ async function slots(hospitalId, doctorId, date) {
           seats: seats.emergency.seats,
           booked: seats.emergency.booked,
           seatsLeft: seats.emergency.left,
-          // Bookable right now: the slot is full, it is today and still running, and an emergency seat is free.
-          available: status === 'full' && today && seats.emergency.left > 0,
+          // Always false now: an emergency is no longer booked into a slot (see emergencyWalkIn.js). The counts are history.
+          available: false,
         },
       });
     }
@@ -174,27 +174,20 @@ async function lookupByMobile(hospitalId, rawMobile) {
   };
 }
 
-// A full slot: the 409 carries `slotFull` so the desk can reload the grid and offer an emergency walk-in.
-const slotFull = () => conflict('This slot is full. Pick another time, or book an emergency walk-in if it cannot wait.', { time: 'This slot is full.', slotFull: true });
-
-// Inside the booking transaction: an emergency seat, or a 409 saying why there is none.
-async function emergencySeat(conn, d, date, time) {
-  const taken = await bookingCore.takeEmergencySeat(conn, { doctorId: d.id, date, time });
-  if (taken.seat) return taken;
-  if (taken.refused === 'not-full') throw conflict(`This slot still has ${taken.seatsLeft} seat${taken.seatsLeft === 1 ? '' : 's'} free. Book a regular seat; emergencies are only for a full slot.`, { emergency: 'The slot is not full.' });
-  if (taken.refused === 'none-allowed') throw conflict(`${d.name} takes no emergency walk-ins in this slot. Set emergency seats on the doctor's page.`, { emergency: 'No emergency seats for this slot.' });
-  if (taken.refused === 'emergency-full') throw conflict(`All ${taken.seats} emergency seat${taken.seats === 1 ? '' : 's'} of this slot are taken. Pick another time.`, { emergency: 'Emergency seats are full.' });
-  return null;
-}
+// A full slot: the 409 carries `slotFull` so the desk can reload the grid.
+const slotFull = () => conflict('This slot is full. Pick another time.', { time: 'This slot is full.', slotFull: true });
 
 // Book a slot at the front desk. The seat and token are taken in one transaction, under the same
 // head-count rules (and database triggers) as an app booking, so two desks, or a desk and the app,
 // can never both get the last seat.
-// `emergency: true` books an emergency walk-in into a slot that is already full: today only, in a slot
-// that has not ended, up to the block's emergency seats. The patient goes to the front of the queue (E01...).
+// An emergency walk-in is no longer booked into a slot: it is registered through services/emergencyWalkIn.js
+// (POST /api/emergency/walk-ins). `emergency: true` here is refused with a pointer to it.
 async function book(hospitalId, body = {}, user = null) {
   const date = String(body.date || '');
   const time = String(body.time || '');
+  if (body.emergency === true) {
+    throw new HttpError(410, 'Emergency booking into a slot has been replaced. Use Emergency Walk-in (POST /api/emergency/walk-ins): it needs no slot.', { emergency: 'Use POST /api/emergency/walk-ins.', useInstead: '/api/emergency/walk-ins' });
+  }
   if (!isDate(date)) throw badRequest('Choose a valid date (YYYY-MM-DD).', { date: 'Use YYYY-MM-DD.' });
   if (!TIME_RE.test(time)) throw badRequest('Choose a slot time (HH:MM).', { time: 'Use HH:MM.' });
   const { d, h } = await hospitalDoctor(hospitalId, body.doctorId);
@@ -203,9 +196,6 @@ async function book(hospitalId, body = {}, user = null) {
   const block = bookingCore.blockFor(await bookingCore.schedulesOn(db, d.id, date), time);
   if (!block) throw badRequest(`${d.name} has no slot at ${time} on ${date}.`, { time: 'Not one of the doctor\'s slots that day.' });
   if (instantPlus(date, time, block.slot_minutes, h.timezone) <= Date.now()) throw conflict('That slot has already ended.');
-  const emergency = body.emergency === true;
-  if (emergency && date !== nowIn(h.timezone).date) throw conflict('An emergency walk-in can only be booked for today.', { emergency: 'Only for a slot today.' });
-  if (emergency && body.channel === 'phone') throw badRequest('An emergency is a walk-in at the desk, not a phone booking.', { channel: 'Choose walk-in.' });
 
   const patient = await patientFor(body.patientId ? { id: body.patientId } : body.patient, hospitalId);
   const sameDay = (conn) => conn.one(
@@ -224,27 +214,23 @@ async function book(hospitalId, body = {}, user = null) {
     apptId = await db.tx(async (conn) => {
       const again = await sameDay(conn); // re-checked under the write lock: two desks booking together
       if (again) throw clashError(again);
-      const taken = emergency
-        ? await emergencySeat(conn, d, date, time)
-        : await bookingCore.takeSeat(conn, { doctorId: d.id, date, time, channel: 'reception' });
+      const taken = await bookingCore.takeSeat(conn, { doctorId: d.id, date, time, channel: 'reception' });
       if (!taken) throw slotFull();
       const tokenNo = await bookingCore.slotTokenNumber(conn, { doctorId: d.id, date, time, seat: taken.seat });
-      const emergencyNo = emergency ? await bookingCore.nextEmergencyNo(conn, { doctorId: d.id, date }) : null;
       const id = await db.nextId('appointments', 'APT', 10001, conn);
       await conn.query(
-        `INSERT INTO appointments (id, hospital_id, doctor_id, patient_id, appt_date, appt_time, seat_no, fee, currency, status, payment_status, source, token_no, reason_for_visit, booked_by_user_id, is_emergency, emergency_no)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed', 'pending', ?, ?, ?, ?, ?, ?)`,
-        [id, h.id, d.id, patient.id, date, time, taken.seat, d.fee, d.currency, source, tokenNo, reason, user ? user.id : null, emergency ? 1 : 0, emergencyNo]
+        `INSERT INTO appointments (id, hospital_id, doctor_id, patient_id, appt_date, appt_time, seat_no, fee, currency, status, payment_status, source, token_no, reason_for_visit, booked_by_user_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed', 'pending', ?, ?, ?, ?)`,
+        [id, h.id, d.id, patient.id, date, time, taken.seat, d.fee, d.currency, source, tokenNo, reason, user ? user.id : null]
       );
       // The queue token comes with the booking: no separate "Generate Token" step.
       await bookingCore.issueQueueToken(conn, { hospitalId: h.id, appointmentId: id, doctorId: d.id, date, number: tokenNo });
       return id;
     });
   } catch (err) {
-    if (bookingCore.isSlotFullError(err)) throw emergency ? conflict('The emergency seats of this slot were just taken. Pick another time.') : slotFull();
+    if (bookingCore.isSlotFullError(err)) throw slotFull();
     throw err;
   }
-  if (emergency) await auditLog.record({ req: { user: user || {} }, action: 'EMERGENCY_WALK_IN_BOOKED', entityType: 'APPOINTMENT', entityId: apptId, summary: `Emergency walk-in ${apptId} added to the full ${time} slot of ${d.name} on ${date}` });
   try { await events.fire('NEW_APPOINTMENT', apptId); } catch (err) { console.error('notification NEW_APPOINTMENT failed', err.message); }
   return appointmentModel.findById(hospitalId, apptId);
 }
@@ -267,7 +253,7 @@ async function reschedule(hospitalId, id, body = {}, user = null) {
   const a = await ownAppointment(hospitalId, id);
   if (a.status !== 'confirmed' && a.status !== 'pending') throw conflict(`A ${a.status} appointment can't be rescheduled.`);
   if (a.no_show) throw conflict('This appointment is marked as a no-show. Undo the no-show before rescheduling.');
-  if (a.is_emergency) throw conflict('An emergency walk-in is booked for its exact slot and cannot be moved. Cancel it and book again if needed.');
+  if (a.is_emergency) throw conflict('An emergency walk-in has no slot to move. Cancel it and register again if needed.');
   const date = String(body.date || '');
   const time = String(body.time || '');
   if (!isDate(date)) throw badRequest('Choose a valid date (YYYY-MM-DD).', { date: 'Use YYYY-MM-DD.' });
@@ -319,6 +305,7 @@ async function reschedule(hospitalId, id, body = {}, user = null) {
 async function markNoShow(hospitalId, id, user = null) {
   const a = await ownAppointment(hospitalId, id);
   const { h } = await hospitalDoctor(hospitalId, a.doctor_id);
+  if (a.emergency_walkin) throw conflict('An emergency walk-in cannot be a no-show. Cancel it if the patient has left.');
   if (a.no_show) throw conflict('This appointment is already marked as a no-show.');
   if (a.status !== 'confirmed') throw conflict(a.status === 'pending' ? 'Confirm the appointment first.' : `A ${a.status} appointment can't be a no-show.`);
   if (a.appt_date !== appointmentModel.todayIn(h.timezone)) throw conflict(a.appt_date > appointmentModel.todayIn(h.timezone) ? 'The appointment is not today yet, so the patient can\'t be a no-show.' : 'A no-show can only be marked on the day of the appointment.');
@@ -512,4 +499,4 @@ async function setWalkInSeats(hospitalId, doctorId, body = {}) {
   return walkInSeats(hospitalId, doctorId);
 }
 
-module.exports = { slots, book, collectPayment, lookupByMobile, reschedule, markNoShow, undoNoShow, updateDetails, walkInSeats, setWalkInSeats, blockJson, sameName };
+module.exports = { hospitalDoctor, dayBlocker, patientFor, slots, book, collectPayment, lookupByMobile, reschedule, markNoShow, undoNoShow, updateDetails, walkInSeats, setWalkInSeats, blockJson, sameName };

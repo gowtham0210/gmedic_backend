@@ -28,7 +28,8 @@ const hourLabel = (h) => `${((h + 11) % 12) + 1} ${h >= 12 ? 'PM' : 'AM'}`;
 const hoursLabel = (min) => { const h = min / 60; return `${Number.isInteger(h) ? h : h.toFixed(1)} h`; };
 const BLOCK_DEFAULTS = { dayOfWeek: '1', startTime: '09:00', endTime: '13:00', slotMinutes: '15', capacityPerSlot: '1' };
 
-// Add a block, or edit one (`block`): edits apply from tomorrow; today and existing bookings stay as they are.
+// Add a block, or edit one (`block`): edits apply from tomorrow, today and existing bookings stay as they are. A new block for today starts
+// today when its start time is still ahead and nobody is booked later today (the server decides and says so).
 // `defaults` pre-fills a new block (clicking an empty spot on the week grid).
 function BlockModal({ open, block, defaults, onClose, onCreated, onRemove }) {
   const [form, setForm] = useState(BLOCK_DEFAULTS);
@@ -97,8 +98,8 @@ function BlockModal({ open, block, defaults, onClose, onCreated, onRemove }) {
               </div>
             </div>
             <p className="text-muted" style={{ fontSize: 12.5, marginTop: 10 }}>{block
-              ? 'Today keeps its current hours. Appointments already booked are kept, even if they fall outside the new hours.'
-              : 'Tip: for a lunch break, add two separate blocks for the same day (e.g. 09:00–13:00 and 16:00–19:00).'}</p>
+              ? 'Hours already in force keep today as they are and change from tomorrow. Hours that have not started yet start today when the start time is still ahead and nobody is booked later today. Appointments already booked are kept, even if they fall outside the new hours.'
+              : 'New hours for today start today when the start time is still ahead and nobody is booked later today; otherwise they start from the next such day. Tip: for a lunch break, add two separate blocks for the same day (e.g. 09:00–13:00 and 16:00–19:00).'}</p>
           </div>
           <div className={`modal__foot${block ? ' modal__foot--split' : ''}`}>
             {block && <button type="button" className="btn btn--ghost" style={{ color: 'var(--red-600)' }} onClick={() => onRemove(block)}><Icon name="trash" />Remove Hours</button>}

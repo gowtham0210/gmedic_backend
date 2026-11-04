@@ -28,6 +28,8 @@ fs.mkdirSync(path.dirname(config.dbFile), { recursive: true });
 const database = new DatabaseSync(config.dbFile);
 database.exec('PRAGMA foreign_keys = ON');
 database.exec('PRAGMA journal_mode = WAL');
+// Wait for another connection's write instead of failing at once (the app and a script can share the file).
+database.exec('PRAGMA busy_timeout = 5000');
 
 const RETURNS_ROWS = /^\s*(SELECT|WITH|PRAGMA|EXPLAIN)/i;
 const stmtCache = new Map();

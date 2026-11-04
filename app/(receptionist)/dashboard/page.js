@@ -5,6 +5,8 @@ import AvailabilityModal from '../../../components/receptionist/modals/Availabil
 import QrModal from '../../../components/receptionist/modals/QrModal';
 import AppointmentModal from '../../../components/receptionist/modals/AppointmentModal';
 import BookAppointmentModal from '../../../components/receptionist/modals/BookAppointmentModal';
+import EmergencyWalkInModal from '../../../components/receptionist/modals/EmergencyWalkInModal';
+import EmergencyWalkInPanel from '../../../components/receptionist/EmergencyWalkInPanel';
 import CollectPaymentModal from '../../../components/receptionist/modals/CollectPaymentModal';
 import { HospitalStatusNotice, NoActiveQr } from '../../../components/receptionist/HospitalStatusBadge';
 import { requireReceptionist } from '../../../lib/rbac';
@@ -51,6 +53,8 @@ export default async function DashboardPage() {
           </div>
         ))}
       </section>
+
+      <EmergencyWalkInPanel />
 
       <section className="dash-grid">
         <article className="card" id="availability-card">
@@ -147,6 +151,11 @@ export default async function DashboardPage() {
                 <span className="qa__text"><strong>Book Appointment</strong><small>Walk-in or phone booking</small></span>
                 <Icon name="chevron-right" />
               </button>
+              <button type="button" className="qa" data-open-emergency hidden>
+                <span className="qa__icon tone-red"><Icon name="alert" /></span>
+                <span className="qa__text"><strong>Emergency Walk-in</strong><small>Register a patient who cannot wait</small></span>
+                <Icon name="chevron-right" />
+              </button>
               <a className="qa" href="/tokens">
                 <span className="qa__icon tone-violet"><Icon name="ticket" /></span>
                 <span className="qa__text"><strong>Today&apos;s Tokens</strong><small>Queue, slips and status</small></span>
@@ -177,6 +186,7 @@ export default async function DashboardPage() {
       <QrModal hospitalName={hospital.name} />
       <AppointmentModal />
       <BookAppointmentModal />
+      <EmergencyWalkInModal />
       <CollectPaymentModal />
 
       <Script src="/js/doctor-modals.js" strategy="afterInteractive" />
@@ -184,6 +194,8 @@ export default async function DashboardPage() {
       <Script src="/js/collect-payment.js" strategy="afterInteractive" />
       <Script src="/js/appointment-modal.js" strategy="afterInteractive" />
       <Script src="/js/book-appointment.js" strategy="afterInteractive" />
+      <Script src="/js/emergency-walkin.js" strategy="afterInteractive" />
+      <Script src="/js/emergency-summary.js" strategy="afterInteractive" />
       <Script src="/js/pages/dashboard.js" strategy="afterInteractive" />
     </>
   );

@@ -1,7 +1,7 @@
 import Icon from '../../Icon';
 
-// Front-desk booking: doctor + date, a slot grid with live seat counts (full slots greyed out; a full
-// slot that can still take an emergency walk-in stays pickable, in red), then the patient.
+// Front-desk booking of a normal appointment: doctor + date, a slot grid with live seat counts (full slots are
+// greyed out with the reason), then the patient. Emergencies are not booked here: see EmergencyWalkInModal.
 // Driven by public/js/book-appointment.js; fires `appointments:changed`.
 export default function BookAppointmentModal() {
   return (
@@ -39,15 +39,12 @@ export default function BookAppointmentModal() {
                 <span data-slot-summary className="text-muted">Choose a doctor and date to see free slots.</span>
                 <span className="slot-legend" aria-hidden="true">
                   <span><i className="slot-legend__swatch"></i>Available</span>
-                  <span><i className="slot-legend__swatch slot-legend__swatch--emergency"></i>Emergency only</span>
                   <span><i className="slot-legend__swatch slot-legend__swatch--full"></i>Full</span>
                   <span className="slot-live" data-live-state></span>
                 </span>
               </div>
               <div className="slot-grid" role="radiogroup" aria-label="Slots" data-slot-grid></div>
               <p className="field__error" data-error-for="time"></p>
-              {/* Shown when a full slot is picked: this booking is an emergency walk-in over capacity. */}
-              <div className="alert alert--error" hidden data-emergency-note style={{ marginTop: 12 }}><Icon name="alert" /><span></span></div>
             </fieldset>
 
             <div className="divider"></div>

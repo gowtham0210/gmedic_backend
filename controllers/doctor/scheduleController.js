@@ -2,6 +2,8 @@ const scheduleModel = require('../../models/doctorScheduleModel');
 const { badRequest, notFound } = require('../../utils/http');
 
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const minutesOf = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
 
 function readCapacity(value) {
   const capacity = value === undefined || value === '' ? 1 : Number(value);
@@ -23,15 +25,20 @@ exports.create = async (req, res) => {
   const minutes = slotMinutes === undefined || slotMinutes === null || slotMinutes === '' ? 15 : Number(slotMinutes);
   if (!Number.isInteger(minutes) || minutes < 5 || minutes > 120) throw badRequest('Appointment duration must be a whole number of minutes between 5 and 120.', { slotMinutes: 'Between 5 and 120 minutes.' });
 
+  // The hours must hold at least one whole appointment, or there would be no slots at all.
+  if (minutesOf(endTime) - minutesOf(startTime) < minutes) throw badRequest(`These hours are shorter than one ${minutes}-minute appointment.`, { endTime: 'Leave room for at least one appointment.' });
   const capacity = readCapacity(capacityPerSlot);
 
   const result = await scheduleModel.create(req.doctorId, { dayOfWeek: day, startTime, endTime, slotMinutes: minutes, capacityPerSlot: capacity });
   if (result.error) throw badRequest(result.error);
-  res.json({ ok: true, message: `Working hours added from ${result.firstDate}.`, id: result.id, effectiveFrom: result.effectiveFrom });
+  const message = result.startsToday
+    ? `Working hours added for today and every ${DAY_NAMES[day]} after. Patients can book these hours now.`
+    : `Working hours added from ${result.firstDate}.${result.laterBecause ? ` ${result.laterBecause}, so they start on that day.` : ''}`;
+  res.json({ ok: true, message, id: result.id, effectiveFrom: result.effectiveFrom, startsToday: result.startsToday });
 };
 
 // PATCH /api/doctor/schedule/:id { startTime?, endTime?, slotMinutes?, capacityPerSlot? }
-// Takes effect from the next working day; appointments already booked are kept as they are.
+// Editing existing hours takes effect from the next working day (today keeps what patients booked against); appointments already booked are kept as they are.
 exports.update = async (req, res) => {
   const body = req.body || {};
   const onlyCapacity = body.startTime === undefined && body.endTime === undefined && body.slotMinutes === undefined;
@@ -62,6 +69,13 @@ exports.update = async (req, res) => {
   const result = await scheduleModel.edit(req.doctorId, Number(req.params.id), { startTime: body.startTime, endTime: body.endTime, slotMinutes: minutes, capacityPerSlot: capacity });
   if (result.notFound) throw notFound('Schedule block not found.');
   if (result.error) throw badRequest(result.error, result.field ? { [result.field]: result.error } : undefined);
+  if (result.startsToday) {
+    return res.json({
+      ok: true,
+      message: `Working hours saved. They start today and every ${DAY_NAMES[result.schedule.dayOfWeek]} after. Patients can book these hours now.`,
+      schedule: result.schedule, effectiveFrom: result.effectiveFrom, startsToday: true, outside: result.outside, overbooked: result.overbooked,
+    });
+  }
   if (result.unchanged) return res.json({ ok: true, message: 'No changes to save.', schedule: result.schedule });
   const out = result.outside.count;
   res.json({

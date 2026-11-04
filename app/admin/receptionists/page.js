@@ -250,6 +250,16 @@ export default function ReceptionistsPage() {
     }
   }
 
+  async function setEmergency(r, allowed) {
+    try {
+      const res = await api(`/api/admin/receptionists/${r.id}/emergency-booking`, { method: 'PATCH', body: { allowed } });
+      toast(res.message, 'success');
+      load();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  }
+
   async function resetPassword(r) {
     try {
       const res = await api(`/api/admin/receptionists/${r.id}/reset-password`, { method: 'POST' });
@@ -291,11 +301,11 @@ export default function ReceptionistsPage() {
 
         <div className="table-wrap">
           <table className="table table--stack">
-            <thead><tr><th>Name</th><th>Hospital</th><th>Contact</th><th>Status</th><th className="col-actions">Actions</th></tr></thead>
+            <thead><tr><th>Name</th><th>Hospital</th><th>Contact</th><th>Status</th><th>Emergency booking</th><th className="col-actions">Actions</th></tr></thead>
             <tbody>
-              {loading && <tr><td colSpan={5}><div className="skeleton skeleton--row"></div><div className="skeleton skeleton--row"></div></td></tr>}
+              {loading && <tr><td colSpan={6}><div className="skeleton skeleton--row"></div><div className="skeleton skeleton--row"></div></td></tr>}
               {!loading && items.length === 0 && (
-                <tr><td colSpan={5} style={{ whiteSpace: 'normal' }}><div className="empty"><div className="empty__icon"><Icon name="users" /></div><h3>No receptionists found</h3><p>Add the first receptionist for a hospital.</p></div></td></tr>
+                <tr><td colSpan={6} style={{ whiteSpace: 'normal' }}><div className="empty"><div className="empty__icon"><Icon name="users" /></div><h3>No receptionists found</h3><p>Add the first receptionist for a hospital.</p></div></td></tr>
               )}
               {items.map((r) => (
                 <tr key={r.id}>
@@ -303,8 +313,10 @@ export default function ReceptionistsPage() {
                   <td data-label="Hospital" className="text-muted">{r.hospitalName}</td>
                   <td data-label="Contact"><span>{r.email}</span><span className="cell-sub">{r.phone}</span></td>
                   <td data-label="Status"><span className={`badge badge--${r.status === 'ACTIVE' ? 'confirmed' : 'cancelled'}`}>{r.status}</span></td>
+                  <td data-label="Emergency booking">{r.canBookEmergency ? <span className="badge badge--confirmed">Allowed</span> : <span className="text-muted">Not allowed</span>}</td>
                   <td className="col-actions">
                     {can('receptionists.manage') && <div className="action-group">
+                      <button type="button" className="action-btn" onClick={() => setEmergency(r, !r.canBookEmergency)}><Icon name="alert" />{r.canBookEmergency ? 'Revoke emergency' : 'Allow emergency'}</button>
                       <button type="button" className="action-btn" onClick={() => setEditTarget(r)}><Icon name="pencil" />Edit</button>
                       <button type="button" className="action-btn" onClick={() => setResetTarget(r)}><Icon name="lock" />Reset Password</button>
                       <button type="button" className="action-btn" onClick={() => (r.status === 'ACTIVE' ? setDeactivateTarget(r) : setAccountStatus(r, 'ACTIVE'))}><Icon name={r.status === 'ACTIVE' ? 'user-x' : 'user-check'} />{r.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}</button>

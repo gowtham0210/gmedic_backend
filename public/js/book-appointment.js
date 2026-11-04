@@ -2,7 +2,7 @@
    carry data-doctor-id to preselect a doctor. Slots stream live from GET /api/doctors/:id/slots/stream
    while the modal is open, so a seat taken at another counter or in the Gmedic app greys out here within
    a second (if the stream can't be opened, GET /api/doctors/:id/slots is polled every 20 seconds instead).
-   A full slot that can still take an emergency walk-in stays pickable; booking it sends `emergency: true`.
+   Normal appointments only: emergencies are registered with the separate Emergency Walk-in form (emergency-walkin.js).
    Fires `appointments:changed` after a booking. */
 (function () {
   'use strict';
@@ -15,13 +15,11 @@
   const summary = $('[data-slot-summary]', modal);
   const submit = $('[data-book-submit]', modal);
   const submitLabel = $('[data-book-label]', modal);
-  const emergencyNote = $('[data-emergency-note]', modal);
   const liveState = $('[data-live-state]', modal);
   const REFRESH_MS = 20000;
   const hint = $('[data-patient-hint]', modal);
   const conflict = $('[data-patient-conflict]', modal);
   let picked = '';
-  let emergency = false;   // the picked slot is full: this booking is an emergency walk-in
   let slotsByTime = {};
   let timer = null;
   let source = null;       // the live EventSource, while the modal is open
@@ -42,26 +40,19 @@
 
   function seatsText(s) {
     if (s.status === 'unavailable') return 'Closed';
-    if (s.status === 'full' && s.emergency.available) return `Full · ${s.emergency.seatsLeft} emergency left`;
     if (s.status === 'full') return 'Full';
     return `${s.seatsLeft} of ${s.capacity} left`;
   }
 
-  const pickable = (s) => s && (s.status === 'available' || s.emergency.available);
+  const pickable = (s) => s && s.status === 'available';
 
-  // The picked slot decides the mode: a full slot means an emergency walk-in, said in words before booking.
-  function setMode() {
-    const s = slotsByTime[picked];
-    emergency = !!(s && s.status === 'full' && s.emergency.available);
-    const doctor = form.elements.doctorId.selectedOptions[0];
-    const doctorName = doctor ? doctor.textContent.split(' · ')[0] : 'the doctor';
-    emergencyNote.hidden = !emergency;
-    if (emergency) {
-      $('span', emergencyNote).textContent = `The ${G.time(picked)} slot is full. This books an emergency walk-in over capacity (${s.emergency.seatsLeft} of ${s.emergency.seats} emergency seat${s.emergency.seats === 1 ? '' : 's'} left), and the patient goes to the front of ${doctorName}'s queue.`;
-      form.elements.channel.value = 'walkin';
-    }
-    form.elements.channel.disabled = emergency;
-    submitLabel.textContent = emergency ? 'Book Emergency Walk-in' : 'Book Appointment';
+  // Why a slot cannot be picked, in a few words (null when it can). `closed` is the day-level reason from the
+  // server (doctor on leave or absent, deactivated, hospital closed, date passed...).
+  function whyDisabled(s, closed) {
+    if (pickable(s)) return null;
+    if (closed) return /doctor|leave|absent/i.test(closed) ? 'Doctor unavailable' : 'Day closed';
+    if (s.status === 'unavailable') return 'Slot ended';
+    return 'Normal capacity full';
   }
 
   function render(data) {
@@ -84,21 +75,16 @@
     if (picked && !pickable(now)) {
       G.toast(`The ${G.time(picked)} slot just filled. Pick another time.`, 'error');
       picked = '';
-    } else if (picked && !emergency && now.status === 'full') {
-      // A regular seat was being booked and the last one just went: say so before it becomes an emergency.
-      G.toast(`The ${G.time(picked)} slot just filled. Pick it again to book an emergency walk-in, or choose another time.`, 'error');
-      picked = '';
     }
-    setMode(); // also refreshes the emergency seats left in the note
     grid.innerHTML = slots.map((s) => {
-      const asEmergency = s.status === 'full' && s.emergency.available;
       const disabled = !pickable(s);
       // Seats left only for the desk: the app's share of this slot is used up.
-      const walkIn = !disabled && !asEmergency && s.online.seatsLeft === 0 ? '<small class="slot__walkin">App full</small>' : '';
-      const emergencyBooked = s.emergency.booked ? ` · ${s.emergency.booked} emergency` : '';
-      return `<button type="button" role="radio" class="slot${disabled ? ' is-full' : ''}${asEmergency ? ' is-emergency' : ''}${s.time === picked ? ' is-selected' : ''}"
+      const why = whyDisabled(s, data.closedReason);
+      const walkIn = why ? `<small class="slot__walkin">${esc(why)}</small>`
+        : s.online.seatsLeft === 0 ? '<small class="slot__walkin">App full</small>' : '';
+      return `<button type="button" role="radio" class="slot${disabled ? ' is-full' : ''}${s.time === picked ? ' is-selected' : ''}"
           data-slot="${esc(s.time)}" aria-checked="${s.time === picked}" ${disabled ? 'disabled aria-disabled="true"' : ''}
-          title="${esc(`${s.booked} booked of ${s.capacity}${emergencyBooked}${s.walkInSeats ? ` · ${s.walkInSeats} held for walk-ins` : ''} · app: ${s.online.seatsLeft} left${s.emergency.seats ? ` · ${s.emergency.seats} emergency seat${s.emergency.seats === 1 ? '' : 's'} when full (today only)` : ''}`)}">
+          title="${esc(`${why ? `${why}. ` : ''}${s.booked} booked of ${s.capacity}${s.walkInSeats ? ` · ${s.walkInSeats} held for walk-ins` : ''} · app: ${s.online.seatsLeft} left`)}">
           <span class="slot__time">${G.time(s.time)}</span>
           <span class="slot__seats">${seatsText(s)}</span>${walkIn}
         </button>`;
@@ -111,7 +97,6 @@
     if (!doctorId || !date) {
       grid.innerHTML = '';
       slotsByTime = {};
-      setMode();
       summary.textContent = 'Choose a doctor and date to see free slots.';
       return;
     }
@@ -161,7 +146,6 @@
     const btn = e.target.closest('[data-slot]');
     if (!btn || btn.disabled) return;
     picked = btn.dataset.slot;
-    setMode();
     $$('[data-slot]', grid).forEach((b) => {
       const on = b === btn;
       b.classList.toggle('is-selected', on);
@@ -207,8 +191,8 @@
     conflict.hidden = false;
   }
 
-  form.elements.doctorId.addEventListener('change', () => { picked = ''; setMode(); loadSlots(); startRefresh(); });
-  form.elements.date.addEventListener('change', () => { picked = ''; setMode(); loadSlots(); startRefresh(); });
+  form.elements.doctorId.addEventListener('change', () => { picked = ''; loadSlots(); startRefresh(); });
+  form.elements.date.addEventListener('change', () => { picked = ''; loadSlots(); startRefresh(); });
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -233,8 +217,7 @@
           time: picked,
           ...(chosen ? chosen : { patient: { name: v.name, mobile: v.mobile, gender: v.gender || undefined, ...(different ? { differentPerson: true } : {}), ...(same ? { samePerson: true } : {}) } }),
           reason: v.reason || undefined,
-          channel: !emergency && v.channel === 'phone' ? 'phone' : undefined,
-          ...(emergency ? { emergency: true } : {}),
+          channel: v.channel === 'phone' ? 'phone' : undefined,
         },
       });
       G.toast(res.message, 'success');
@@ -255,7 +238,6 @@
     resetPatientChoice();
     picked = '';
     slotsByTime = {};
-    setMode();
     grid.innerHTML = '';
     form.elements.date.min = G.todayISO();
     form.elements.date.value = G.todayISO();

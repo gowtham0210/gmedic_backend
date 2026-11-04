@@ -786,6 +786,26 @@ paths:
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
         '404': {description: Not found}
+  /api/admin/receptionists/{id}/emergency-booking:
+    patch:
+      tags: ["Admin: Receptionists"]
+      summary: "Allow or stop a receptionist booking emergency walk-ins"
+      description: "Sets the receptionist's emergency-booking permission (default: not allowed). Enforced on the server by POST /api/appointments with `emergency: true`. Audited as EMERGENCY_BOOKING_GRANTED / EMERGENCY_BOOKING_REVOKED."
+      operationId: patchApiAdminReceptionistsIdEmergencyBooking
+      x-access: "receptionists.manage"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/EmergencyBookingChange'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/EmergencyBookingChanged'}}}}
+        '400': {description: "allowed is not true or false", content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Receptionist not found}
   /api/admin/receptionists/{id}/reset-password:
     post:
       tags: ["Admin: Receptionists"]
@@ -1952,6 +1972,115 @@ paths:
               schema: {type: string}
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
+  /api/emergency/options:
+    get:
+      tags: ["Receptionist"]
+      summary: "What the Emergency Walk-in form offers"
+      description: "Departments with their doctors, and for each doctor whether an emergency walk-in can be registered right now (active, verified, present, not on leave, working today and before the end of their last working block of the day; a present doctor whose hours start later today is eligible now) and why not. Also whether this receptionist is allowed (`allowed`, read from the database), the hospital's emergency intake state and the current workload warning."
+      operationId: getApiEmergencyOptions
+      x-access: "receptionist"
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/EmergencyOptions'}}}}
+        '401': {description: Not signed in / session ended}
+  /api/emergency/summary:
+    get:
+      tags: ["Receptionist"]
+      summary: "Today's emergency walk-in counts and the active list"
+      description: "Counted by the server from the real appointments and queue tokens; nothing is entered by hand. Every patient is in exactly one group, so the three groups add up to `activeTotal`: awaiting triage (open and no triage yet), waiting for consultation (open and assessed by a doctor) and under consultation. Completed patients are counted in `completedToday`; cancelled patients are counted nowhere. `warning` is true at or above `threshold` (the system setting emergency_walkin_warning_threshold, default 10) and carries `escalation` instructions; it never refuses a registration."
+      operationId: getApiEmergencySummary
+      x-access: "receptionist"
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/EmergencySummary'}}}}
+        '401': {description: Not signed in / session ended}
+  /api/emergency/walk-ins:
+    post:
+      tags: ["Receptionist"]
+      summary: "Register an emergency walk-in (no slot)"
+      description: "Registers a patient who cannot wait, without choosing a slot. It takes no seat of any slot and gives an emergency token (E001, E002, ... per doctor per day, never reused). Server-side rules: the receptionist must be active, of this hospital and allowed (users.can_book_emergency, checked in the database; otherwise 403, audited); `emergencyReason` 3-300 characters; the hospital is active and its emergency intake is not paused; the doctor is in the department, can be booked like for a normal appointment (active, verified, not marked absent, not on leave) and is working today (before the end of their last working block of the day; a present doctor whose hours start later today is eligible now). Availability is read again inside the registration, so a stale screen cannot get through. There is no walk-in limit: no count refuses a registration (the response carries a `workload` warning instead). A refusal for the hospital or the doctor is a 409 whose message carries the hospital's escalation and referral instructions and fields.alternatives lists other doctors who can take the patient. The patient is registered by mobile number exactly as in POST /api/appointments (same 409 questions about a shared number). Triage is not set here: a doctor assesses it later, until then the walk-in is awaiting triage. Recorded in the audit log (EMERGENCY_WALKIN_REGISTERED) with the reason, the receptionist and the time."
+      operationId: postApiEmergencyWalkIns
+      x-access: "receptionist"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/EmergencyWalkInRequest'}
+      responses:
+        '201': {description: Registered, content: {application/json: {schema: {$ref: '#/components/schemas/EmergencyWalkInResult'}}}}
+        '400': {description: "Validation error (reason, department, doctor, patient)", content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: "Not allowed to register emergency walk-ins (no permission, inactive, or another hospital)"}
+        '404': {description: Doctor not found (not one of this hospital's doctors)}
+        '409': {description: "Intake paused, doctor unavailable (absent, on leave, deactivated or outside working hours), hospital not active, the patient is already registered as an active walk-in, or the number belongs to another patient", content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+  /api/doctor/queue/{id}/triage:
+    patch:
+      tags: ["Doctor"]
+      summary: "Assess the triage priority of an emergency walk-in"
+      description: "Only a doctor, only for their own walk-in on today's queue that is not completed or cancelled. Every assignment or change is audited (TRIAGE_ASSIGNED / TRIAGE_CHANGED) with the previous value."
+      operationId: patchApiDoctorQueueIdTriage
+      x-access: "doctor"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TriageRequest'}
+      responses:
+        '200': {description: OK}
+        '400': {description: "Unknown priority, or not today's queue", content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '404': {description: Token not found}
+        '409': {description: "Not an emergency walk-in, or already completed or cancelled"}
+  /api/doctor/queue/{id}/call:
+    post:
+      tags: ["Doctor"]
+      summary: "Call a particular waiting or skipped patient"
+      description: "The suggested order (critical first, then walk-ins awaiting triage, urgent, semi-urgent, then appointments and non-urgent walk-ins by time) is only a suggestion; the doctor can call anyone. Calling someone other than the suggested patient, or a walk-in nobody has assessed, is audited as QUEUE_OVERRIDE. A patient in consultation is never touched."
+      operationId: postApiDoctorQueueIdCall
+      x-access: "doctor"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object, properties: {note: {type: string, maxLength: 200}}}
+      responses:
+        '200': {description: OK}
+        '400': {description: "Not today's queue, or the patient cannot be called"}
+        '401': {description: Not signed in / session ended}
+        '404': {description: Token not found}
+  /api/admin/hospitals/{id}/emergency-intake:
+    get:
+      tags: ["Admin: Hospitals"]
+      summary: "Emergency intake settings of a hospital"
+      operationId: getApiAdminHospitalsIdEmergencyIntake
+      x-access: "hospitals.view"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, properties: {intake: {$ref: '#/components/schemas/EmergencyIntake'}}}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Hospital not found}
+    put:
+      tags: ["Admin: Hospitals"]
+      summary: "Pause or resume emergency walk-ins and set the escalation and referral instructions"
+      description: "Super Admin and Operations (hospitals.manage) only; never the receptionist. Pausing or resuming needs a reason (3-300 characters); who changed it and when is kept on the hospital and in the audit log (EMERGENCY_INTAKE_PAUSED / _RESUMED, EMERGENCY_REFERRAL_UPDATED). There is no walk-in count to configure: sending `walkInLimit` returns 400. Nothing has to be set for emergency walk-ins to work; the workload warning level is a system setting."
+      operationId: putApiAdminHospitalsIdEmergencyIntake
+      x-access: "hospitals.manage"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/EmergencyIntakeUpdate'}
+      responses:
+        '200': {description: OK}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Not signed in / session ended}
+        '403': {description: Role lacks the required permission}
+        '404': {description: Hospital not found}
   /api/me:
     get:
       tags: ["Receptionist"]
@@ -2027,7 +2156,7 @@ paths:
     post:
       tags: ["Receptionist"]
       summary: "Book a walk-in or phone appointment (shares seats and tokens with the patient app)"
-      description: "Takes a seat in the slot, gives the booking its slot-based token number and issues its queue token (status waiting), all in one transaction. Token numbers follow the doctor's day in slot order: each slot owns as many numbers as it has seats, so with 6 per slot the first slot is T001-T006 and the next T007-T012, and seat n of a slot gets that slot's n-th number whatever the channel or booking order (a cancelled seat's number goes to its next booking; if a capacity cut leaves that number held, the next number after the day's planned capacity is used). Front-desk bookings may use the slot's walk-in seats as well as any online seat still free. Give `patientId` for an existing patient, or `patient` (found or registered by mobile number). `channel: phone` records the source as Phone, otherwise Walk-in; the booking user is recorded in `bookedBy`. A known number given with a different name returns 409 (fields.existingPatientName, existingPatientKnown, and existingPatientId only for a patient already known at this hospital; a patient not yet seen here is shown with a masked name); re-send with that `patientId` (or `patient.samePerson: true` when no id was returned), or with `patient.differentPerson: true` to register a separate person who shares the number. `patientId` is only accepted for a patient with an appointment or link at this hospital (else 400). Names match when the words of one are the leading words of the other ('Riya' = 'Riya Sharma', 'Raj' is not 'Rajesh'). Booking the same patient with the same doctor on the same day twice returns 409, also under concurrent requests. `emergency: true` books an emergency walk-in into a slot whose regular seats are all taken: today only, in a slot that has not ended, at the desk (not by phone), up to the schedule block's `emergencySeats` (0-3). It takes a seat above the capacity, gets token code E01, E02, ... (per doctor per day) and is called before everyone else waiting; it cannot be rescheduled. On a slot that still has a free seat it returns 409. A regular booking into a full slot returns 409 with fields.slotFull."
+      description: "Takes a seat in the slot, gives the booking its slot-based token number and issues its queue token (status waiting), all in one transaction. Token numbers follow the doctor's day in slot order: each slot owns as many numbers as it has seats, so with 6 per slot the first slot is T001-T006 and the next T007-T012, and seat n of a slot gets that slot's n-th number whatever the channel or booking order (a cancelled seat's number goes to its next booking; if a capacity cut leaves that number held, the next number after the day's planned capacity is used). Front-desk bookings may use the slot's walk-in seats as well as any online seat still free. Give `patientId` for an existing patient, or `patient` (found or registered by mobile number). `channel: phone` records the source as Phone, otherwise Walk-in; the booking user is recorded in `bookedBy`. A known number given with a different name returns 409 (fields.existingPatientName, existingPatientKnown, and existingPatientId only for a patient already known at this hospital; a patient not yet seen here is shown with a masked name); re-send with that `patientId` (or `patient.samePerson: true` when no id was returned), or with `patient.differentPerson: true` to register a separate person who shares the number. `patientId` is only accepted for a patient with an appointment or link at this hospital (else 400). Names match when the words of one are the leading words of the other ('Riya' = 'Riya Sharma', 'Raj' is not 'Rajesh'). Booking the same patient with the same doctor on the same day twice returns 409, also under concurrent requests. `emergency: true` is no longer accepted here: it returns 410 with fields.useInstead = /api/emergency/walk-ins. An emergency is registered with POST /api/emergency/walk-ins, which needs no slot and takes no seat of this endpoint's slots. Emergency appointments booked into a full slot before that change (migration 032) stay as history. A regular booking into a full slot returns 409 with fields.slotFull."
       operationId: postApiAppointments
       x-access: "receptionist"
       requestBody:
@@ -2041,6 +2170,7 @@ paths:
         '401': {description: Not signed in / session ended}
         '403': {description: Role lacks the required permission}
         '404': {description: Doctor not found (not one of this hospital's doctors)}
+        '410': {description: "`emergency: true` was sent: emergencies are registered with POST /api/emergency/walk-ins instead (fields.useInstead)", content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '409': {description: "Day closed (hospital not active, doctor deactivated, unverified, branch inactive, on leave or absent, outside the booking window), slot full or already ended, the patient already has an appointment with the doctor that day (fields.appointmentId), or the number belongs to another patient (fields.existingPatientId); emergency refused (fields.emergency: slot not full, no emergency seats, emergency seats taken, not today, or by phone)", content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
   /api/doctors/{id}/slots:
     get:
@@ -2088,7 +2218,7 @@ paths:
         '404': {description: Doctor not found}
     put:
       tags: ["Receptionist"]
-      summary: "Hold back seats per slot for walk-ins, and set emergency seats (one block, or all of the doctor's blocks)"
+      summary: "Hold back seats per slot for walk-ins (one block, or all of the doctor's blocks)"
       description: "Applies at once and only limits new app bookings; appointments already made are kept."
       operationId: putApiDoctorsIdWalkInSeats
       x-access: "receptionist"
@@ -2098,7 +2228,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: {type: object, description: "Send walkInSeats, emergencySeats or both", properties: {walkInSeats: {type: integer, minimum: 0, maximum: 50}, emergencySeats: {type: integer, minimum: 0, maximum: 3, description: "Emergency walk-ins a full slot can still take"}, scheduleId: {type: integer, description: "Omit to apply to every current and upcoming block"}}}
+            schema: {type: object, description: "Send walkInSeats, emergencySeats or both", properties: {walkInSeats: {type: integer, minimum: 0, maximum: 50}, emergencySeats: {type: integer, minimum: 0, maximum: 3, description: "Legacy (migration 032): kept as data, no longer used to book anything"}, scheduleId: {type: integer, description: "Omit to apply to every current and upcoming block"}}}
       responses:
         '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/RecWalkInSeats'}}}}
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
@@ -2432,8 +2562,8 @@ paths:
         '404': {description: Doctor not found}
     post:
       tags: ["Receptionist"]
-      summary: "Add a working-hours block from the next working day (no overlaps)"
-      description: "Working hours are a weekly block per day (a lunch break is two blocks). Changes take effect from the next working day (tomorrow, hospital time) and never move or cancel booked appointments; today keeps the old version. The doctor portal has the same screen for the doctor's own hours. The new block may not overlap another block on that day."
+      summary: "Add a working-hours block (today when that is safe, otherwise from the next working day; no overlaps)"
+      description: "Working hours are a weekly block per day (a lunch break is two blocks). A block for a weekday that is TODAY starts today (`startsToday: true`, `effectiveFrom` = today) when its start time is still ahead, it overlaps no hours already set for that day (including hours that start tomorrow) and nobody is booked or holding a seat at or after its start time today; its slots then open at once and the receptionist, the patient app and the emergency eligibility all read the same effective date. Otherwise, and for any other weekday, it starts tomorrow-based (`startsToday: false`; the message says why, e.g. the start time already passed or patients are already booked later today). Token numbers follow the slots of the day in order, which is why a block is not slipped in before patients already booked later today. The hours must hold at least one whole appointment (400 otherwise). Adding never moves or cancels booked appointments. Editing or removing existing hours still takes effect from the next working day (today keeps the old version). The doctor portal has the same screen for the doctor's own hours."
       operationId: postApiDoctorsIdSchedule
       x-access: "receptionist"
       parameters:
@@ -2453,7 +2583,7 @@ paths:
     patch:
       tags: ["Receptionist"]
       summary: "Edit a working-hours block from the next working day"
-      description: "Send any of startTime, endTime, slotMinutes and capacityPerSlot. The change applies from the next working day: today's slots keep the old version and existing bookings are kept. The result lists bookings left outside the new hours (`outside`, capacity/hours edits) and slots now over capacity (`overbooked`). Hours that overlap another block on the day return 400 (fields.startTime); a block that already ends today cannot be changed (400). Sending nothing that differs is a no-op."
+      description: "Send any of startTime, endTime, slotMinutes and capacityPerSlot. The change applies from the next working day: today's slots keep the old version and existing bookings are kept. Exception: a block that has not started yet (its effective date is after today, so nobody can have booked into it) on today's weekday starts today under the same conditions as adding it (start time ahead, no overlap, not the replacement of hours that end today, nobody booked or holding a seat at or after its start today); the response then has `startsToday: true`. The result lists bookings left outside the new hours (`outside`, capacity/hours edits) and slots now over capacity (`overbooked`). Hours that overlap another block on the day return 400 (fields.startTime); a block that already ends today cannot be changed (400). Sending nothing that differs is a no-op."
       operationId: patchApiDoctorsIdScheduleBlockId
       x-access: "receptionist"
       parameters:
@@ -3291,7 +3421,7 @@ paths:
         '401': {description: Not signed in / session ended}
     post:
       tags: ["Doctor"]
-      summary: "Add a working-hours block from the next working day (no overlaps)"
+      summary: "Add a working-hours block (today when that is safe, otherwise from the next working day; no overlaps)"
       operationId: postApiDoctorSchedule
       x-access: "doctor"
       requestBody:
@@ -3325,7 +3455,7 @@ paths:
     delete:
       tags: ["Doctor"]
       summary: "Stop a working-hours block from the next working day (bookings kept)"
-      description: "A block that is not in force yet is deleted outright; otherwise it ends today and stays visible as ending (`endsToday`) until tomorrow. Appointments already booked in its hours are kept and counted in `keptAppointments`. Refused (400) when the block already ends today. Use the impact endpoint to show the count before confirming."
+      description: "A block that is not in force yet, or one added today that nobody has booked or held a seat in on any date, is deleted outright; otherwise it ends today and stays visible as ending (`endsToday`) until tomorrow. Appointments already booked in its hours are kept and counted in `keptAppointments`. Refused (400) when the block already ends today. Use the impact endpoint to show the count before confirming."
       operationId: deleteApiDoctorScheduleId
       x-access: "doctor"
       parameters:
@@ -5454,7 +5584,7 @@ components:
       type: object
       properties:
         doctor: {$ref: '#/components/schemas/AdminDoctor'}
-    ReceptionistList: {"type": "object", "properties": {"items": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "name": {"type": "string"}, "email": {"type": "string"}, "phone": {"type": "string"}, "hospitalId": {"type": "string"}, "hospitalName": {"type": "string"}, "status": {"type": "string"}, "createdAt": {"type": "string", "format": "date-time"}}}}, "total": {"type": "integer"}, "page": {"type": "integer"}, "pageSize": {"type": "integer"}, "pages": {"type": "integer"}}}
+    ReceptionistList: {"type": "object", "properties": {"items": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "name": {"type": "string"}, "email": {"type": "string"}, "phone": {"type": "string"}, "hospitalId": {"type": "string"}, "hospitalName": {"type": "string"}, "status": {"type": "string"}, "canBookEmergency": {"type": "boolean", "description": "May book emergency walk-ins over a full slot"}, "createdAt": {"type": "string", "format": "date-time"}}}}, "total": {"type": "integer"}, "page": {"type": "integer"}, "pageSize": {"type": "integer"}, "pages": {"type": "integer"}}}
     QrList:
       type: object
       properties:
@@ -6179,6 +6309,123 @@ components:
                 type: string
               role:
                 type: string
+    EmergencyIntake:
+      type: object
+      properties:
+        status: {type: string, enum: [OPEN, PAUSED]}
+        reason: {type: string, nullable: true, description: Why intake was last paused or resumed}
+        referralNote: {type: string, nullable: true, description: "Escalation and referral instructions: where to send a patient when intake is paused, a doctor is unavailable or the workload is high"}
+        changedAt: {type: string, format: date-time, nullable: true}
+        warningThreshold: {type: integer, description: "The system default workload warning level (admin GET/PUT only)"}
+    EmergencyIntakeUpdate:
+      type: object
+      description: Send at least one of paused, referralNote
+      properties:
+        paused: {type: boolean, description: "true pauses, false resumes; needs reason"}
+        reason: {type: string, minLength: 3, maxLength: 300}
+        referralNote: {type: string, maxLength: 500, description: "An empty string clears it"}
+    EmergencyOptions:
+      type: object
+      properties:
+        allowed: {type: boolean, description: "This receptionist may register emergency walk-ins"}
+        hospital: {type: object, properties: {id: {type: string}, name: {type: string}}}
+        intake: {$ref: '#/components/schemas/EmergencyIntake'}
+        workload: {$ref: '#/components/schemas/EmergencyWorkload'}
+        departments:
+          type: array
+          description: "A doctor without a department is listed under id `none`"
+          items:
+            type: object
+            properties:
+              id: {type: string}
+              name: {type: string}
+              doctors:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: {type: string}
+                    name: {type: string}
+                    specialization: {type: string, nullable: true}
+                    available: {type: boolean, description: "Can be registered for an emergency right now: available like for a normal booking and inside a working-hours block"}
+                    reason: {type: string, nullable: true, description: "Why not, when available is false"}
+    EmergencyWorkload:
+      type: object
+      properties:
+        activeTotal: {type: integer}
+        threshold: {type: integer, description: "The system default warning level (setting emergency_walkin_warning_threshold, default 10)"}
+        warning: {type: boolean, description: "activeTotal is at or above threshold. Only a warning: registration is never refused"}
+        escalation: {type: string, nullable: true, description: "What the desk should do, with the hospital's own instructions when it has set them"}
+    EmergencySummary:
+      type: object
+      properties:
+        date: {type: string, format: date}
+        activeTotal: {type: integer, description: awaitingTriage + waitingForConsultation + underConsultation}
+        awaitingTriage: {type: integer}
+        waitingForConsultation: {type: integer}
+        underConsultation: {type: integer}
+        completedToday: {type: integer}
+        threshold: {type: integer}
+        warning: {type: boolean}
+        escalation: {type: string, nullable: true}
+        intake: {$ref: '#/components/schemas/EmergencyIntake'}
+        active:
+          type: array
+          items:
+            type: object
+            properties:
+              appointmentId: {type: string}
+              token: {type: string, example: E001}
+              patientName: {type: string}
+              doctorName: {type: string}
+              reason: {type: string, nullable: true}
+              registeredAt: {type: string, format: date-time}
+              triage: {type: string, nullable: true, enum: [CRITICAL, URGENT, SEMI_URGENT, NON_URGENT]}
+              group: {type: string, enum: [AWAITING_TRIAGE, WAITING, UNDER_CONSULTATION]}
+              consultationStatus: {type: string, enum: [waiting, called, in_consultation, skipped]}
+    EmergencyWalkInRequest:
+      type: object
+      required: [departmentId, doctorId, emergencyReason]
+      description: Give patientId (an existing patient) or patient (found or registered by mobile number). No date, time or slot.
+      properties:
+        departmentId: {type: string, description: "A department id, or `none` for a doctor without one"}
+        doctorId: {type: string}
+        emergencyReason: {type: string, minLength: 3, maxLength: 300}
+        patientId: {type: string}
+        patient:
+          type: object
+          properties:
+            name: {type: string}
+            mobile: {type: string}
+            gender: {type: string, enum: [male, female, other]}
+            dateOfBirth: {type: string, format: date}
+            samePerson: {type: boolean}
+            differentPerson: {type: boolean}
+    EmergencyWalkInResult:
+      type: object
+      properties:
+        ok: {type: boolean}
+        message: {type: string}
+        token: {type: object, properties: {code: {type: string, example: E001}, status: {type: string, example: waiting}, triage: {type: string, nullable: true}, awaitingTriage: {type: boolean}}}
+        appointment: {$ref: '#/components/schemas/RecAppointment'}
+        workload: {$ref: '#/components/schemas/EmergencyWorkload'}
+    TriageRequest:
+      type: object
+      required: [priority]
+      properties:
+        priority: {type: string, enum: [CRITICAL, URGENT, SEMI_URGENT, NON_URGENT]}
+        note: {type: string, maxLength: 200}
+    EmergencyBookingChange:
+      type: object
+      required: [allowed]
+      properties:
+        allowed: {type: boolean, description: "true grants, false revokes emergency booking for the receptionist"}
+    EmergencyBookingChanged:
+      type: object
+      properties:
+        ok: {type: boolean}
+        message: {type: string}
+        canBookEmergency: {type: boolean}
     RecMe:
       type: object
       properties:
@@ -6187,6 +6434,7 @@ components:
           properties:
             id: {type: string}
             role: {type: string}
+            canBookEmergency: {type: boolean, description: "The receptionist may book emergency walk-ins (the portal shows the Emergency Booking switch only when true)"}
             name: {type: string}
             firstName: {type: string}
             initials: {type: string}
@@ -6549,8 +6797,8 @@ components:
                 properties:
                   endsToday: {type: boolean, description: The block stops after today; it can no longer be edited or removed}
                   startsLater: {type: boolean, description: The block starts after today}
-    RecDoctorSlots: {"type": "object", "properties": {"doctorId": {"type": "string"}, "date": {"type": "string", "format": "date"}, "closedReason": {"type": "string", "nullable": true}, "slots": {"type": "array", "items": {"type": "object", "properties": {"time": {"type": "string"}, "start": {"type": "string", "format": "date-time"}, "end": {"type": "string", "format": "date-time"}, "capacity": {"type": "integer"}, "walkInSeats": {"type": "integer"}, "booked": {"type": "integer"}, "held": {"type": "integer"}, "seatsLeft": {"type": "integer"}, "status": {"type": "string", "enum": ["available", "full", "unavailable"]}, "online": {"type": "object", "properties": {"seatsLeft": {"type": "integer"}, "status": {"type": "string", "enum": ["available", "full", "unavailable"]}}}, "emergency": {"type": "object", "description": "Emergency walk-ins over a full slot (seats is the block's emergencySeats). available: the slot is full, it is today and still running, and an emergency seat is free.", "properties": {"seats": {"type": "integer"}, "booked": {"type": "integer"}, "seatsLeft": {"type": "integer"}, "available": {"type": "boolean"}}}}}}}}
-    RecWalkInSeats: {"type": "object", "properties": {"doctorId": {"type": "string"}, "blocks": {"type": "array", "items": {"type": "object", "properties": {"scheduleId": {"type": "integer"}, "dayOfWeek": {"type": "integer"}, "startTime": {"type": "string"}, "endTime": {"type": "string"}, "slotMinutes": {"type": "integer"}, "capacityPerSlot": {"type": "integer"}, "walkInSeats": {"type": "integer"}, "onlineSeats": {"type": "integer"}, "effectiveFrom": {"type": "string", "format": "date", "nullable": true}, "effectiveTo": {"type": "string", "format": "date", "nullable": true}, "emergencySeats": {"type": "integer", "minimum": 0, "maximum": 3, "description": "Emergency walk-ins a full slot of this block can still take (today only)"}}}}}}
+    RecDoctorSlots: {"type": "object", "properties": {"doctorId": {"type": "string"}, "date": {"type": "string", "format": "date"}, "closedReason": {"type": "string", "nullable": true}, "slots": {"type": "array", "items": {"type": "object", "properties": {"time": {"type": "string"}, "start": {"type": "string", "format": "date-time"}, "end": {"type": "string", "format": "date-time"}, "capacity": {"type": "integer"}, "walkInSeats": {"type": "integer"}, "booked": {"type": "integer"}, "held": {"type": "integer"}, "seatsLeft": {"type": "integer"}, "status": {"type": "string", "enum": ["available", "full", "unavailable"]}, "online": {"type": "object", "properties": {"seatsLeft": {"type": "integer"}, "status": {"type": "string", "enum": ["available", "full", "unavailable"]}}}, "emergency": {"type": "object", "description": "History of emergencies booked into a full slot (migration 032). available is always false now: emergencies are registered with POST /api/emergency/walk-ins.", "properties": {"seats": {"type": "integer"}, "booked": {"type": "integer"}, "seatsLeft": {"type": "integer"}, "available": {"type": "boolean"}}}}}}}}
+    RecWalkInSeats: {"type": "object", "properties": {"doctorId": {"type": "string"}, "blocks": {"type": "array", "items": {"type": "object", "properties": {"scheduleId": {"type": "integer"}, "dayOfWeek": {"type": "integer"}, "startTime": {"type": "string"}, "endTime": {"type": "string"}, "slotMinutes": {"type": "integer"}, "capacityPerSlot": {"type": "integer"}, "walkInSeats": {"type": "integer"}, "onlineSeats": {"type": "integer"}, "effectiveFrom": {"type": "string", "format": "date", "nullable": true}, "effectiveTo": {"type": "string", "format": "date", "nullable": true}, "emergencySeats": {"type": "integer", "minimum": 0, "maximum": 3, "description": "Legacy (migration 032): kept as data, no longer used to book anything"}}}}}}
     RecBookAppointment:
       type: object
       required: [doctorId, date, time]
@@ -6572,7 +6820,7 @@ components:
             differentPerson: {type: boolean, description: "Confirms a different person who shares a mobile number already on file under another name: registers them as their own patient without a number, linked to the number's owner"}
         reason: {type: string, maxLength: 300, description: Reason for visit}
         channel: {type: string, example: phone, description: "phone records the booking as source Phone; anything else, or omitted, is Walk-in"}
-        emergency: {type: boolean, description: "Emergency walk-in over a full slot (today only, never by phone). See the operation description."}
+        emergency: {type: boolean, description: "Refused with 410: register emergencies with POST /api/emergency/walk-ins. Do not send it."}
     RecBookResult:
       type: object
       properties:
@@ -7002,6 +7250,11 @@ components:
         cancelReason: {type: string, nullable: true}
         noShow: {type: boolean, description: Marked no-show (a flag on a confirmed appointment)}
         emergency: {type: boolean, description: "Emergency walk-in over a full slot (token E01, E02, ...; seen first)"}
+        emergencyReason: {type: string, nullable: true, description: "Why the emergency was booked (3-300 characters). Null on regular appointments and on emergencies booked before migration 033"}
+        emergencyWalkIn: {type: boolean, description: "An emergency walk-in registered without a slot (E001...). Never shown to the patient app"}
+        triage: {type: string, nullable: true, enum: [CRITICAL, URGENT, SEMI_URGENT, NON_URGENT], description: "Clinical priority set by a doctor; null while the walk-in is awaiting triage"}
+        triagedAt: {type: string, format: date-time, nullable: true}
+        bookedById: {type: string, nullable: true, description: ID of the user who booked it (the receptionist, for a front-desk booking)}
         reason: {type: string, nullable: true, description: Reason for visit}
         bookedBy: {type: string, nullable: true, description: Name of the user who booked it}
         rescheduleCount: {type: integer}
@@ -7369,6 +7622,11 @@ components:
         cancelReason: {type: string, nullable: true}
         noShow: {type: boolean, description: The patient did not come (a flag on a confirmed appointment; it is final for the day)}
         emergency: {type: boolean, description: "Emergency walk-in over a full slot (token E01, E02, ...; seen first)"}
+        emergencyReason: {type: string, nullable: true, description: "Why the emergency was booked (3-300 characters). Null on regular appointments and on emergencies booked before migration 033"}
+        emergencyWalkIn: {type: boolean, description: "An emergency walk-in registered without a slot (E001...). Never shown to the patient app"}
+        triage: {type: string, nullable: true, enum: [CRITICAL, URGENT, SEMI_URGENT, NON_URGENT], description: "Clinical priority set by a doctor; null while the walk-in is awaiting triage"}
+        triagedAt: {type: string, format: date-time, nullable: true}
+        bookedById: {type: string, nullable: true, description: ID of the user who booked it (the receptionist, for a front-desk booking)}
         reason: {type: string, nullable: true, description: Reason for visit, up to 300 characters}
         bookedBy: {type: string, nullable: true, description: Name of the staff member or patient who booked it}
         rescheduleCount: {type: integer}
@@ -7529,8 +7787,16 @@ components:
         patientName: {type: string, nullable: true}
         date: {type: string, format: date}
         number: {type: integer}
-        code: {type: string, example: T001, description: "T001... or E01... for an emergency walk-in"}
-        emergency: {type: boolean, description: "Emergency walk-in: called before everyone else waiting"}
+        code: {type: string, example: T001, description: "T001... for an appointment, E001... for an emergency walk-in (E01... for the older slot emergencies)"}
+        emergency: {type: boolean, description: "An emergency booked into a full slot before migration 032 was closed (history); called first, as before"}
+        walkIn: {type: boolean, description: "An emergency walk-in (separate E001... token, no slot)"}
+        kind: {type: string, enum: [NORMAL, EMERGENCY], description: "Which number sequence the token is in"}
+        triage: {type: string, nullable: true, enum: [CRITICAL, URGENT, SEMI_URGENT, NON_URGENT], description: "Set by a doctor"}
+        awaitingTriage: {type: boolean, description: "A walk-in nobody has assessed yet: shown to the doctor as such, never treated as urgent"}
+        triagedAt: {type: string, format: date-time, nullable: true}
+        emergencyReason: {type: string, nullable: true}
+        registeredAt: {type: string, format: date-time, nullable: true, description: "Walk-ins only"}
+        arrivedAt: {type: integer, description: "Epoch ms the patient started waiting: registration for a walk-in, the slot start for an appointment"}
         status: {type: string, enum: [waiting, called, in_consultation, completed, cancelled, skipped]}
         nextStatuses:
           type: array

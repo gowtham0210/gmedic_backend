@@ -26,6 +26,8 @@ function fromRow(row) {
     passwordHash: row.password_hash,
     status: row.status,
     mustChangePassword: !!row.must_change_password,
+    // May book an emergency walk-in over a full slot (granted by an admin; migration 033).
+    canBookEmergency: !!row.can_book_emergency,
     sessionVersion: row.session_version,
     passwordChangedAt: db.iso(row.password_changed_at),
     createdAt: db.iso(row.created_at),
@@ -102,6 +104,7 @@ function toPublic(user) {
     phone: user.phone,
     hospitalId: user.hospitalId,
     status: user.status,
+    canBookEmergency: !!user.canBookEmergency,
     passwordChangedAt: user.passwordChangedAt || null,
     createdAt: user.createdAt,
   };

@@ -4467,6 +4467,7 @@ components:
             reason: {type: string}
         rescheduleCount: {type: integer}
         queueAhead: {type: integer, nullable: true, description: Patients ahead once the patient is checked in}
+        currentToken: {type: string, nullable: true, description: "Token code the doctor is attending now (status in_consultation) on this appointment day, e.g. T005. Null when nobody is in consultation, the appointment is closed, or live_queue is off."}
         cancelledAt: {type: string, format: date-time, nullable: true}
         cancelReason: {type: string, nullable: true}
         checkedInAt: {type: string, format: date-time, nullable: true}

@@ -49,6 +49,13 @@ async function reopen(req, doctorId, appointmentId) {
   await db.tx(async (conn) => {
     const done = await conn.query("UPDATE appointments SET status = ?, reopen_count = reopen_count + 1 WHERE id = ? AND status = 'completed'", [restored, a.id]);
     if (!done.affectedRows) throw conflict('This appointment changed while you were looking at it. Refresh and try again.');
+    // Same one-at-a-time rule as tokenModel.updateStatus: the doctor may have started someone else since.
+    const busy = await conn.one(
+      `SELECT t.code FROM tokens t JOIN tokens mine ON mine.appointment_id = ? AND mine.status = 'completed'
+        WHERE t.doctor_id = mine.doctor_id AND t.token_date = mine.token_date AND t.status = 'in_consultation' LIMIT 1`,
+      [a.id]
+    );
+    if (busy) throw conflict(`${busy.code} is in consultation. Complete it before reopening this one.`);
     await conn.query(
       `UPDATE tokens SET status = 'in_consultation', completed_at = NULL
         WHERE id = (SELECT id FROM tokens WHERE appointment_id = ? AND status = 'completed' ORDER BY id DESC LIMIT 1)`,

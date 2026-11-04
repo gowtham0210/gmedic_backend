@@ -7,6 +7,7 @@ const db = require('../../db');
 const featureFlags = require('../featureFlags');
 const events = require('../appointmentEvents');
 const bookingCore = require('../bookingCore');
+const tokenModel = require('../../models/tokenModel');
 const {
   fail, notFound, policy, RULES, nowIn, isoAt, instant, minutesOf, hhmm, isDate,
   paise, rupees, METHOD_IN, METHOD_OUT, patientJson, hospitalJson, hoursOf, holdMinutes, feeBreakdown, FEE_MODEL_OUT,
@@ -82,9 +83,16 @@ async function buildView(a, user) {
   const base = pay ? paise(pay.amount) : 0;
   const refundedRupees = pay ? Number((await db.one("SELECT COALESCE(SUM(amount), 0) AS n FROM refunds WHERE payment_id = ? AND status = 'COMPLETED'", [pay.id])).n) : 0;
   let queueAhead = null;
+  let currentToken = null;
   // The live queue position is the "live_queue" feature flag (Platform Settings > Feature Flags).
-  if (token && ['waiting', 'called'].includes(token.status) && await featureFlags.isEnabled('live_queue', a.hospital_id)) {
+  const liveQueue = await featureFlags.isEnabled('live_queue', a.hospital_id);
+  if (token && ['waiting', 'called'].includes(token.status) && liveQueue) {
     queueAhead = Number((await db.one("SELECT COUNT(*) AS n FROM tokens WHERE doctor_id = ? AND token_date = ? AND status IN ('waiting','called','in_consultation') AND number < ?", [a.doctor_id, a.appt_date, token.number])).n);
+  }
+  // "Now serving": the code of the token this doctor has in consultation on this appointment's day (just the code, no patient detail).
+  if (liveQueue && !['cancelled', 'completed'].includes(a.status) && !a.no_show) {
+    const serving = await tokenModel.currentServing(a.doctor_id, a.appt_date);
+    currentToken = serving ? serving.code : null;
   }
   const appointment = {
     id: a.id,
@@ -111,6 +119,7 @@ async function buildView(a, user) {
     refund: refund ? { amountPaise: paise(refund.amount), status: refund.status === 'COMPLETED' ? 'completed' : 'initiated', createdAt: db.iso(refund.created_at), reason: refund.reason } : null,
     rescheduleCount: a.reschedule_count,
     queueAhead,
+    currentToken,
     cancelledAt: db.iso(a.cancelled_at),
     cancelReason: a.cancel_reason || null,
     checkedInAt: token ? db.iso(token.created_at) : null,

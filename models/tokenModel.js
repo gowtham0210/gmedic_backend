@@ -140,16 +140,43 @@ async function updateStatus(hospitalId, id, status, { skipTransitionCheck = fals
 
   const now = 'CURRENT_TIMESTAMP';
   let extra = '';
+  // One patient at a time per doctor per day: checked in the same transaction as the write, so the doctor's
+  // queue and the receptionist's token screen follow the same rule and two requests can't both win.
   if (status === 'waiting') extra = ', called_at = NULL, completed_at = NULL, skipped_at = NULL';
   if (status === 'called') extra = `, called_at = ${now}, completed_at = NULL`;
   if (status === 'in_consultation') extra = `, called_at = COALESCE(called_at, ${now})`;
   if (status === 'completed') extra = `, called_at = COALESCE(called_at, ${now}), completed_at = ${now}`;
   if (status === 'cancelled') extra = `, cancelled_at = ${now}`;
   if (status === 'skipped') extra = `, skipped_at = ${now}`;
-  const res = await db.query(`UPDATE tokens SET status = ?${extra} WHERE hospital_id = ? AND id = ?`, [status, hospitalId, id]);
+  const res = await db.tx(async (conn) => {
+    if (status === 'in_consultation') {
+      const busy = await conn.one(
+        "SELECT t.code, p.name AS patient_name FROM tokens t LEFT JOIN appointments a ON a.id = t.appointment_id LEFT JOIN patients p ON p.id = a.patient_id WHERE t.doctor_id = ? AND t.token_date = ? AND t.status = 'in_consultation' AND t.id <> ?",
+        [current.doctorId, current.date, id]
+      );
+      if (busy) throw badRequest(`${busy.code}${busy.patient_name ? ` (${busy.patient_name})` : ''} is still in consultation. Complete it before starting another patient.`);
+    }
+    return conn.query(`UPDATE tokens SET status = ?${extra} WHERE hospital_id = ? AND id = ?`, [status, hospitalId, id]);
+  });
   if (!res.affectedRows) return null;
   return findById(hospitalId, id);
 }
 
-module.exports = { STATUSES, TRANSITIONS, formatCode, query, summarize, findById, activeForAppointment, create, updateStatus, fromRow };
+// The token a doctor is attending on a date, for the patient app's "Now serving". Only `in_consultation` counts:
+// `called` means the patient was summoned, not that the doctor has started. Returns { code, number } or null.
+// If data ever holds more than one in_consultation token for the doctor and day (rows from before the guard in
+// updateStatus), no single token is the right answer, so it returns null rather than picking one.
+async function currentServing(doctorId, date) {
+  const rows = await db.query(
+    "SELECT code, number FROM tokens WHERE doctor_id = ? AND token_date = ? AND status = 'in_consultation' ORDER BY id LIMIT 2",
+    [doctorId, date]
+  );
+  if (rows.length > 1) {
+    console.warn(`tokenModel.currentServing: more than one token in consultation for doctor ${doctorId} on ${date}; showing none.`);
+    return null;
+  }
+  return rows[0] ? { code: rows[0].code, number: rows[0].number } : null;
+}
+
+module.exports = { STATUSES, TRANSITIONS, formatCode, query, summarize, findById, activeForAppointment, create, updateStatus, currentServing, fromRow };
 // (searches escape LIKE wildcards)
